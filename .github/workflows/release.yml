@@ -31,12 +31,17 @@ jobs:
         shell: pwsh
         run: Copy-Item dist/OrixNotch.exe OrixNotch.exe -Force
 
+      - name: Build MSIX installer
+        shell: pwsh
+        run: pwsh packaging/Build-Msix.ps1
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             OrixNotch-win-x64.zip
             OrixNotch.exe
+            publish/OrixNotch.msix
           generate_release_notes: true
           body: |
             ## OrixNotch ${{ github.ref_name }}
@@ -44,8 +49,9 @@ jobs:
             Dynamic-island style toolbox for Windows (WPF, .NET 8).
 
             ### Run
-            - **Option A (recommended):** download `OrixNotch.exe` and run it directly (self-contained, no .NET install needed).
-            - **Option B:** download `OrixNotch-win-x64.zip`, unzip, and run `OrixNotch.exe`.
+            - **Installer (recommended for most users):** download `OrixNotch.msix` and open it to install (unsigned package — the Microsoft Store listing is signed by the Store).
+            - **Portable exe:** download `OrixNotch.exe` and run it directly (self-contained, no .NET install needed).
+            - **Zip:** `OrixNotch-win-x64.zip` contains the same self-contained exe.
             - Requires Windows 10 (2004) or later.
 
             ### Data & privacy

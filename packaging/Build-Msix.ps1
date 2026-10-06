@@ -55,8 +55,12 @@ Write-Tile "StoreLogo.png" 50 50
 Write-Tile "Square44x44Logo.png" 44 44
 Write-Tile "Square150x150Logo.png" 150 150
 
-# 4. Pack.
-$sdkBin = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64"
+# 4. Pack (locate the newest installed Windows SDK: works locally and on GitHub runners).
+$sdkBin = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
+    Where-Object { Test-Path (Join-Path $_.FullName "x64\makeappx.exe") } |
+    Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
+if (-not $sdkBin) { throw "makeappx.exe not found (install the Windows 10/11 SDK)" }
+$sdkBin = Join-Path $sdkBin "x64"
 $makeappx = Join-Path $sdkBin "makeappx.exe"
 New-Item -ItemType Directory -Path (Split-Path $outMsix) -Force | Out-Null
 Write-Host "Packing MSIX..."
