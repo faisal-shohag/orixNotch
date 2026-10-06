@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish (win-x64 single file)
+        run: dotnet publish src/OrixNotch -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o dist
+
+      - name: Zip artifact
+        shell: pwsh
+        run: Compress-Archive -Path dist/* -DestinationPath OrixNotch-win-x64.zip -Force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: OrixNotch-win-x64.zip
+          generate_release_notes: true
+          body: |
+            ## OrixNotch ${{ github.ref_name }}
+
+            Dynamic-island style toolbox for Windows (WPF, .NET 8).
+
+            ### Run
+            - Unzip `OrixNotch-win-x64.zip` and run `OrixNotch.exe` (self-contained, no .NET install needed).
+            - Requires Windows 10 (2004) or later.
+
+            ### Data & privacy
+            Settings and local data live in `%LOCALAPPDATA%\OrixNotch`. Network calls only to Open-Meteo (weather) and Yahoo Finance (stocks) while those tools are open.
