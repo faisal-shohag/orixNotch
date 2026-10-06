@@ -27,10 +27,16 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path dist/* -DestinationPath OrixNotch-win-x64.zip -Force
 
+      - name: Stage exe asset
+        shell: pwsh
+        run: Copy-Item dist/OrixNotch.exe OrixNotch.exe -Force
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: OrixNotch-win-x64.zip
+          files: |
+            OrixNotch-win-x64.zip
+            OrixNotch.exe
           generate_release_notes: true
           body: |
             ## OrixNotch ${{ github.ref_name }}
@@ -38,7 +44,8 @@ jobs:
             Dynamic-island style toolbox for Windows (WPF, .NET 8).
 
             ### Run
-            - Unzip `OrixNotch-win-x64.zip` and run `OrixNotch.exe` (self-contained, no .NET install needed).
+            - **Option A (recommended):** download `OrixNotch.exe` and run it directly (self-contained, no .NET install needed).
+            - **Option B:** download `OrixNotch-win-x64.zip`, unzip, and run `OrixNotch.exe`.
             - Requires Windows 10 (2004) or later.
 
             ### Data & privacy
