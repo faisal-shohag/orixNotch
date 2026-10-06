@@ -185,6 +185,9 @@ DocProject/Help/html
 # Click-Once directory
 publish/
 
+# MSIX staging output (packaging/Package.appxmanifest + Build-Msix.ps1 are source)
+packaging/layout/
+
 # Publish Web Output
 *.[Pp]ublish.xml
 *.azurePubxml
