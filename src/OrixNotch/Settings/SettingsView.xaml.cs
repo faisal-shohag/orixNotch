@@ -415,7 +415,7 @@ public partial class SettingsView : UserControl, IToolView
 
         // Brand lockup: vector notch mark + wordmark + tagline (light/dark auto via BrandMark).
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
-        brand.Children.Add(new BrandMark { Variant = BrandVariant.Auto, Width = 72, Height = 22, VerticalAlignment = VerticalAlignment.Center });
+        brand.Children.Add(new BrandMark { Variant = BrandVariant.Auto, Width = 52, Height = 16, VerticalAlignment = VerticalAlignment.Center });
         var words = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         var name = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold };
         name.Inlines.Add(new System.Windows.Documents.Run("Orix"));

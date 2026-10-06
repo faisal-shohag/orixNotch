@@ -1,6 +1,6 @@
 # OrixNotch
 
-![OrixNotch brand — gradient notch mark](src/OrixNotch/Assets/Brand/logo-512.png)
+<img src="src/OrixNotch/Assets/Brand/logo-512.png" width="180" alt="OrixNotch brand — gradient notch mark" />
 
 > **Your Screen, Smarter** — Smoother • Faster • Smarter
 
