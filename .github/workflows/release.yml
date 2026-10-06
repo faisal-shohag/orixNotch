@@ -35,6 +35,14 @@ jobs:
         shell: pwsh
         run: pwsh packaging/Build-Msix.ps1
 
+      - name: Install WiX (MSI)
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build MSI installer
+        shell: pwsh
+        run: pwsh packaging/Build-Msi.ps1
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -42,6 +50,7 @@ jobs:
             OrixNotch-win-x64.zip
             OrixNotch.exe
             publish/OrixNotch.msix
+            publish/OrixNotch.msi
           generate_release_notes: true
           body: |
             ## OrixNotch ${{ github.ref_name }}
@@ -49,7 +58,7 @@ jobs:
             Dynamic-island style toolbox for Windows (WPF, .NET 8).
 
             ### Run
-            - **Installer (recommended for most users):** download `OrixNotch.msix` and open it to install (unsigned package — the Microsoft Store listing is signed by the Store).
+            - **Installer:** download `OrixNotch.msi` (per-machine, needs admin: `msiexec /i OrixNotch.msi /qn`) or `OrixNotch.msix` (unsigned package — the Microsoft Store listing is signed by the Store).
             - **Portable exe:** download `OrixNotch.exe` and run it directly (self-contained, no .NET install needed).
             - **Zip:** `OrixNotch-win-x64.zip` contains the same self-contained exe.
             - Requires Windows 10 (2004) or later.
