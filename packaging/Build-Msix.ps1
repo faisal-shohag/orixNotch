@@ -79,3 +79,9 @@ if ($Sign) {
 
 Write-Host "MSIX ready: $outMsix"
 Get-Item $outMsix | Select-Object Name, Length
+
+# Mirror to tracked output/ dir (git tracks MSI/MSIX; EXE is Releases-only).
+$outDir = Join-Path $repoRoot "output"
+New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+Copy-Item $outMsix (Join-Path $outDir "OrixNotch.msix") -Force
+Write-Host "Mirrored to output/OrixNotch.msix"

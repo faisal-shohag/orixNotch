@@ -46,3 +46,9 @@ if ($LASTEXITCODE -ne 0) { throw "wix build failed" }
 
 Write-Host "MSI ready: $outMsi"
 Get-Item $outMsi | Select-Object Name, Length
+
+# Mirror to tracked output/ dir (git tracks MSI/MSIX; EXE is Releases-only).
+$outDir = Join-Path $repoRoot "output"
+New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+Copy-Item $outMsi (Join-Path $outDir "OrixNotch.msi") -Force
+Write-Host "Mirrored to output/OrixNotch.msi"
