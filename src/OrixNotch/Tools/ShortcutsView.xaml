@@ -1,0 +1,100 @@
+<UserControl x:Class="OrixNotch.Tools.ShortcutsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hero="clr-namespace:OrixNotch.Shell">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid>
+                <TextBox x:Name="Search" Tag="Search shortcuts…" Padding="30,0,10,0"
+                         TextChanged="OnSearchChanged" />
+                <hero:HeroIcon Kind="Magnifier" Width="15" Height="15" Margin="11,0,0,0" IsHitTestVisible="False"
+                                      HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
+            </Grid>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                <TextBlock x:Name="Status" Style="{StaticResource SubText}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Button Style="{StaticResource IconButton}" Width="34" Height="34" ToolTip="New shortcut"
+                        Foreground="{DynamicResource SubTextBrush}" Click="OnNew">
+                    <hero:HeroIcon Kind="Plus" Width="14" Height="14" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Inline editor -->
+        <Border x:Name="EditorPanel" Grid.Row="1" Background="{DynamicResource SurfaceBrush}" CornerRadius="9" Padding="8"
+                Margin="0,0,0,8" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="NameInput" Tag="Name" />
+                <TextBox x:Name="TargetInput" Grid.Column="1" Margin="6,0" Tag="App, file, folder, URL or ms-settings:…" />
+                <Button Grid.Column="2" Content="Browse" Height="32" Click="OnBrowse" />
+                <Button Grid.Column="3" Style="{StaticResource AccentButton}" Content="Save" Height="32" Margin="6,0,0,0" Click="OnSave" />
+                <Button Grid.Column="4" Style="{StaticResource IconButton}" Width="26" Height="26" Margin="2,0,0,0"
+                        Foreground="{DynamicResource SubTextBrush}" Click="OnCancel">
+                    <hero:HeroIcon Kind="XMark" Width="13" Height="13" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="List">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="4" VerticalAlignment="Top" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Margin="0,0,6,6" Height="26" Cursor="Hand" Focusable="False" ToolTip="{Binding Target}" Click="OnRun">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Edit" Click="OnEdit" />
+                                    <MenuItem Header="Delete" Click="OnDelete" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bd" CornerRadius="8" Background="{DynamicResource SurfaceBrush}" Padding="7,0">
+                                        <ContentPresenter VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface2Brush}" />
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="Bd" Property="Opacity" Value="0.7" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="13" Height="13" CornerRadius="6.5" Background="{DynamicResource TextBrush}">
+                                    <hero:HeroIcon Kind="Play" Width="8" Height="8" Margin="1,0,0,0" Foreground="{DynamicResource PillBrush}"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Medium" Margin="7,0,0,0"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="96" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextBrush}" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
