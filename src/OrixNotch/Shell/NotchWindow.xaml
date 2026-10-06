@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:svc="clr-namespace:OrixNotch.Services"
         xmlns:hero="clr-namespace:OrixNotch.Shell"
-        Title="OrixNotch"
+        Title="OrixNotch" Icon="pack://application:,,,/Assets/Brand/OrixNotch.ico"
         WindowStyle="None" AllowsTransparency="True" Background="{x:Null}"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
         Width="860" Height="600" UseLayoutRounding="True"

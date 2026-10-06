@@ -11,7 +11,8 @@
     <AssemblyName>OrixNotch</AssemblyName>
     <RootNamespace>OrixNotch</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.0</Version>
+    <ApplicationIcon>Assets\Brand\OrixNotch.ico</ApplicationIcon>
+    <Version>0.2.0</Version>
     <Product>OrixNotch</Product>
     <!-- WPF needs the DPI settings in app.manifest; the WinForms analyzer only knows SetHighDpiMode. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
@@ -26,6 +27,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\emoji-test.txt" />
     <Resource Include="Fonts\*.ttf" />
+    <Resource Include="Assets\Brand\OrixNotch.ico" />
+    <Resource Include="Assets\Brand\logo-512.png" />
   </ItemGroup>
 
   <ItemGroup>

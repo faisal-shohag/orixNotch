@@ -1,5 +1,9 @@
 # OrixNotch
 
+![OrixNotch brand — gradient notch mark](src/OrixNotch/Assets/Brand/logo-512.png)
+
+> **Your Screen, Smarter** — Smoother • Faster • Smarter
+
 A dynamic-island style toolbox for Windows, inspired by [OmniNotch](https://omninotch.app/) for macOS.
 A small black pill sits at the top-center of your screen. Hover it (or click it, or press **Ctrl+Alt+N**) and it springs open into a panel of tools.
 

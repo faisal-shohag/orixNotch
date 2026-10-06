@@ -25,6 +25,8 @@
                 <TextBlock x:Name="Greeting" FontSize="15" FontWeight="SemiBold" />
                 <TextBlock x:Name="DateLine" Style="{StaticResource SubText}" FontSize="12" />
             </StackPanel>
+            <hero:BrandMark Variant="Auto" Width="54" Height="17" Margin="12,0,0,0" VerticalAlignment="Center"
+                            Opacity="0.9" ToolTip="OrixNotch — Smoother • Faster • Smarter" />
         </StackPanel>
 
         <Grid Grid.Row="1">

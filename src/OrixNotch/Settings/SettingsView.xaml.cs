@@ -412,6 +412,28 @@ public partial class SettingsView : UserControl, IToolView
     private void RenderAbout()
     {
         Title("About", $"OrixNotch {typeof(App).Assembly.GetName().Version?.ToString(3)}");
+
+        // Brand lockup: vector notch mark + wordmark + tagline (light/dark auto via BrandMark).
+        var brand = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+        brand.Children.Add(new BrandMark { Variant = BrandVariant.Auto, Width = 72, Height = 22, VerticalAlignment = VerticalAlignment.Center });
+        var words = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var name = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold };
+        name.Inlines.Add(new System.Windows.Documents.Run("Orix"));
+        var notchRun = new System.Windows.Documents.Run("Notch");
+        notchRun.Foreground = (Brush)FindResource("BrandGradientBrush");
+        name.Inlines.Add(notchRun);
+        words.Children.Add(name);
+        words.Children.Add(new TextBlock
+        {
+            Text = "Smoother  •  Faster  •  Smarter",
+            Style = (Style)FindResource("SubText"),
+            FontSize = 10.5,
+            FontWeight = FontWeights.Normal,
+            Margin = new Thickness(0, 1, 0, 0),
+        });
+        brand.Children.Add(words);
+        Page.Children.Add(Group(brand));
+
         Section("PRIVACY");
         Page.Children.Add(Group(new TextBlock
         {

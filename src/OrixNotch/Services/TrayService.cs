@@ -45,7 +45,7 @@ public sealed class TrayService : IDisposable
 
 internal static class IconFactory
 {
-    /// <summary>Draws the black-pill-with-orange-dot logo so no .ico asset is needed.</summary>
+    /// <summary>Draws the OrixNotch brand pill (blue → purple → pink gloss) so the tray matches the app icon.</summary>
     public static Drawing.Icon CreateTrayIcon()
     {
         using var bmp = new Drawing.Bitmap(32, 32);
@@ -53,13 +53,37 @@ internal static class IconFactory
         {
             g.SmoothingMode = Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.Clear(Drawing.Color.Transparent);
-            using var path = RoundedRect(new Drawing.RectangleF(1.5f, 8.5f, 29f, 15f), 7.5f);
-            using var fill = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 12, 12, 12));
-            using var pen = new Drawing.Pen(Drawing.Color.FromArgb(230, 240, 240, 240), 1.6f);
-            using var dot = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 255, 138, 61));
-            g.FillPath(fill, path);
-            g.DrawPath(pen, path);
-            g.FillEllipse(dot, 19.5f, 12.5f, 7f, 7f);
+
+            // Dark rounded-square chip (matches Assets/Brand app icon).
+            using var bgPath = RoundedRect(new Drawing.RectangleF(0, 0, 32, 32), 7.5f);
+            using var bgFill = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 11, 14, 23));
+            g.FillPath(bgFill, bgPath);
+
+            // Gradient pill.
+            var pill = new Drawing.RectangleF(4.5f, 12f, 23f, 8f);
+            using var pillPath = RoundedRect(pill, 4f);
+            using var brush = new Drawing.Drawing2D.LinearGradientBrush(
+                pill,
+                Drawing.Color.FromArgb(255, 46, 156, 255),
+                Drawing.Color.FromArgb(255, 217, 70, 239),
+                Drawing.Drawing2D.LinearGradientMode.Horizontal);
+            var blend = new Drawing.Drawing2D.ColorBlend(4);
+            blend.Colors =
+            [
+                Drawing.Color.FromArgb(255, 46, 156, 255),
+                Drawing.Color.FromArgb(255, 79, 70, 255),
+                Drawing.Color.FromArgb(255, 124, 60, 255),
+                Drawing.Color.FromArgb(255, 217, 70, 239),
+            ];
+            blend.Positions = [0f, 0.38f, 0.68f, 1f];
+            brush.InterpolationColors = blend;
+            g.FillPath(brush, pillPath);
+
+            // Notch dip punched with the chip background + soft highlight.
+            using var notch = Notch(new Drawing.RectangleF(11.5f, 11f, 9.5f, 4.5f));
+            g.FillPath(bgFill, notch);
+            using var edge = new Drawing.Pen(Drawing.Color.FromArgb(120, 255, 255, 255), 1f);
+            g.DrawPath(edge, notch);
         }
         return Drawing.Icon.FromHandle(bmp.GetHicon());
     }
@@ -72,6 +96,21 @@ internal static class IconFactory
         path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
         path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
         path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    private static Drawing.Drawing2D.GraphicsPath Notch(Drawing.RectangleF r)
+    {
+        var radius = r.Width * 0.16f;
+        var d = radius * 2;
+        var path = new Drawing.Drawing2D.GraphicsPath();
+        path.AddLine(r.X, r.Y, r.Right, r.Y);
+        path.AddLine(r.Right, r.Y, r.Right, r.Bottom - radius);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddLine(r.Right - radius, r.Bottom, r.X + radius, r.Bottom);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.AddLine(r.X, r.Bottom - radius, r.X, r.Y);
         path.CloseFigure();
         return path;
     }

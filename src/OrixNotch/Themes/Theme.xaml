@@ -35,6 +35,14 @@
     <SolidColorBrush x:Key="GoodBrush" Color="#32D74B" />
     <SolidColorBrush x:Key="BadBrush" Color="#FF453A" />
 
+    <!-- OrixNotch brand gradient (logo board: blue → indigo → violet → pink). Static: brand stays constant across themes. -->
+    <LinearGradientBrush x:Key="BrandGradientBrush" StartPoint="0,0.5" EndPoint="1,0.5">
+        <GradientStop Color="#FF2E9CFF" Offset="0.0" />
+        <GradientStop Color="#FF4F46FF" Offset="0.38" />
+        <GradientStop Color="#FF7C3CFF" Offset="0.68" />
+        <GradientStop Color="#FFD946EF" Offset="1.0" />
+    </LinearGradientBrush>
+
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
     <svc:InverseBoolToVisibility x:Key="InverseBoolToVis" />
     <svc:ZeroToVisibility x:Key="ZeroToVis" />
