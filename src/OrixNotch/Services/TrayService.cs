@@ -59,8 +59,8 @@ internal static class IconFactory
             using var bgFill = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 11, 14, 23));
             g.FillPath(bgFill, bgPath);
 
-            // Gradient pill.
-            var pill = new Drawing.RectangleF(4.5f, 12f, 23f, 8f);
+            // Gradient pill (slim capsule matching BrandMark).
+            var pill = new Drawing.RectangleF(8.5f, 12f, 15f, 8f);
             using var pillPath = RoundedRect(pill, 4f);
             using var brush = new Drawing.Drawing2D.LinearGradientBrush(
                 pill,
@@ -80,9 +80,9 @@ internal static class IconFactory
             g.FillPath(brush, pillPath);
 
             // Notch dip punched with the chip background + soft highlight.
-            using var notch = Notch(new Drawing.RectangleF(11.5f, 11f, 9.5f, 4.5f));
+            using var notch = Notch(new Drawing.RectangleF(12.85f, 11f, 6.3f, 3.2f));
             g.FillPath(bgFill, notch);
-            using var edge = new Drawing.Pen(Drawing.Color.FromArgb(120, 255, 255, 255), 1f);
+            using var edge = new Drawing.Pen(Drawing.Color.FromArgb(120, 255, 255, 255), 0.6f);
             g.DrawPath(edge, notch);
         }
         return Drawing.Icon.FromHandle(bmp.GetHicon());
@@ -102,15 +102,19 @@ internal static class IconFactory
 
     private static Drawing.Drawing2D.GraphicsPath Notch(Drawing.RectangleF r)
     {
-        var radius = r.Width * 0.16f;
+        var radius = r.Width * 0.30f;
+        var t = r.Width * 0.12f;
         var d = radius * 2;
+        var td = t * 2;
         var path = new Drawing.Drawing2D.GraphicsPath();
-        path.AddLine(r.X, r.Y, r.Right, r.Y);
-        path.AddLine(r.Right, r.Y, r.Right, r.Bottom - radius);
+        path.AddLine(r.X + t, r.Y, r.Right - t, r.Y);
+        path.AddArc(r.Right - td, r.Y, td, td, 270, 90);
+        path.AddLine(r.Right, r.Y + t, r.Right, r.Bottom - radius);
         path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
         path.AddLine(r.Right - radius, r.Bottom, r.X + radius, r.Bottom);
         path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        path.AddLine(r.X, r.Bottom - radius, r.X, r.Y);
+        path.AddLine(r.X, r.Bottom - radius, r.X, r.Y + t);
+        path.AddArc(r.X, r.Y, td, td, 180, 90);
         path.CloseFigure();
         return path;
     }

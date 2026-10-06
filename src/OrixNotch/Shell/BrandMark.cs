@@ -123,9 +123,9 @@ public class BrandMark : Control
                         new Point(0, 0), new Point(0, 0.55));
                     dc.DrawRectangle(gloss, null, new Rect(0, 0, ViewBoxW, ViewBoxH * 0.55));
                     dc.Pop();
-                    // Notch inner highlight (matches the glossy dip in the logo).
+                    // Notch inner highlight (thin, matches the glossy dip in the logo).
                     dc.DrawGeometry(Brushes.Transparent,
-                        new Pen(new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)), 2.5)
+                        new Pen(new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)), 1.25)
                         { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round },
                         BuildNotchStroke());
                     break;
@@ -139,7 +139,10 @@ public class BrandMark : Control
 
     internal static Geometry BuildMarkGeometry()
     {
-        var outer = new RectangleGeometry(new Rect(0, 0, ViewBoxW, ViewBoxH), ViewBoxH / 2, ViewBoxH / 2);
+        // Slimmer capsule: 120 wide centered in the 208 viewBox (was 152).
+        const double pillW = 120;
+        const double pillX = (ViewBoxW - pillW) / 2; // 44
+        var outer = new RectangleGeometry(new Rect(pillX, 0, pillW, ViewBoxH), ViewBoxH / 2, ViewBoxH / 2);
         var notch = BuildNotchGeometry();
         var combined = new CombinedGeometry(GeometryCombineMode.Exclude, outer, notch);
         if (combined.CanFreeze) combined.Freeze();
@@ -148,14 +151,20 @@ public class BrandMark : Control
 
     private static Geometry BuildNotchGeometry()
     {
-        // Top-center dip: 84 wide, ~30 tall, flat top (cut through), rounded bottom.
-        const double x = (ViewBoxW - 84) / 2; // 62
-        var fig = new PathFigure { StartPoint = new Point(x, -2), IsClosed = true };
-        fig.Segments.Add(new LineSegment(new Point(x + 84, -2), true));
-        fig.Segments.Add(new LineSegment(new Point(x + 84, 14), true));
-        fig.Segments.Add(new QuadraticBezierSegment(new Point(x + 84, 28), new Point(x + 70, 28), true));
-        fig.Segments.Add(new LineSegment(new Point(x + 14, 28), true));
-        fig.Segments.Add(new QuadraticBezierSegment(new Point(x, 28), new Point(x, 14), true));
+        // Shallow top-center dip: 50 wide, ~20 tall, flat top (cut through),
+        // all corners rounded (top r=6, bottom r=10).
+        const double w = 50;
+        const double x = (ViewBoxW - w) / 2; // 79
+        const double bottom = 20;
+        var fig = new PathFigure { StartPoint = new Point(x + 6, -2), IsClosed = true };
+        fig.Segments.Add(new LineSegment(new Point(x + w - 6, -2), true));
+        fig.Segments.Add(new QuadraticBezierSegment(new Point(x + w, -2), new Point(x + w, 4), true));
+        fig.Segments.Add(new LineSegment(new Point(x + w, 10), true));
+        fig.Segments.Add(new QuadraticBezierSegment(new Point(x + w, bottom), new Point(x + w - 10, bottom), true));
+        fig.Segments.Add(new LineSegment(new Point(x + 10, bottom), true));
+        fig.Segments.Add(new QuadraticBezierSegment(new Point(x, bottom), new Point(x, 10), true));
+        fig.Segments.Add(new LineSegment(new Point(x, 4), true));
+        fig.Segments.Add(new QuadraticBezierSegment(new Point(x, -2), new Point(x + 6, -2), true));
         var geo = new PathGeometry([fig]);
         if (geo.CanFreeze) geo.Freeze();
         return geo;
@@ -163,13 +172,14 @@ public class BrandMark : Control
 
     private static Geometry BuildNotchStroke()
     {
-        const double x = (ViewBoxW - 84) / 2;
-        var fig = new PathFigure { StartPoint = new Point(x + 2, 2) };
-        fig.Segments.Add(new LineSegment(new Point(x + 2, 13), true));
-        fig.Segments.Add(new QuadraticBezierSegment(new Point(x + 2, 26), new Point(x + 15, 26), true));
-        fig.Segments.Add(new LineSegment(new Point(x + 69, 26), true));
-        fig.Segments.Add(new QuadraticBezierSegment(new Point(x + 82, 26), new Point(x + 82, 13), true));
-        fig.Segments.Add(new LineSegment(new Point(x + 82, 2), true));
+        const double w = 50;
+        const double x = (ViewBoxW - w) / 2;
+        var fig = new PathFigure { StartPoint = new Point(x + 7, 0) };
+        fig.Segments.Add(new LineSegment(new Point(x + 7, 9), true));
+        fig.Segments.Add(new QuadraticBezierSegment(new Point(x + 7, 18), new Point(x + 16, 18), true));
+        fig.Segments.Add(new LineSegment(new Point(x + w - 16, 18), true));
+        fig.Segments.Add(new QuadraticBezierSegment(new Point(x + w - 7, 18), new Point(x + w - 7, 9), true));
+        fig.Segments.Add(new LineSegment(new Point(x + w - 7, 0), true));
         var geo = new PathGeometry([fig]);
         if (geo.CanFreeze) geo.Freeze();
         return geo;

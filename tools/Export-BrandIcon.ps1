@@ -28,8 +28,8 @@ function New-AppIconBitmap([int]$size) {
             $g.FillPath((New-Object System.Drawing.SolidBrush($bg)), $bgPath)
         } finally { $bgPath.Dispose() }
 
-        # Gradient pill centered.
-        $pillW = $size * 0.70
+        # Gradient pill centered (slim capsule: ~0.44 of icon, matches BrandMark 120x64).
+        $pillW = $size * 0.44
         $pillH = $size * 0.235
         $pillX = ($size - $pillW) / 2
         $pillY = ($size - $pillH) / 2 - $size * 0.02
@@ -63,13 +63,13 @@ function New-AppIconBitmap([int]$size) {
 
             # Notch cutout: punch through the top-center with the bg color, rounded bottom.
             $notchW = $pillW * 0.42
-            $notchH = $pillH * 0.48
+            $notchH = $pillH * 0.32
             $notchX = $pillX + ($pillW - $notchW) / 2
             $notchY = $pillY - 1
             $notch = NotchPath $notchX $notchY $notchW $notchH
             try {
                 $g.FillPath((New-Object System.Drawing.SolidBrush($bg)), $notch)
-                $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(120, 255, 255, 255), [float]([Math]::Max(1.0, $size / 128.0)))
+                $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(120, 255, 255, 255), [float]([Math]::Max(0.6, $size / 200.0)))
                 try { $g.DrawPath($pen, $notch) } finally { $pen.Dispose() }
             } finally { $notch.Dispose() }
         } finally { $pillPath.Dispose() }
@@ -89,14 +89,17 @@ function RoundedRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
 }
 
 function NotchPath([float]$x, [float]$y, [float]$w, [float]$h) {
-    $r = $w * 0.16
+    $r = $w * 0.30
+    $t = $w * 0.12
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $p.AddLine($x, $y, $x + $w, $y) | Out-Null
-    $p.AddLine($x + $w, $y, $x + $w, $y + $h - $r) | Out-Null
+    $p.AddLine($x + $t, $y, $x + $w - $t, $y) | Out-Null
+    $p.AddArc($x + $w - 2 * $t, $y, 2 * $t, 2 * $t, 270, 90) | Out-Null
+    $p.AddLine($x + $w, $y + $t, $x + $w, $y + $h - $r) | Out-Null
     $p.AddArc($x + $w - 2 * $r, $y + $h - 2 * $r, 2 * $r, 2 * $r, 0, 90) | Out-Null
     $p.AddLine($x + $w - $r, $y + $h, $x + $r, $y + $h) | Out-Null
     $p.AddArc($x, $y + $h - 2 * $r, 2 * $r, 2 * $r, 90, 90) | Out-Null
-    $p.AddLine($x, $y + $h - $r, $x, $y) | Out-Null
+    $p.AddLine($x, $y + $h - $r, $x, $y + $t) | Out-Null
+    $p.AddArc($x, $y, 2 * $t, 2 * $t, 180, 90) | Out-Null
     $p.CloseFigure() | Out-Null
     return $p
 }
