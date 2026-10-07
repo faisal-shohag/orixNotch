@@ -1,7 +1,6 @@
 # Builds the portable self-contained OrixNotch exe.
 # Run from repo root:  pwsh packaging/Build-Exe.ps1
-# Output goes to publish/ and output/ (output/*.exe is git-ignored:
-# EXE exceeds GitHub's 100MB limit — get it from GitHub Releases).
+# Output goes to publish/ and output/ (output/ is git-ignored; installers ship via GitHub Releases).
 param()
 
 $ErrorActionPreference = "Stop"

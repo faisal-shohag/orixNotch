@@ -491,10 +491,6 @@ $RECYCLE.BIN/
 
 # Published builds
 publish/
-# Tracked release output (MSI/MSIX only — EXE exceeds GitHub's 100MB limit,
-# get it from GitHub Releases). Negations must come after the *.msi/*.msix rules above.
-!output/*.msi
-!output/*.msix
-output/*.exe
-output/*.pdb
-output/*.wixpdb
+# Local installer output (EXE/MSI/MSIX). Not tracked: builds aren't byte-identical
+# and installers ship via GitHub Releases.
+output/

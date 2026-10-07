@@ -80,8 +80,10 @@ if ($Sign) {
 Write-Host "MSIX ready: $outMsix"
 Get-Item $outMsix | Select-Object Name, Length
 
-# Mirror to tracked output/ dir (git tracks MSI/MSIX; EXE is Releases-only).
+# Mirror to local output/ dir (git-ignored; installers ship via GitHub Releases).
+# Test-signed builds get a distinct name so they're never mistaken for the Store upload.
 $outDir = Join-Path $repoRoot "output"
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-Copy-Item $outMsix (Join-Path $outDir "OrixNotch.msix") -Force
-Write-Host "Mirrored to output/OrixNotch.msix"
+$mirrorName = if ($Sign) { "OrixNotch-test-signed.msix" } else { "OrixNotch.msix" }
+Copy-Item $outMsix (Join-Path $outDir $mirrorName) -Force
+Write-Host "Mirrored to output/$mirrorName"
