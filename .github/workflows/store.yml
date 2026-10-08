@@ -1,0 +1,56 @@
+# Uploads a release's Store package to Microsoft Partner Center.
+# Runs when a (non-pre-)release is published, or manually for any tag. Does nothing until the Store
+# app exists and these are set (Settings → Secrets and variables → Actions) — see docs/RELEASING.md:
+#   variables: STORE_PRODUCT_ID (e.g. 9NXXXXXXXXXX), STORE_IDENTITY_NAME, STORE_PUBLISHER, STORE_PUBLISHER_DISPLAY_NAME
+#   secrets:   PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_SELLER_ID, PARTNER_CENTER_CLIENT_ID, PARTNER_CENTER_CLIENT_SECRET
+# By default the submission is left as a draft to review in Partner Center; "commit" submits it for certification.
+name: Microsoft Store
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload (e.g. v1.2.3)"
+        required: true
+      commit:
+        description: "Submit for certification right away (otherwise leave a draft)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    if: ${{ vars.STORE_PRODUCT_ID != '' && (github.event_name == 'workflow_dispatch' || !github.event.release.prerelease) }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Download the Store package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release download $env:TAG --repo ${{ github.repository }} --pattern "*-store.msix" --dir store
+          $msix = Get-ChildItem store -Filter *-store.msix | Select-Object -First 1
+          if (-not $msix) { throw "No *-store.msix asset on release $env:TAG" }
+          "MSIX=$($msix.FullName)" >> $env:GITHUB_ENV
+
+      - name: Setup Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.4
+
+      - name: Sign in to Partner Center
+        run: msstore reconfigure --tenantId ${{ secrets.PARTNER_CENTER_TENANT_ID }} --sellerId ${{ secrets.PARTNER_CENTER_SELLER_ID }} --clientId ${{ secrets.PARTNER_CENTER_CLIENT_ID }} --clientSecret ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+
+      - name: Upload package
+        shell: pwsh
+        env:
+          COMMIT: ${{ inputs.commit && 'true' || 'false' }}
+        run: |
+          $publishArgs = @("publish", ".", "--inputFile", $env:MSIX, "--appId", "${{ vars.STORE_PRODUCT_ID }}")
+          if ($env:COMMIT -ne "true") { $publishArgs += "--noCommit" }
+          msstore @publishArgs
+          if ($LASTEXITCODE -ne 0) { throw "msstore publish failed" }

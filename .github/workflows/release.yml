@@ -1,9 +1,14 @@
+# Push a tag vX.Y.Z (matching <Version> in OrixNotch.csproj) to publish a GitHub Release with:
+#   OrixNotch-X.Y.Z-setup.msi        per-user installer (no admin), opens at login, auto-starts after install
+#   OrixNotch-X.Y.Z-portable.exe     single self-contained exe, no install
+#   OrixNotch-X.Y.Z-store.msix       package for Microsoft Store upload (store.yml picks it up)
+#   SHA256SUMS.txt
+# Tags with a suffix (v1.2.0-beta.1) become pre-releases. See docs/RELEASING.md.
 name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
 
 permissions:
   contents: write
@@ -11,57 +16,81 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+      ORIXNOTCH_SIGN_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Read version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)(-[0-9A-Za-z.-]+)?$') { throw "Tag '$tag' is not vX.Y.Z[-suffix]" }
+          $version = $Matches[1]
+          $csproj = Get-Content src/OrixNotch/OrixNotch.csproj -Raw
+          if ($csproj -notmatch "<Version>$([regex]::Escape($version))</Version>") {
+            throw "Tag $tag doesn't match <Version> in src/OrixNotch/OrixNotch.csproj. Bump the csproj first (tools/Bump-Version.ps1)."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$([string]($tag -match '-').ToLower())" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          global-json-file: global.json
 
-      - name: Publish (win-x64 single file)
-        run: dotnet publish src/OrixNotch -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o dist
+      - name: Install WiX
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.Util.wixext/5.0.2
 
-      - name: Zip artifact
+      # Optional Authenticode signing of the exe and MSI (removes "unknown publisher" warnings).
+      # Add repo secrets SIGNING_PFX_BASE64 + SIGNING_PFX_PASSWORD to enable; skipped otherwise.
+      - name: Load signing certificate
+        if: ${{ env.SIGNING_PFX_BASE64 != '' }}
         shell: pwsh
-        run: Compress-Archive -Path dist/* -DestinationPath OrixNotch-win-x64.zip -Force
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          "ORIXNOTCH_SIGN_PFX=$pfx" >> $env:GITHUB_ENV
 
-      - name: Stage exe asset
+      - name: Build packages
         shell: pwsh
-        run: Copy-Item dist/OrixNotch.exe OrixNotch.exe -Force
+        env:
+          # Product identity from Partner Center (repo variables); placeholders until the Store app exists.
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory dist -Force | Out-Null
+          ./packaging/Build-Exe.ps1 -Version $v
+          Copy-Item publish/exe/OrixNotch.exe "dist/OrixNotch-$v-portable.exe"
+          ./packaging/Build-Msi.ps1 -Version $v -OutFile "$PWD/dist/OrixNotch-$v-setup.msi"
+          $msix = @{ Version = $v; OutFile = "$PWD/dist/OrixNotch-$v-store.msix" }
+          if ($env:STORE_IDENTITY_NAME) {
+            $msix.IdentityName = $env:STORE_IDENTITY_NAME
+            $msix.Publisher = $env:STORE_PUBLISHER
+            $msix.PublisherDisplayName = $env:STORE_PUBLISHER_DISPLAY_NAME
+          } else {
+            Write-Warning "STORE_IDENTITY_NAME not set: the .msix carries placeholder identity and can't be uploaded to the Store yet."
+          }
+          ./packaging/Build-Msix.ps1 @msix
+          Push-Location dist
+          Get-ChildItem -File | ForEach-Object { "$((Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content SHA256SUMS.txt -Encoding ascii
+          Pop-Location
 
-      - name: Build MSIX installer
-        shell: pwsh
-        run: pwsh packaging/Build-Msix.ps1
-
-      - name: Install WiX (MSI)
-        shell: pwsh
-        run: dotnet tool install --global wix --version 5.0.2
-
-      - name: Build MSI installer
-        shell: pwsh
-        run: pwsh packaging/Build-Msi.ps1
-
-      - name: Create GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            OrixNotch-win-x64.zip
-            OrixNotch.exe
-            publish/OrixNotch.msix
-            publish/OrixNotch.msi
+          files: dist/*
+          prerelease: ${{ steps.version.outputs.prerelease }}
           generate_release_notes: true
           body: |
-            ## OrixNotch ${{ github.ref_name }}
-
-            Dynamic-island style toolbox for Windows (WPF, .NET 8).
-
-            ### Run
-            - **Installer:** download `OrixNotch.msi` (per-machine, needs admin: `msiexec /i OrixNotch.msi /qn`) or `OrixNotch.msix` (unsigned package — the Microsoft Store listing is signed by the Store).
-            - **Portable exe:** download `OrixNotch.exe` and run it directly (self-contained, no .NET install needed).
-            - **Zip:** `OrixNotch-win-x64.zip` contains the same self-contained exe.
-            - Requires Windows 10 (2004) or later.
-
-            ### Data & privacy
-            Settings and local data live in `%LOCALAPPDATA%\OrixNotch`. Network calls only to Open-Meteo (weather) and Yahoo Finance (stocks) while those tools are open.
+            ## Install
+            - **`OrixNotch-${{ steps.version.outputs.version }}-setup.msi`** — recommended. Installs for your user only (no admin), starts OrixNotch right away and opens it at login (turn off in Settings → General → Open at login). Silent: `msiexec /i OrixNotch-${{ steps.version.outputs.version }}-setup.msi /qn LAUNCHAPP=0`.
+            - **`OrixNotch-${{ steps.version.outputs.version }}-portable.exe`** — no install, run from anywhere.
+            - `OrixNotch-${{ steps.version.outputs.version }}-store.msix` is the Microsoft Store upload package (the Store signs it); it can't be installed by double-clicking.
+            - Windows 10 (2004) or later, x64. Checksums in `SHA256SUMS.txt`.

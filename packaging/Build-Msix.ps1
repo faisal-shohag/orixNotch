@@ -1,38 +1,43 @@
-# Builds the OrixNotch MSIX package (unsigned, ready for Microsoft Store upload).
-# Store signs the package on submission. For local sideload testing use -Sign
-# (creates a self-signed CN=OrixNotch cert; install the .cer to Trusted People first).
+# Builds the OrixNotch MSIX package.
 #
-# Run from repo root:  pwsh packaging/Build-Msix.ps1 [-Sign]
-param([switch]$Sign)
+#   Microsoft Store upload (Store signs it):
+#     pwsh packaging/Build-Msix.ps1 -Version 1.2.3 -IdentityName <Store name> -Publisher "CN=..." -PublisherDisplayName "..."
+#   Local sideload test (self-signed; trust publish/OrixNotch-test.cer in Local Machine > Trusted People first):
+#     pwsh packaging/Build-Msix.ps1 -Sign
+#
+# The app is published self-contained: MSIX can't pull in the .NET 8 Desktop Runtime, so a
+# framework-dependent package would fail to start on PCs without it.
+param(
+    [string]$Version,
+    [string]$IdentityName = "OrixNotch",
+    [string]$Publisher = "CN=OrixNotch",
+    [string]$PublisherDisplayName = "Faisal Shohag",
+    [string]$OutFile,
+    [switch]$Sign
+)
 
 $ErrorActionPreference = "Stop"
+. "$PSScriptRoot/Common.ps1"
 Add-Type -AssemblyName System.Drawing
 
-$repoRoot = Split-Path $PSScriptRoot -Parent
-$layout = Join-Path $repoRoot "packaging/layout"
-$outMsix = Join-Path $repoRoot "publish/OrixNotch.msix"
+$appVersion = Get-AppVersion $Version
+$layout = Join-Path $PSScriptRoot "layout"
+if (-not $OutFile) { $OutFile = Join-Path $RepoRoot "publish/OrixNotch.msix" }
+Write-Host "MSIX $appVersion.0 · $IdentityName · $Publisher"
 
-# Sync manifest version from the csproj (x.y.z -> x.y.z.0).
-$csproj = Get-Content (Join-Path $repoRoot "src/OrixNotch/OrixNotch.csproj") -Raw
-if ($csproj -notmatch "<Version>(\d+\.\d+\.\d+)</Version>") { throw "Version not found in csproj" }
-$appVersion = "$($Matches[1]).0"
-Write-Host "App version: $appVersion"
+# 1. Self-contained folder publish.
+Invoke-Publish -OutDir $layout -Version $appVersion
 
-# 1. Publish framework-dependent win-x64 (small; Store machines have .NET via the framework package graph).
-Write-Host "Publishing app..."
-& dotnet publish (Join-Path $repoRoot "src/OrixNotch") -c Release -r win-x64 --self-contained false -o $layout
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
-
-# 2. Manifest with synced version.
+# 2. Manifest: version (x.y.z.0 — the Store requires revision 0) and identity.
 $manifest = Get-Content (Join-Path $PSScriptRoot "Package.appxmanifest") -Raw
-$manifest = $manifest -replace 'Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$appVersion`""
+$manifest = $manifest -replace '(<Identity[^>]*?\sVersion=")[^"]+"', "`${1}$appVersion.0`""
+$manifest = $manifest -replace '(<Identity[^>]*?\sName=")[^"]+"', "`${1}$IdentityName`""
+$manifest = $manifest -replace '(<Identity[^>]*?\sPublisher=")[^"]+"', "`${1}$([Security.SecurityElement]::Escape($Publisher))`""
+$manifest = $manifest -replace '<PublisherDisplayName>[^<]*</PublisherDisplayName>', "<PublisherDisplayName>$([Security.SecurityElement]::Escape($PublisherDisplayName))</PublisherDisplayName>"
 Set-Content (Join-Path $layout "AppxManifest.xml") $manifest -Encoding UTF8
 
-# Drop debug symbols from the package.
-Get-ChildItem $layout -Filter *.pdb -Recurse | Remove-Item -Force
-
 # 3. Tile assets resized from the brand logo.
-$logo = Join-Path $repoRoot "src/OrixNotch/Assets/Brand/logo-512.png"
+$logo = Join-Path $ProjectDir "Assets/Brand/logo-512.png"
 $assetsDir = Join-Path $layout "Assets"
 New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
 function Write-Tile([string]$name, [int]$w, [int]$h) {
@@ -47,7 +52,6 @@ function Write-Tile([string]$name, [int]$w, [int]$h) {
                 $g.DrawImage($src, 0, 0, $w, $h)
             } finally { $g.Dispose() }
             $bmp.Save((Join-Path $assetsDir $name), [System.Drawing.Imaging.ImageFormat]::Png)
-            Write-Host "wrote Assets/$name"
         } finally { $bmp.Dispose() }
     } finally { $src.Dispose() }
 }
@@ -55,35 +59,25 @@ Write-Tile "StoreLogo.png" 50 50
 Write-Tile "Square44x44Logo.png" 44 44
 Write-Tile "Square150x150Logo.png" 150 150
 
-# 4. Pack (locate the newest installed Windows SDK: works locally and on GitHub runners).
-$sdkBin = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
-    Where-Object { Test-Path (Join-Path $_.FullName "x64\makeappx.exe") } |
-    Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
-if (-not $sdkBin) { throw "makeappx.exe not found (install the Windows 10/11 SDK)" }
-$sdkBin = Join-Path $sdkBin "x64"
-$makeappx = Join-Path $sdkBin "makeappx.exe"
-New-Item -ItemType Directory -Path (Split-Path $outMsix) -Force | Out-Null
-Write-Host "Packing MSIX..."
-& $makeappx pack /d $layout /p $outMsix /o
+# 4. Pack.
+$sdkBin = Get-WindowsSdkBin
+New-Item -ItemType Directory -Path (Split-Path $OutFile) -Force | Out-Null
+& (Join-Path $sdkBin "makeappx.exe") pack /d $layout /p $OutFile /o
 if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed" }
 
 if ($Sign) {
-    $certPath = Join-Path $repoRoot "publish/OrixNotch-test.cer"
-    $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=OrixNotch" -KeyUsage DigitalSignature `
-        -FriendlyName "OrixNotch test cert" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+    # Self-signed test certificate; its subject must equal the manifest Publisher.
+    $certPath = Join-Path $RepoRoot "publish/OrixNotch-test.cer"
+    $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $Publisher -and $_.FriendlyName -eq "OrixNotch test cert" } | Select-Object -First 1
+    if (-not $cert) {
+        $cert = New-SelfSignedCertificate -Type Custom -Subject $Publisher -KeyUsage DigitalSignature `
+            -FriendlyName "OrixNotch test cert" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+    }
     Export-Certificate -Cert $cert -FilePath $certPath | Out-Null
-    Write-Host "Test cert exported to $certPath — install it to Local Machine > Trusted People before installing the MSIX."
-    & (Join-Path $sdkBin "signtool.exe") sign /fd SHA256 /a /f $certPath /p "" $outMsix
+    & (Join-Path $sdkBin "signtool.exe") sign /fd SHA256 /sha1 $cert.Thumbprint $OutFile
     if ($LASTEXITCODE -ne 0) { throw "signtool failed" }
+    Write-Host "Test-signed. Trust $certPath (Local Machine > Trusted People) before installing."
 }
 
-Write-Host "MSIX ready: $outMsix"
-Get-Item $outMsix | Select-Object Name, Length
-
-# Mirror to local output/ dir (git-ignored; installers ship via GitHub Releases).
-# Test-signed builds get a distinct name so they're never mistaken for the Store upload.
-$outDir = Join-Path $repoRoot "output"
-New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-$mirrorName = if ($Sign) { "OrixNotch-test-signed.msix" } else { "OrixNotch.msix" }
-Copy-Item $outMsix (Join-Path $outDir $mirrorName) -Force
-Write-Host "Mirrored to output/$mirrorName"
+Write-Host "MSIX ready: $OutFile"
+Copy-ToOutput $OutFile ($(if ($Sign) { "OrixNotch-test-signed.msix" } else { Split-Path $OutFile -Leaf }))

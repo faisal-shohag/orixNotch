@@ -189,6 +189,8 @@ publish/
 packaging/layout/
 # MSI staging + generated WiX fragment (packaging/OrixNotch.wxs + Build-Msi.ps1 are source)
 packaging/msi-stage/
+# Release workflow staging
+dist/
 packaging/*.g.wxi
 
 # Publish Web Output

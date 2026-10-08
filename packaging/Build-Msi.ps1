@@ -1,54 +1,45 @@
-# Builds the OrixNotch MSI installer (per-machine, x64).
-# Requires WiX v5 (v7+ needs OSMF EULA acceptance):
+# Builds the OrixNotch MSI (per-user, x64, no admin needed).
+# Requires WiX v5 (v7+ needs OSMF EULA acceptance) and its Util extension:
 #   dotnet tool install --global wix --version 5.0.2
-# Run from repo root:  pwsh packaging/Build-Msi.ps1
-# Silent install:  msiexec /i publish/OrixNotch.msi /qn
-param()
+#   wix extension add -g WixToolset.Util.wixext/5.0.2
+# Run from repo root:  pwsh packaging/Build-Msi.ps1 [-Version 1.2.3]
+# Silent install:      msiexec /i publish/OrixNotch.msi /qn LAUNCHAPP=0
+param([string]$Version, [string]$OutFile)
 
 $ErrorActionPreference = "Stop"
+. "$PSScriptRoot/Common.ps1"
 
-$repoRoot = Split-Path $PSScriptRoot -Parent
+$appVersion = Get-AppVersion $Version
 $stage = Join-Path $PSScriptRoot "msi-stage"
-$outMsi = Join-Path $repoRoot "publish/OrixNotch.msi"
+if (-not $OutFile) { $OutFile = Join-Path $RepoRoot "publish/OrixNotch.msi" }
+Write-Host "MSI $appVersion"
 
-# Version from the csproj.
-$csproj = Get-Content (Join-Path $repoRoot "src/OrixNotch/OrixNotch.csproj") -Raw
-if ($csproj -notmatch "<Version>(\d+\.\d+\.\d+)</Version>") { throw "Version not found in csproj" }
-$appVersion = $Matches[1]
-Write-Host "App version: $appVersion"
+# 1. Self-contained single-file publish (same exe as the portable download), signed if a cert is set up.
+Invoke-Publish -OutDir $stage -Version $appVersion -SingleFile
+Invoke-CodeSign (Join-Path $stage "OrixNotch.exe")
 
-# 1. Self-contained publish (matches the GitHub release exe).
-Write-Host "Publishing app..."
-if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-& dotnet publish (Join-Path $repoRoot "src/OrixNotch") -c Release -r win-x64 --self-contained `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
-    -o $stage
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
-Get-ChildItem $stage -Filter *.pdb | Remove-Item -Force
-
-# 2. Harvest files into a WiX fragment (stable auto GUIDs via WiX v4+ default).
+# 2. File list for the AppBinaries component.
 $files = Get-ChildItem $stage -File | Sort-Object Name
 $xml = @('<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">')
 foreach ($f in $files) {
     $id = if ($f.Name -eq "OrixNotch.exe") { ' Id="MainExe"' } else { "" }
-    $xml += "  <Component Bitness=`"always64`"><File$id Source=`"$($f.FullName)`" /></Component>"
+    $xml += "  <File$id Source=`"$($f.FullName)`" />"
 }
 $xml += "</Include>"
 Set-Content (Join-Path $PSScriptRoot "MsiFiles.g.wxi") ($xml -join "`r`n") -Encoding UTF8
-Write-Host "Harvested $($files.Count) files."
 
-# 3. Build the MSI (WiX v5: no EULA gate; pin wix 5.x — v7 requires OSMF acceptance).
-Write-Host "Building MSI..."
-& wix build -arch x64 -d "ProductVersion=$appVersion" -d "StageDir=$stage" `
-    -d "BrandIco=$(Join-Path $repoRoot 'src/OrixNotch/Assets/Brand/OrixNotch.ico')" `
-    -o $outMsi (Join-Path $PSScriptRoot "OrixNotch.wxs")
+# 3. Build.
+if (-not ((wix extension list -g) -match "WixToolset.Util.wixext")) {
+    wix extension add -g WixToolset.Util.wixext/5.0.2
+    if ($LASTEXITCODE -ne 0) { throw "could not add WixToolset.Util.wixext" }
+}
+New-Item -ItemType Directory -Path (Split-Path $OutFile) -Force | Out-Null
+& wix build -arch x64 -ext WixToolset.Util.wixext -d "ProductVersion=$appVersion" `
+    -d "BrandIco=$(Join-Path $ProjectDir 'Assets/Brand/OrixNotch.ico')" `
+    -o $OutFile (Join-Path $PSScriptRoot "OrixNotch.wxs")
 if ($LASTEXITCODE -ne 0) { throw "wix build failed" }
+Remove-Item ([IO.Path]::ChangeExtension($OutFile, ".wixpdb")) -ErrorAction SilentlyContinue # build debug info, not shipped
+Invoke-CodeSign $OutFile
 
-Write-Host "MSI ready: $outMsi"
-Get-Item $outMsi | Select-Object Name, Length
-
-# Mirror to local output/ dir (git-ignored; installers ship via GitHub Releases).
-$outDir = Join-Path $repoRoot "output"
-New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-Copy-Item $outMsi (Join-Path $outDir "OrixNotch.msi") -Force
-Write-Host "Mirrored to output/OrixNotch.msi"
+Write-Host "MSI ready: $OutFile"
+Copy-ToOutput $OutFile (Split-Path $OutFile -Leaf)

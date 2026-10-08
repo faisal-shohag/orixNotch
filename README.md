@@ -42,11 +42,9 @@ dotnet run --project src/OrixNotch
 dotnet run --project src/OrixNotch -- --open weather
 ```
 
-Publish a single self-contained exe (~75 MB, no .NET install needed) to `publish/`:
-
-```powershell
-dotnet publish src/OrixNotch -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish
-```
+Installers (portable exe, per-user MSI, Store MSIX) are built by the scripts in `packaging/`; CI builds
+them on every push and a `vX.Y.Z` tag publishes a GitHub Release. See [docs/RELEASING.md](docs/RELEASING.md)
+for the release process, code signing and Microsoft Store setup.
 
 ## Data & privacy
 

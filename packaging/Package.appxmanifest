@@ -1,18 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   OrixNotch MSIX manifest (sideload + Microsoft Store upload).
-  BEFORE STORE SUBMISSION: set Identity Name to your reserved Store name and
-  Publisher to the exact Publisher ID from Partner Center
-  (Account settings > Organizational profile). The Store re-signs the package.
+  Identity Name / Publisher / PublisherDisplayName and Version are filled in by
+  packaging/Build-Msix.ps1 (-IdentityName -Publisher -PublisherDisplayName -Version).
+  For the Store, CI passes the values Partner Center shows under
+  Product management > Product identity (repo variables STORE_IDENTITY_NAME,
+  STORE_PUBLISHER, STORE_PUBLISHER_DISPLAY_NAME). The Store re-signs the package.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
-  IgnorableNamespaces="uap uap10 rescap desktop mp">
+  IgnorableNamespaces="uap uap3 uap10 rescap desktop mp">
   <Identity
     Name="OrixNotch"
     Publisher="CN=OrixNotch"
@@ -41,12 +44,16 @@
         Square44x44Logo="Assets\Square44x44Logo.png" />
       <Extensions>
         <desktop:Extension Category="windows.startupTask" Executable="OrixNotch.exe" EntryPoint="Windows.FullTrustApplication">
-          <desktop:StartupTask TaskId="OrixNotchAutostart" Enabled="false" DisplayName="OrixNotch" />
+          <!-- Enabled: Windows turns open-at-login on after the first launch; the user can switch it off in
+               Task Manager or OrixNotch's settings (StartupService). -->
+          <desktop:StartupTask TaskId="OrixNotchAutostart" Enabled="true" DisplayName="OrixNotch" />
         </desktop:Extension>
       </Extensions>
     </Application>
   </Applications>
   <Capabilities>
+    <!-- Mirror Windows notifications on the notch (user grants access once). General capabilities come before rescap. -->
+    <uap3:Capability Name="userNotificationListener" />
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
