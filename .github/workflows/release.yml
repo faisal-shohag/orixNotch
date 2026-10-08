@@ -80,7 +80,9 @@ jobs:
           }
           ./packaging/Build-Msix.ps1 @msix
           Push-Location dist
-          Get-ChildItem -File | ForEach-Object { "$((Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content SHA256SUMS.txt -Encoding ascii
+          # LF line endings so `sha256sum -c` works on Linux/macOS too.
+          $sums = Get-ChildItem -File | ForEach-Object { "$((Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+          [IO.File]::WriteAllText("$PWD/SHA256SUMS.txt", ($sums -join "`n") + "`n")
           Pop-Location
 
       - name: Publish GitHub Release
