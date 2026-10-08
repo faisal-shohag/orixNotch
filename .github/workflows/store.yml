@@ -1,5 +1,6 @@
 # Uploads a release's Store package to Microsoft Partner Center.
-# Runs when a (non-pre-)release is published, or manually for any tag. Does nothing until the Store
+# Called by release.yml after a (non-pre-)release is published, or run manually for any tag.
+# (A release created with the workflow token doesn't fire "release: published", so release.yml calls this.) Does nothing until the Store
 # app exists and these are set (Settings → Secrets and variables → Actions) — see docs/RELEASING.md:
 #   variables: STORE_PRODUCT_ID (e.g. 9NXXXXXXXXXX), STORE_IDENTITY_NAME, STORE_PUBLISHER, STORE_PUBLISHER_DISPLAY_NAME
 #   secrets:   PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_SELLER_ID, PARTNER_CENTER_CLIENT_ID, PARTNER_CENTER_CLIENT_SECRET
@@ -7,8 +8,11 @@
 name: Microsoft Store
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -24,7 +28,7 @@ permissions:
 
 jobs:
   submit:
-    if: ${{ vars.STORE_PRODUCT_ID != '' && (github.event_name == 'workflow_dispatch' || !github.event.release.prerelease) }}
+    if: ${{ vars.STORE_PRODUCT_ID != '' }}
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -32,7 +36,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: |
           gh release download $env:TAG --repo ${{ github.repository }} --pattern "*-store.msix" --dir store
           $msix = Get-ChildItem store -Filter *-store.msix | Select-Object -First 1

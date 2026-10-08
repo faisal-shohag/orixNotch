@@ -97,3 +97,12 @@ jobs:
             - **`OrixNotch-${{ steps.version.outputs.version }}-portable.exe`** — no install, run from anywhere.
             - `OrixNotch-${{ steps.version.outputs.version }}-store.msix` is the Microsoft Store upload package (the Store signs it); it can't be installed by double-clicking.
             - Windows 10 (2004) or later, x64. Checksums in `SHA256SUMS.txt`.
+
+  # Upload to the Microsoft Store (draft submission) once the Store app is configured; see docs/RELEASING.md.
+  store:
+    needs: release
+    if: ${{ vars.STORE_PRODUCT_ID != '' && !contains(github.ref_name, '-') }}
+    uses: ./.github/workflows/store.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit

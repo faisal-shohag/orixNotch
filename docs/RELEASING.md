@@ -6,7 +6,7 @@
 |---|---|---|
 | `ci.yml` | every push to `main`, every PR | Builds, then builds all three packages (exe, MSI, MSIX) so packaging breaks show up in the PR. Packages are attached to the run as an artifact for 14 days. |
 | `release.yml` | pushing a tag `vX.Y.Z` | Checks the tag matches `<Version>` in `OrixNotch.csproj`, builds the packages, writes `SHA256SUMS.txt`, publishes a GitHub Release. Tags with a suffix (`v1.2.0-beta.1`) become pre-releases. |
-| `store.yml` | a release is published (not pre-releases), or run by hand | Uploads the release's `*-store.msix` to Partner Center. Skipped until the Store app is set up (below). |
+| `store.yml` | called by `release.yml` after a normal (non-pre-) release, or run by hand | Uploads the release's `*-store.msix` to Partner Center. Skipped until the Store app is set up (below). |
 | Dependabot | weekly / monthly | PRs for NuGet packages and GitHub Actions. |
 
 ## Packages
