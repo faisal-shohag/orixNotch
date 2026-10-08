@@ -35,7 +35,8 @@ jobs:
             throw "Tag $tag doesn't match <Version> in src/OrixNotch/OrixNotch.csproj. Bump the csproj first (tools/Bump-Version.ps1)."
           }
           "version=$version" >> $env:GITHUB_OUTPUT
-          "prerelease=$([string]($tag -match '-').ToLower())" >> $env:GITHUB_OUTPUT
+          $prerelease = if ($tag.Contains('-')) { 'true' } else { 'false' }
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
 
       - uses: actions/setup-dotnet@v4
         with:
