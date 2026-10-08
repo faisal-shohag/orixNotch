@@ -15,7 +15,9 @@ public sealed class AppSettings
     public List<string> ToolOrder { get; set; } = new();
     public List<string> HiddenTools { get; set; } = new();
     public int MonitorIndex { get; set; } = -1; // -1 = primary display
+    /// <summary>Open at login. Turned on once for new installs (see StartupService.SyncAsync).</summary>
     public bool LaunchAtStartup { get; set; }
+    public bool StartupDefaultApplied { get; set; }
     public bool HideInFullscreen { get; set; } = true;
 
     public bool ClipboardEnabled { get; set; } = true;
@@ -34,6 +36,26 @@ public sealed class AppSettings
     public int TimerMinutes { get; set; } = 10;
     public string PomodoroSound { get; set; } = "No Sound";
     public string TimerSound { get; set; } = "No Sound";
+
+    // Calendar reminders on the closed notch
+    public bool RemindersEnabled { get; set; } = true;
+    public int ReminderLeadMin { get; set; } = 10;   // show this long before an event
+    public int ReminderLingerMin { get; set; } = 5;  // keep showing this long after it starts
+    public string ReminderSound { get; set; } = "Calendar";
+
+    // Windows notifications mirrored on the closed notch
+    public bool NotifyEnabled { get; set; } = true;
+    public bool NotifyShowText { get; set; } = true;
+    public List<string> NotifyMutedApps { get; set; } = new();  // app ids (AUMIDs)
+    public List<string> NotifySeenApps { get; set; } = new();   // "aumid|display name", newest first
+
+    // Idle closed notch: what to show when nothing is live
+    public List<string> IdleItems { get; set; } = new() { "clock" };
+    public string IdleLayout { get; set; } = "Rotate"; // Rotate | Split | Row
+    public int IdleRotateSec { get; set; } = 8;
+    /// <summary>"Auto" = the AI tool closest to its limit; "Choose" = the tools in <see cref="IdleAiTools"/>.</summary>
+    public string IdleAiMode { get; set; } = "Auto";
+    public List<string> IdleAiTools { get; set; } = new();
 
     public string LastTool { get; set; } = "nowplaying";
 
@@ -68,6 +90,7 @@ public sealed class AppSettings
     // Ask AI (API keys are stored separately, encrypted — see AiService)
     public string AiProvider { get; set; } = "anthropic"; // "anthropic" or "gemini"
     public string AiModel { get; set; } = "claude-opus-5-5";
+    public double AskAiHeight { get; set; } = 220;
 
     // AI usage limits used to compute "% used" (tokens; 0 = no limit shown)
     public long ClaudeSessionTokenLimit { get; set; }
@@ -87,28 +110,5 @@ public static class SettingsService
     {
         Storage.Save(FileName, Current);
         if (notify) Changed?.Invoke();
-    }
-}
-
-public static class StartupService
-{
-    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "OrixNotch";
-
-    public static void Apply(bool enabled)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
-            if (key is null) return;
-            if (enabled)
-                key.SetValue(ValueName, $"\"{Environment.ProcessPath}\"");
-            else
-                key.DeleteValue(ValueName, throwOnMissingValue: false);
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
-        }
     }
 }

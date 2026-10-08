@@ -13,8 +13,6 @@ namespace OrixNotch.Tools;
 
 public sealed class StockQuote
 {
-    private static readonly Brush Up = Frozen(Color.FromRgb(0x30, 0xD1, 0x58));
-    private static readonly Brush Down = Frozen(Color.FromRgb(0xFF, 0x45, 0x3A));
     private static readonly Brush Neutral = Frozen(Color.FromRgb(0x8E, 0x8E, 0x93));
 
     public string Symbol { get; init; } = "";
@@ -37,7 +35,8 @@ public sealed class StockQuote
             Name = name,
             PriceText = price.ToString(price >= 1000 ? "N0" : "N2", CultureInfo.CurrentCulture) + (currency == "USD" ? "" : $" {currency}"),
             ChangeText = $"{(change >= 0 ? "+" : "")}{pct:0.00}%",
-            Tint = change > 0 ? Up : change < 0 ? Down : Neutral,
+            // Theme brushes so the pill keeps contrast on light schemes; picked up again on the next refresh.
+            Tint = ThemeService.Get(change > 0 ? "GoodBrush" : change < 0 ? "BadBrush" : "SubTextBrush"),
             Points = Sparkline(closes, previous, 120, 24),
         };
     }

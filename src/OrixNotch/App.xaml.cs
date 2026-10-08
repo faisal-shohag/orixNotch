@@ -13,39 +13,17 @@ public partial class App : Application
 
     public static AppSettings Settings => SettingsService.Current;
 
-    /// <summary>Registers the bundled Noto Sans Bengali for this user (no admin needed),
-    /// so the UiFont fallback map can resolve it. Skipped when already available.</summary>
-    private static void EnsureBengaliFont()
+    /// <summary>
+    /// The UI font: Latin in SF Pro when installed, otherwise the bundled Inter; Bengali always in the
+    /// bundled Noto Sans Bengali, even inside mixed strings. Both variants are composite fonts shipped
+    /// in Fonts/*.CompositeFont, whose targets are relative to the file. (A composite built in code
+    /// can't point at pack:// resources: those targets silently fall back to Windows' Bengali font.)
+    /// Nothing is installed, and the SF Pro check is one lookup instead of a scan of every system font.
+    /// </summary>
+    private static FontFamily BuildUiFont()
     {
-        const string family = "Noto Sans Bengali";
-        try
-        {
-            if (Fonts.SystemFontFamilies.Any(f => f.Source.StartsWith(family, StringComparison.OrdinalIgnoreCase)))
-                return;
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts", writable: true);
-            // Another app (or a previous run) may have registered it under a different value name.
-            if (key?.GetValueNames().Any(n => n.Contains(family, StringComparison.OrdinalIgnoreCase)) == true)
-                return;
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Microsoft", "Windows", "Fonts");
-            Directory.CreateDirectory(dir);
-            const string fileName = "NotoSansBengali-OrixNotch.ttf";
-            var dest = Path.Combine(dir, fileName);
-            if (!File.Exists(dest))
-            {
-                using var src = Application.GetResourceStream(
-                    new Uri("pack://application:,,,/Fonts/NotoSansBengali.ttf", UriKind.Absolute))?.Stream;
-                if (src is null) return;
-                using var dst = File.Create(dest);
-                src.CopyTo(dst);
-            }
-            key?.SetValue($"{family} (TrueType)", fileName, Microsoft.Win32.RegistryValueKind.String);
-        }
-        catch (Exception ex)
-        {
-            Log(ex);
-        }
+        var sf = new Typeface("SF Pro Text").TryGetGlyphTypeface(out _);
+        return new FontFamily(new Uri("pack://application:,,,/Fonts/"), sf ? "./#OrixUI SF" : "./#OrixUI");
     }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -65,19 +43,14 @@ public partial class App : Application
             args.Handled = true;
         };
 
-        // Bengali script renders in Noto Sans Bengali (see UiFont in Theme.xaml): make sure
-        // the family is registered before any UI measures text. No admin needed (per-user).
-        EnsureBengaliFont();
-
-        // Use Apple's SF Pro when the user has installed it; otherwise the bundled Inter (Theme.xaml).
-        var sf = System.Windows.Media.Fonts.SystemFontFamilies
-            .FirstOrDefault(f => f.Source is "SF Pro Text" or "SF Pro Display" or "SF Pro");
-        if (sf is not null) Resources["UiFont"] = sf;
+        // Before any UI measures text.
+        Resources["UiFont"] = BuildUiFont();
         ThemeService.Apply();
         var window = new NotchWindow();
         MainWindow = window;
         window.Show();
         _tray = new TrayService(window);
+        _ = StartupService.SyncAsync(); // open-at-login: on by default, kept in step with Windows
 
         // `OrixNotch.exe --open weather` starts with the panel open on a tool.
         var openAt = Array.IndexOf(e.Args, "--open");

@@ -9,7 +9,7 @@
         </Grid.RowDefinitions>
 
         <Grid Margin="0,0,0,8">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel x:Name="Totals" Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="Today" Style="{StaticResource SubText}" />
                 <TextBlock x:Name="TodayCost" FontSize="13" FontWeight="SemiBold" Margin="5,0,14,0" Typography.NumeralAlignment="Tabular" />
                 <TextBlock Text="30 days" Style="{StaticResource SubText}" />
@@ -26,10 +26,30 @@
 
         <TextBlock x:Name="Empty" Grid.Row="1" Style="{StaticResource SubText}" TextWrapping="Wrap" TextAlignment="Center"
                    HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380" Visibility="Collapsed"
-                   Text="No local AI tool logs found. Usage appears here when Claude Code or Codex has been used on this PC." />
+                   Text="No AI tools found. Usage appears here for Claude Code, Codex / ChatGPT, Cursor, Antigravity, DeepSeek (API key in Ask AI) and Perplexity." />
 
-        <ScrollViewer x:Name="Strip" Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+        <!-- Card strip, like Clipboard: the wheel glides, resting the pointer near either edge scrolls that way (EdgeScroll). -->
+        <ScrollViewer x:Name="Strip" Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                      hero:EdgeScroll.IsEnabled="True" ScrollChanged="OnStripScrolled">
             <StackPanel x:Name="Cards" Orientation="Horizontal" />
         </ScrollViewer>
+
+        <!-- "More this way" hints, shown only when the strip can scroll that way. Visual only. -->
+        <Grid x:Name="EdgeLeft" Grid.Row="1" Width="48" HorizontalAlignment="Left" IsHitTestVisible="False" Opacity="0">
+            <Rectangle x:Name="EdgeLeftFade" />
+            <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource Surface2Brush}"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0">
+                <hero:HeroIcon Kind="ChevronLeft" Width="12" Height="12" Foreground="{DynamicResource TextBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+        </Grid>
+        <Grid x:Name="EdgeRight" Grid.Row="1" Width="48" HorizontalAlignment="Right" IsHitTestVisible="False" Opacity="0">
+            <Rectangle x:Name="EdgeRightFade" />
+            <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource Surface2Brush}"
+                    HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,2,0">
+                <hero:HeroIcon Kind="ChevronRight" Width="12" Height="12" Foreground="{DynamicResource TextBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

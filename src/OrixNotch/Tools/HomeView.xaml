@@ -3,141 +3,297 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:svc="clr-namespace:OrixNotch.Services"
              xmlns:hero="clr-namespace:OrixNotch.Shell">
+    <UserControl.Resources>
+        <!-- Round accent play/pause button -->
+        <Style x:Key="PlayButton" TargetType="Button">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Ellipse x:Name="Glow" Fill="{DynamicResource AccentBrush}" Opacity="0.35" Margin="-3">
+                                <Ellipse.Effect>
+                                    <BlurEffect Radius="10" />
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            <Ellipse x:Name="Bd" Fill="{DynamicResource AccentBrush}" />
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Glow" Property="Opacity" Value="0.6" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.8" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                                <Setter TargetName="Glow" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Widget card on the right: surface fill, hairline stroke -->
+        <Style x:Key="Widget" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="8,4,12,4" />
+        </Style>
+
+        <!-- Small rounded count badge -->
+        <Style x:Key="CountPill" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="MinWidth" Value="20" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Greeting -->
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-            <Grid Width="28" Height="28" Cursor="Hand" ToolTip="Change profile picture" MouseLeftButtonUp="OnAvatarClick">
-                <Ellipse Fill="{DynamicResource AccentBrush}" />
-                <TextBlock x:Name="Initial" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource OnAccentBrush}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                <Ellipse x:Name="AvatarImage" Visibility="Collapsed">
-                    <Ellipse.Fill>
-                        <ImageBrush x:Name="AvatarBrush" Stretch="UniformToFill" />
-                    </Ellipse.Fill>
-                </Ellipse>
-            </Grid>
-            <StackPanel Margin="9,0,0,0" VerticalAlignment="Center">
-                <TextBlock x:Name="Greeting" FontSize="15" FontWeight="SemiBold" />
-                <TextBlock x:Name="DateLine" Style="{StaticResource SubText}" FontSize="12" />
+        <!-- Header: ringed avatar + time-of-day greeting on the left; date chip + clock on the right -->
+        <Grid x:Name="HeaderRow" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal">
+                <!-- Avatar: accent ring with a small gap, photo or initial inside, hover lifts the ring -->
+                <Grid x:Name="Avatar" Width="40" Height="40" Cursor="Hand" ToolTip="Change profile picture"
+                      Background="Transparent" MouseLeftButtonUp="OnAvatarClick">
+                    <Ellipse x:Name="AvatarRing" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.6" Opacity="0.7" />
+                    <Grid Margin="4">
+                        <Ellipse Fill="{DynamicResource AccentSoftBrush}" />
+                        <TextBlock x:Name="Initial" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Ellipse x:Name="AvatarImage" Visibility="Collapsed">
+                            <Ellipse.Fill>
+                                <ImageBrush x:Name="AvatarBrush" Stretch="UniformToFill" />
+                            </Ellipse.Fill>
+                        </Ellipse>
+                    </Grid>
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="MouseEnter">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="AvatarRing" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.15" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="MouseLeave">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="AvatarRing" Storyboard.TargetProperty="Opacity" To="0.7" Duration="0:0:0.2" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
+                </Grid>
+
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <hero:HeroIcon x:Name="GreetingIcon" Kind="Sun" Width="11" Height="11" Foreground="{DynamicResource AccentBrush}"
+                                       VerticalAlignment="Center" />
+                        <TextBlock x:Name="Greeting" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"
+                                   Margin="5,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock x:Name="NameLine" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="320" />
+                </StackPanel>
             </StackPanel>
-            <hero:BrandMark Variant="Auto" Width="39" Height="12" Margin="12,0,0,0" VerticalAlignment="Center"
-                            Opacity="0.9" ToolTip="OrixNotch — Smoother • Faster • Smarter" />
-        </StackPanel>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Border CornerRadius="11" Padding="9,4,10,4" Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <hero:HeroIcon Kind="CalendarDays" Width="12" Height="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" />
+                        <TextBlock x:Name="DateLine" FontSize="12" FontWeight="Medium" Margin="6,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+                <Border Width="1" Height="22" Margin="14,0" Background="{DynamicResource StrokeBrush}" VerticalAlignment="Center" />
+                <TextBlock x:Name="Clock" FontSize="26" FontWeight="Light" Typography.NumeralAlignment="Tabular" VerticalAlignment="Center" />
+                <TextBlock x:Name="AmPm" Style="{StaticResource SubText}" FontSize="11" FontWeight="SemiBold" Margin="4,0,0,4" VerticalAlignment="Bottom" />
+            </StackPanel>
+        </Grid>
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="430" />
+                <ColumnDefinition Width="440" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Now Playing card; background tinted from the album art -->
-            <Border x:Name="Card" CornerRadius="19" Padding="15" Height="140" VerticalAlignment="Top" DataContext="{x:Static svc:NowPlayingService.Instance}"
-                    Background="{DynamicResource SurfaceBrush}">
+            <!-- Now Playing: blurred album art behind, scrim for contrast, controls on top -->
+            <Border x:Name="Card" CornerRadius="18" BorderThickness="1" BorderBrush="{DynamicResource StrokeBrush}"
+                    Background="{DynamicResource SurfaceBrush}" DataContext="{x:Static svc:NowPlayingService.Instance}"
+                    SizeChanged="OnCardSizeChanged">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="109" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Border Width="109" Height="109" CornerRadius="10" Background="{DynamicResource Surface2Brush}" VerticalAlignment="Center">
-                        <Border.Clip>
-                            <RectangleGeometry Rect="0,0,109,109" RadiusX="10" RadiusY="10" />
-                        </Border.Clip>
-                        <Grid>
-                            <hero:HeroIcon Kind="MusicNote" Width="24" Height="24" Foreground="{DynamicResource SubTextBrush}"
-                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <Image Source="{Binding Art}" Stretch="UniformToFill" />
-                        </Grid>
-                    </Border>
+                    <Image x:Name="Backdrop" Source="{Binding Art}" Stretch="UniformToFill" Opacity="0.6"
+                           RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
+                        <Image.RenderTransform>
+                            <ScaleTransform ScaleX="1.4" ScaleY="1.4" />
+                        </Image.RenderTransform>
+                        <Image.Effect>
+                            <BlurEffect Radius="40" KernelType="Gaussian" RenderingBias="Performance" />
+                        </Image.Effect>
+                    </Image>
+                    <Border x:Name="Scrim" IsHitTestVisible="False" />
 
-                    <Grid Grid.Column="1" Margin="18,2,0,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <Grid>
-                            <StackPanel Margin="0,0,28,0">
-                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                <TextBlock x:Name="ArtistLine" Style="{StaticResource SubText}" FontSize="13" TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                            <Button Style="{StaticResource IconButton}" Width="24" Height="24" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    ToolTip="Open Now Playing" Foreground="{DynamicResource SubTextBrush}" Click="OnOpenNowPlaying">
-                                <hero:HeroIcon Kind="Quote" Width="13" Height="13" />
-                            </Button>
-                        </Grid>
+                    <Grid Margin="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Row="1" Margin="0,10,0,0">
-                            <ProgressBar Maximum="{Binding Duration}" Value="{Binding Position, Mode=OneWay}" Height="4" />
-                            <Grid Margin="0,2,0,0">
-                                <TextBlock Text="{Binding PositionText}" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11.5" Typography.NumeralAlignment="Tabular" />
-                                <TextBlock Text="{Binding DurationText}" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11.5" HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular" />
+                        <Border Width="116" Height="116" CornerRadius="12" Background="{DynamicResource Surface2Brush}" VerticalAlignment="Center">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.45" Color="Black" />
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.Clip>
+                                    <RectangleGeometry Rect="0,0,116,116" RadiusX="12" RadiusY="12" />
+                                </Grid.Clip>
+                                <hero:HeroIcon Kind="MusicNote" Width="26" Height="26" Foreground="{DynamicResource SubTextBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Image Source="{Binding Art}" Stretch="UniformToFill" />
                             </Grid>
-                        </StackPanel>
+                        </Border>
 
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    IsEnabled="{Binding HasSession}">
-                            <Button Style="{StaticResource IconButton}" Width="36" Height="32" Command="{Binding PreviousCommand}">
-                                <hero:HeroIcon Kind="Backward" Width="20" Height="20" />
-                            </Button>
-                            <Button Style="{StaticResource IconButton}" Width="40" Height="36" Margin="14,0" Command="{Binding PlayPauseCommand}">
-                                <hero:HeroIcon x:Name="PlayIcon" Kind="Play" Width="24" Height="24" />
-                            </Button>
-                            <Button Style="{StaticResource IconButton}" Width="36" Height="32" Command="{Binding NextCommand}">
-                                <hero:HeroIcon Kind="Forward" Width="20" Height="20" />
-                            </Button>
-                        </StackPanel>
+                        <Grid Grid.Column="1" Margin="16,0,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <StackPanel Margin="0,0,28,0">
+                                    <TextBlock x:Name="NowLabel" Text="NOW PLAYING" FontSize="10" FontWeight="Bold"
+                                               Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,2" />
+                                    <TextBlock Text="{Binding Title}" FontSize="15.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="ArtistLine" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="12.5"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button Style="{StaticResource IconButton}" Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Margin="0,-4,-6,0" ToolTip="Open Now Playing" Foreground="{DynamicResource SubTextBrush}" Click="OnOpenNowPlaying">
+                                    <hero:HeroIcon Kind="ChevronRight" Width="13" Height="13" />
+                                </Button>
+                            </Grid>
+
+                            <StackPanel Grid.Row="2" Margin="0,0,0,4">
+                                <ProgressBar Maximum="{Binding Duration}" Value="{Binding Position, Mode=OneWay}" Height="4" />
+                                <Grid Margin="0,3,0,0">
+                                    <TextBlock Text="{Binding PositionText}" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" Typography.NumeralAlignment="Tabular" />
+                                    <TextBlock Text="{Binding DurationText}" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular" />
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" IsEnabled="{Binding HasSession}">
+                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding PreviousCommand}" VerticalAlignment="Center">
+                                    <hero:HeroIcon Kind="Backward" Width="18" Height="18" />
+                                </Button>
+                                <Button Style="{StaticResource PlayButton}" Margin="16,0" Command="{Binding PlayPauseCommand}">
+                                    <hero:HeroIcon x:Name="PlayIcon" Kind="Play" Width="18" Height="18" />
+                                </Button>
+                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding NextCommand}" VerticalAlignment="Center">
+                                    <hero:HeroIcon Kind="Forward" Width="18" Height="18" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
                 </Grid>
             </Border>
 
-            <!-- Today + reminders -->
-            <StackPanel Grid.Column="1" Margin="22,4,0,0">
-                <Button Style="{StaticResource RowButton}" Margin="-6,-4,0,0" HorizontalAlignment="Left" Click="OnOpenCalendar">
-                    <StackPanel Orientation="Horizontal">
-                        <hero:HeroIcon Kind="CalendarDays" Width="15" Height="15" VerticalAlignment="Center" />
-                        <TextBlock Text="Today" FontSize="14" FontWeight="SemiBold" Margin="6,0,4,0" />
-                        <hero:HeroIcon Kind="ChevronRight" Width="11" Height="11" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
-                    </StackPanel>
-                </Button>
-                <ItemsControl x:Name="Events" Margin="0,2,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,1,0,3">
-                                <Border Width="2.5" CornerRadius="1.25" Background="{DynamicResource AccentBrush}" HorizontalAlignment="Left" />
-                                <StackPanel Margin="8,0,0,0">
-                                    <TextBlock Text="{Binding Title}" FontSize="14" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding TimeLabel}" Style="{StaticResource SubText}" FontSize="12" />
-                                </StackPanel>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <TextBlock x:Name="NoEvents" Text="No events" Style="{StaticResource SubText}" FontSize="12" Margin="0,0,0,4" />
+            <!-- Today + Reminders widgets -->
+            <Grid Grid.Column="1" Margin="12,0,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="10" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                <Button Style="{StaticResource RowButton}" Margin="-6,2,0,0" HorizontalAlignment="Left" Click="OnOpenTodos">
-                    <StackPanel Orientation="Horizontal">
-                        <hero:HeroIcon Kind="ListBullet" Width="15" Height="15" VerticalAlignment="Center" />
-                        <TextBlock Text="Reminders" FontSize="14" FontWeight="SemiBold" Margin="6,0,4,0" />
-                        <hero:HeroIcon Kind="ChevronRight" Width="11" Height="11" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
+                <Border x:Name="TodayCard" Style="{StaticResource Widget}">
+                    <StackPanel>
+                        <Button Style="{StaticResource RowButton}" Click="OnOpenCalendar" ToolTip="Open Calendar">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource AccentSoftBrush}">
+                                        <hero:HeroIcon Kind="CalendarDays" Width="13" Height="13" Foreground="{DynamicResource AccentBrush}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Today" FontSize="13.5" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Border x:Name="EventCountPill" Style="{StaticResource CountPill}">
+                                    <TextBlock x:Name="EventCount" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"
+                                               HorizontalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                                </Border>
+                            </Grid>
+                        </Button>
+                        <ItemsControl x:Name="Events" Margin="6,2,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="3" Height="14" CornerRadius="1.5" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="13" Margin="8,0,8,0" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="2" Text="{Binding TimeLabel}" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11.5"
+                                                   VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock x:Name="NoEvents" Text="Nothing scheduled" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="12" Margin="6,3,0,0" />
                     </StackPanel>
-                </Button>
-                <ItemsControl x:Name="Reminders" Margin="0,2,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                <Ellipse Width="12" Height="12" Stroke="{DynamicResource SubTextBrush}" StrokeThickness="1.2" VerticalAlignment="Center" />
-                                <TextBlock Text="{Binding Text}" FontSize="14" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="190" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <TextBlock x:Name="NoReminders" Text="All done" Style="{StaticResource SubText}" FontSize="12" />
-            </StackPanel>
+                </Border>
+
+                <Border x:Name="RemindersCard" Grid.Row="2" Style="{StaticResource Widget}">
+                    <StackPanel>
+                        <Button Style="{StaticResource RowButton}" Click="OnOpenTodos" ToolTip="Open Reminders">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource AccentSoftBrush}">
+                                        <hero:HeroIcon Kind="ListBullet" Width="13" Height="13" Foreground="{DynamicResource AccentBrush}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Reminders" FontSize="13.5" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Border x:Name="ReminderCountPill" Style="{StaticResource CountPill}">
+                                    <TextBlock x:Name="ReminderCount" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"
+                                               HorizontalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                                </Border>
+                            </Grid>
+                        </Button>
+                        <ItemsControl x:Name="Reminders" Margin="6,2,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,1">
+                                        <Ellipse Width="12" Height="12" Stroke="{DynamicResource SubTextBrush}" StrokeThickness="1.3" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Text}" FontSize="13" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="200" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel x:Name="NoReminders" Orientation="Horizontal" Margin="6,3,0,0">
+                            <hero:HeroIcon Kind="Check" Width="12" Height="12" Foreground="{DynamicResource GoodBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="All done" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="12" Margin="6,0,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

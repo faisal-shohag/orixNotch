@@ -87,7 +87,7 @@
                 </StackPanel>
                 <TextBlock x:Name="BatteryText" Style="{StaticResource Big}" Text="–" />
                 <TextBlock x:Name="BatterySub" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" />
-                <ProgressBar x:Name="BatteryBar" Maximum="100" Margin="0,8,0,0" Foreground="{DynamicResource GoodBrush}" />
+                <ProgressBar x:Name="BatteryBar" Maximum="100" Margin="0,8,0,0" Foreground="{DynamicResource AccentBrush}" />
             </StackPanel>
         </Border>
 

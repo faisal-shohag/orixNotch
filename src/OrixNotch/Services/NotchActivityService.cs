@@ -11,9 +11,10 @@ public enum NotchActivityKind
     Stopwatch,
     Focus,
     Break,
+    Reminder,
 }
 
-/// <summary>Single-line text (plus kind) for the closed notch. Timers win over music.</summary>
+/// <summary>Single-line text (plus kind) for the closed notch. Event reminders win, then timers, then music.</summary>
 public sealed partial class NotchActivityService : ObservableObject
 {
     public static NotchActivityService Instance { get; } = new();
@@ -30,6 +31,7 @@ public sealed partial class NotchActivityService : ObservableObject
         PomodoroService.Instance.PropertyChanged += OnChanged;
         CountdownService.Instance.PropertyChanged += OnChanged;
         StopwatchService.Instance.PropertyChanged += OnChanged;
+        EventReminderService.Instance.PropertyChanged += OnChanged;
         Refresh();
     }
 
@@ -47,10 +49,17 @@ public sealed partial class NotchActivityService : ObservableObject
         NotchActivityKind kind;
         string text;
         double progress = 0;
-        if (pom.IsRunning)
+        var reminder = EventReminderService.Instance;
+        if (reminder.IsActive)
+        {
+            kind = NotchActivityKind.Reminder;
+            text = reminder.Text;
+            progress = reminder.Progress;
+        }
+        else if (pom.IsRunning)
         {
             kind = pom.IsBreak ? NotchActivityKind.Break : NotchActivityKind.Focus;
-            text = $"{pom.ModeText} {pom.RemainingText}";
+            text = pom.RemainingText; // mode shows as glyph + colour
             progress = pom.Progress;
         }
         else if (ctd.IsRunning)

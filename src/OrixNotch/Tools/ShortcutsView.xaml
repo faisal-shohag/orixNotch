@@ -83,8 +83,8 @@
                                 </ControlTemplate>
                             </Button.Template>
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="13" Height="13" CornerRadius="6.5" Background="{DynamicResource TextBrush}">
-                                    <hero:HeroIcon Kind="Play" Width="8" Height="8" Margin="1,0,0,0" Foreground="{DynamicResource PillBrush}"
+                                <Border Width="13" Height="13" CornerRadius="6.5" Background="{DynamicResource AccentBrush}">
+                                    <hero:HeroIcon Kind="Play" Width="8" Height="8" Margin="1,0,0,0" Foreground="{DynamicResource OnAccentBrush}"
                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                                 <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Medium" Margin="7,0,0,0"

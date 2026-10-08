@@ -1,0 +1,21 @@
+﻿<FontFamily
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/composite-font"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:System="clr-namespace:System;assembly=mscorlib"
+    Baseline="0.9"
+    LineSpacing="1.2">
+
+    <!-- OrixNotch UI font: Bengali in the bundled Noto Sans Bengali, everything else in the bundled Inter.
+         Targets are relative to this file, so they resolve inside the app's resources. Characters
+         neither font has fall back to Windows' fonts. Loaded by App.BuildUiFont(). -->
+    <FontFamily.FamilyNames>
+        <System:String x:Key="en-US">OrixUI</System:String>
+    </FontFamily.FamilyNames>
+
+    <!-- In lookup order: the first map whose range covers a character wins. -->
+    <FontFamily.FamilyMaps>
+        <!-- Bengali, the danda punctuation (U+0964-0965) and the ZWNJ/ZWJ that steer conjuncts. -->
+        <FontFamilyMap Unicode="0980-09FF,0964-0965,200C-200D" Target="./#Noto Sans Bengali" Scale="1.0" />
+        <FontFamilyMap Unicode="0000-10FFFF" Target="./#Inter" Scale="1.0" />
+    </FontFamily.FamilyMaps>
+</FontFamily>

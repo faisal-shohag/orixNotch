@@ -30,7 +30,8 @@
                 <ScaleTransform x:Name="Mirror" ScaleX="1" />
             </Grid.RenderTransform>
             <!-- Scrolling moves a cached bitmap of the text with a transform: no re-layout and no
-                 re-rendering of glyphs per frame. -->
+                 re-rendering of glyphs per frame. The cache isn't pixel-snapped so it can glide by
+                 fractions of a pixel; the view snaps to whole pixels whenever it stops. -->
             <Canvas x:Name="ScrollCanvas">
                 <TextBlock x:Name="ScriptText" TextWrapping="Wrap" TextAlignment="Center" FontWeight="Medium"
                            LineStackingStrategy="BlockLineHeight" Canvas.Left="24">
@@ -38,7 +39,7 @@
                         <TranslateTransform x:Name="Scroll" />
                     </TextBlock.RenderTransform>
                     <TextBlock.CacheMode>
-                        <BitmapCache EnableClearType="False" SnapsToDevicePixels="True" />
+                        <BitmapCache EnableClearType="False" SnapsToDevicePixels="False" />
                     </TextBlock.CacheMode>
                 </TextBlock>
             </Canvas>
@@ -61,7 +62,7 @@
                         Cursor="Hand" Focusable="False" Click="OnPlay">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Bd" CornerRadius="14" Background="{DynamicResource TextBrush}">
+                            <Border x:Name="Bd" CornerRadius="14" Background="{DynamicResource AccentBrush}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <ControlTemplate.Triggers>
@@ -74,7 +75,7 @@
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
-                    <hero:HeroIcon x:Name="PlayIcon" Kind="Play" Width="14" Height="14" Foreground="{DynamicResource PillBrush}" />
+                    <hero:HeroIcon x:Name="PlayIcon" Kind="Play" Width="14" Height="14" Foreground="{DynamicResource OnAccentBrush}" />
                 </Button>
                 <Button Style="{StaticResource IconButton}" Width="28" Height="28" ToolTip="Restart"
                         Foreground="{DynamicResource SubTextBrush}" Click="OnRestart">

@@ -4,13 +4,18 @@ using System.Text.Json;
 
 namespace OrixNotch.Services;
 
-/// <summary>JSON persistence under %LOCALAPPDATA%\OrixNotch.</summary>
+/// <summary>
+/// JSON persistence under %LOCALAPPDATA%\OrixNotch. ORIXNOTCH_DATA_DIR overrides the folder
+/// (used by end-to-end tests so they never touch real data).
+/// </summary>
 public static class Storage
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
     public static string Root { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OrixNotch");
+        Environment.GetEnvironmentVariable("ORIXNOTCH_DATA_DIR") is { Length: > 0 } custom
+            ? custom
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OrixNotch");
 
     static Storage() => Directory.CreateDirectory(Root);
 

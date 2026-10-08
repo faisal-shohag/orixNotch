@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using OrixNotch.Services;
 using OrixNotch.Shell;
@@ -16,11 +17,59 @@ public partial class WeatherView : UserControl, IToolView
 {
     private DateTime _lastFetch = DateTime.MinValue;
     private bool _loading;
+    private bool _hasData;
 
     public WeatherView()
     {
         InitializeComponent();
         CityInput.Text = App.Settings.WeatherCity;
+        BuildSkeleton();
+    }
+
+    /// <summary>Placeholder blocks laid out like the current-conditions row and the 7-day strip.</summary>
+    private void BuildSkeleton()
+    {
+        var current = new Grid { Margin = new Thickness(2, 6, 0, 6) };
+        current.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        current.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        current.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        current.Children.Add(Skeleton.Circle(58, new Thickness(2, 0, 0, 0)));
+
+        var main = new StackPanel { Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var tempRow = new StackPanel { Orientation = Orientation.Horizontal };
+        tempRow.Children.Add(Skeleton.Block(76, 40, 8));
+        tempRow.Children.Add(Skeleton.Block(92, 14, 4, new Thickness(10, 4, 0, 0)));
+        main.Children.Add(tempRow);
+        main.Children.Add(Skeleton.Block(150, 11, 4, new Thickness(0, 9, 0, 0)));
+        Grid.SetColumn(main, 1);
+        current.Children.Add(main);
+
+        var details = new UniformGrid { Rows = 2, Columns = 2, Margin = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+        for (var i = 0; i < 4; i++) details.Children.Add(Skeleton.Block(62, 11, 4, new Thickness(0, 4, i % 2 == 0 ? 14 : 0, 4)));
+        Grid.SetColumn(details, 2);
+        current.Children.Add(details);
+        LoadingSkeleton.Children.Add(current);
+
+        var days = new UniformGrid { Rows = 1 };
+        for (var i = 0; i < 7; i++)
+        {
+            var day = new StackPanel { Margin = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Center };
+            day.Children.Add(Skeleton.Block(32, 10, 3, new Thickness(0, 7, 0, 0), HorizontalAlignment.Center));
+            day.Children.Add(Skeleton.Circle(24, new Thickness(0, 7, 0, 7), HorizontalAlignment.Center));
+            day.Children.Add(Skeleton.Block(28, 13, 4, default, HorizontalAlignment.Center));
+            day.Children.Add(Skeleton.Block(22, 11, 4, new Thickness(0, 5, 0, 7), HorizontalAlignment.Center));
+            days.Children.Add(day);
+        }
+        Grid.SetRow(days, 1);
+        LoadingSkeleton.Children.Add(days);
+    }
+
+    /// <summary>Swaps the content for the skeleton (or back). Forecast stays hidden until data exists.</summary>
+    private void SetLoading(bool loading)
+    {
+        LoadingSkeleton.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        CurrentPanel.Visibility = !loading && _hasData ? Visibility.Visible : Visibility.Hidden;
+        Forecast.Visibility = !loading && _hasData ? Visibility.Visible : Visibility.Hidden;
     }
 
     public void OnShown()
@@ -39,16 +88,19 @@ public partial class WeatherView : UserControl, IToolView
         if (city.Length == 0) return;
         App.Settings.WeatherCity = city;
         SettingsService.Save(notify: false);
-        _ = LoadAsync();
+        _ = LoadAsync(newPlace: true);
     }
 
     private void OnRefresh(object sender, RoutedEventArgs e) => _ = LoadAsync();
 
-    private async Task LoadAsync()
+    /// <summary>Skeleton on first load or a new city; a plain refresh keeps the current data on screen.</summary>
+    private async Task LoadAsync(bool newPlace = false)
     {
         if (_loading) return;
         _loading = true;
-        Status.Text = "Loading…";
+        var skeleton = newPlace || !_hasData;
+        if (skeleton) SetLoading(true);
+        Status.Text = skeleton ? "Loading…" : "Updating…";
         try
         {
             var city = App.Settings.WeatherCity;
@@ -105,7 +157,7 @@ public partial class WeatherView : UserControl, IToolView
             }
             Forecast.ItemsSource = forecast;
 
-            CurrentPanel.Visibility = Visibility.Visible;
+            _hasData = true;
             _lastFetch = DateTime.Now;
             Status.Text = $"Updated {DateTime.Now:t}";
         }
@@ -125,6 +177,8 @@ public partial class WeatherView : UserControl, IToolView
         finally
         {
             _loading = false;
+            // On failure the last good data (if any) comes back; the status line explains why.
+            SetLoading(false);
         }
     }
 

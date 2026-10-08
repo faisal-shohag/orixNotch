@@ -68,14 +68,6 @@ public partial class NotchWindow : Window
 
     public static NotchWindow? Instance { get; private set; }
 
-    /// <summary>The notch started growing/shrinking/moving; overlays should hide.</summary>
-    public event Action? GeometryChanging;
-
-    /// <summary>The open notch stopped animating (or moved); overlays can be placed.</summary>
-    public event Action? GeometrySettled;
-
-    /// <summary>Open and not animating.</summary>
-    public bool IsSettled => _expanded && !_animating;
 
     public NotchWindow()
     {
@@ -87,7 +79,8 @@ public partial class NotchWindow : Window
         _hoverTimer.Tick += (_, _) =>
         {
             _hoverTimer.Stop();
-            if (Pill.IsMouseOver && !_expanded) Expand(activate: false);
+            // Resting on the reminder's dismiss button shouldn't pop the notch open under it.
+            if (Pill.IsMouseOver && !_expanded && !_peeking && !ReminderDismiss.IsMouseOver) Expand(activate: false);
         };
         _leaveTimer.Tick += (_, _) => CheckLeave();
         _guardTimer.Tick += (_, _) => Guard();
@@ -112,6 +105,14 @@ public partial class NotchWindow : Window
         CountdownService.Instance.PropertyChanged += OnActivityChanged;
         StopwatchService.Instance.PropertyChanged += OnActivityChanged;
         NotchActivityService.Instance.PropertyChanged += (_, _) => UpdateActivity();
+        EventReminderService.Instance.Alert += _ => ShowReminderPeek();
+        NotificationWatcher.Instance.Arrived += ShowNotificationPeek;
+        IdleInfoService.Instance.Changed += OnIdleChanged;
+        _idleRotate.Tick += (_, _) => OnIdleRotate();
+        ProfileService.Changed += () => _idleAvatarLoaded = false;
+        _peekTimer.Tick += (_, _) => EndPeek();
+        // A reminder already due at launch fired its alert before we subscribed: show it once we're up.
+        Dispatcher.BeginInvoke(ShowReminderPeek, DispatcherPriority.ContextIdle);
         SettingsService.Changed += OnSettingsChanged;
         HotkeyService.Triggered += OnHotkey;
 
@@ -199,7 +200,6 @@ public partial class NotchWindow : Window
         var x = screen.Bounds.Left + (screen.Bounds.Width - w) / 2;
         var y = screen.Bounds.Top;
         Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, x, y, w, h, Win32.SWP_NOACTIVATE);
-        if (IsSettled) Dispatcher.BeginInvoke(() => GeometrySettled?.Invoke(), DispatcherPriority.Loaded);
     }
 
     /// <summary>Keeps the notch above other topmost windows and out of the way of fullscreen apps.</summary>
@@ -255,8 +255,17 @@ public partial class NotchWindow : Window
         if (Visibility != Visibility.Visible) Visibility = Visibility.Visible;
         if (!_expanded)
         {
+            if (_peeking)
+            {
+                _peeking = false;
+                _currentPeek = null;
+                _peekTimer.Stop();
+                PeekLayer.Visibility = Visibility.Collapsed;
+            }
             _expanded = true;
-            ShowTool(_activeTool == SettingsId ? App.Settings.LastTool : _activeTool);
+            _idleRotate.Stop();
+            if (EventReminderService.Instance.IsActive) ShowTool("calendar");
+            else ShowTool(_activeTool == SettingsId ? App.Settings.LastTool : _activeTool);
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
             _leaveTimer.Start();
@@ -293,6 +302,17 @@ public partial class NotchWindow : Window
         if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
         StartAnimation();
         UpdateActivity();
+        // Alerts that arrived while the notch was open play once it has closed.
+        if (_peekQueue.Count > 0)
+        {
+            var later = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+            later.Tick += (_, _) =>
+            {
+                later.Stop();
+                if (!_peeking) ShowNextPeek();
+            };
+            later.Start();
+        }
     }
 
     private void OnPillMouseEnter(object sender, MouseEventArgs e)
@@ -398,7 +418,6 @@ public partial class NotchWindow : Window
     {
         if (_animating) return;
         _animating = true;
-        GeometryChanging?.Invoke();
         _lastFrame = TimeSpan.Zero;
         CompositionTarget.Rendering += OnFrame;
     }
@@ -426,7 +445,6 @@ public partial class NotchWindow : Window
         {
             CompositionTarget.Rendering -= OnFrame;
             _animating = false;
-            if (_expanded) Dispatcher.BeginInvoke(() => GeometrySettled?.Invoke(), DispatcherPriority.Loaded);
         }
     }
 
@@ -435,10 +453,12 @@ public partial class NotchWindow : Window
         var w = Math.Max(60, _width.Value);
         var h = Math.Max(20, _height.Value);
 
-        // 0 = collapsed, 1 = fully open (to whatever size the current tool wants)
-        var p = Math.Clamp((h - _collapsedH) / Math.Max(1, _expandedH - _collapsedH), 0, 1);
+        // 0 = collapsed, 1 = fully open (to whatever size the current tool wants).
+        // While an alert is showing the notch only grows to PeekH: track that separately.
+        var peek = _peeking && !_expanded ? Math.Clamp((h - _collapsedH) / (PeekH - _collapsedH), 0, 1) : 0;
+        var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((h - _collapsedH) / Math.Max(1, _expandedH - _collapsedH), 0, 1);
         var ear = EarCollapsed + (EarExpanded - EarCollapsed) * p;
-        var radius = RadiusCollapsed + (RadiusExpanded - RadiusCollapsed) * p;
+        var radius = RadiusCollapsed + (RadiusExpanded - RadiusCollapsed) * p + (RadiusPeek - RadiusCollapsed) * peek;
 
         Pill.Width = w + 2 * EarExpanded;
         Pill.Height = h;
@@ -455,8 +475,10 @@ public partial class NotchWindow : Window
         _blur.Radius = (1 - reveal) * 14;
         ExpandedLayer.Effect = reveal < 0.999 && ExpandedLayer.Visibility == Visibility.Visible ? _blur : null;
 
-        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4, 0, 1);
-        CollapsedLayer.Visibility = p < 0.25 ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1);
+        CollapsedLayer.Visibility = p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
+        PeekLayer.Opacity = Math.Clamp((peek - 0.5) * 2, 0, 1);
+        PeekLayer.Visibility = _peeking && peek > 0.5 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -490,93 +512,537 @@ public partial class NotchWindow : Window
     // ---------------------------------------------------------------- collapsed live activity
 
     private bool HasActivity() => NotchActivityService.Instance.HasActivity;
+    private bool _reminderPulsing;
 
-    /// <summary>Closed-notch width for the current state: compact for timers, wide for track text.</summary>
+    /// <summary>Closed-notch width for the current state: compact for timers and reminders, wide for track text.</summary>
     private double ActivityWidth()
     {
+        if (EventReminderService.Instance.IsActive) return _timerW;
         var timer = PomodoroService.Instance.IsRunning
             || CountdownService.Instance.IsRunning
             || StopwatchService.Instance.IsRunning;
         if (timer) return _timerW;
         var music = NowPlayingService.Instance.HasSession && NowPlayingService.Instance.IsPlaying;
-        return music ? _musicW : _idleW;
+        return music ? _musicW : IdleActive ? IdleWidth() : _idleW;
     }
 
     private void OnActivityChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(NowPlayingService.IsPlaying) or nameof(NowPlayingService.HasSession)
+            or nameof(NowPlayingService.Title) or nameof(NowPlayingService.Artist) or nameof(NowPlayingService.ArtTint)
             or nameof(PomodoroService.IsRunning) or nameof(CountdownService.IsRunning) or nameof(StopwatchService.IsRunning))
             UpdateActivity();
     }
 
     private void UpdateActivity()
     {
-        var music = NowPlayingService.Instance.HasSession && NowPlayingService.Instance.IsPlaying;
-        var timer = PomodoroService.Instance.IsRunning
-            || CountdownService.Instance.IsRunning
-            || StopwatchService.Instance.IsRunning;
         var act = NotchActivityService.Instance;
         act.Refresh();
+        var kind = act.Kind;
+        var music = kind == NotchActivityKind.Music;
+        var reminder = kind == NotchActivityKind.Reminder;
+        var timer = kind is NotchActivityKind.Timer or NotchActivityKind.Stopwatch or NotchActivityKind.Focus or NotchActivityKind.Break;
 
-        // Timer wins the text slot; music keeps the art on the left.
-        // The timer ring shows only without music, like the old timer glyph.
-        MiniArt.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
-        MiniTimerRing.Visibility = timer && !music ? Visibility.Visible : Visibility.Collapsed;
-        if (timer && !music)
-        {
-            MiniTimerGlyph.Kind = act.Kind switch
-            {
-                NotchActivityKind.Break => AppIcon.Moon,
-                NotchActivityKind.Timer => AppIcon.Clock,
-                NotchActivityKind.Stopwatch => AppIcon.Clock,
-                _ => AppIcon.Bolt,
-            };
-            MiniArc.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty,
-                act.Kind == NotchActivityKind.Break ? "GoodBrush" : "AccentBrush");
-            MiniArc.Data = BuildMiniArc(act.Progress);
-        }
-        MiniTimer.Visibility = act.HasActivity ? Visibility.Visible : Visibility.Collapsed;
+        MusicPart.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
+        TimerPart.Visibility = timer ? Visibility.Visible : Visibility.Collapsed;
+        ReminderPart.Visibility = reminder ? Visibility.Visible : Visibility.Collapsed;
+        var idle = kind == NotchActivityKind.None && IdleInfoService.Instance.Items.Count > 0;
+        IdlePart.Visibility = idle ? Visibility.Visible : Visibility.Collapsed;
+        if (idle) RenderIdle();
+        UpdateIdleRotation();
+
         if (music)
         {
-            // Track text sits right beside the album art.
-            MiniTimer.HorizontalAlignment = HorizontalAlignment.Left;
-            MiniTimer.Margin = new Thickness(36, 0, 0, 0);
+            var np = NowPlayingService.Instance;
+            TrackTitle.Text = string.IsNullOrWhiteSpace(np.Title) ? "Playing" : np.Title;
+            TrackArtist.Text = string.IsNullOrWhiteSpace(np.Artist) ? "" : "  " + np.Artist;
+            var bars = new SolidColorBrush(WaveColor(np.ArtTint));
+            bars.Freeze();
+            foreach (var bar in new[] { Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Fill = bars;
+            Dispatcher.BeginInvoke(UpdateMarquee, DispatcherPriority.Loaded);
         }
         else
         {
-            MiniTimer.HorizontalAlignment = HorizontalAlignment.Right;
-            MiniTimer.Margin = new Thickness(0, 0, 12, 0);
+            TrackShift.BeginAnimation(TranslateTransform.XProperty, null);
         }
-        MiniTimer.SetResourceReference(TextBlock.ForegroundProperty, act.Kind switch
-        {
-            NotchActivityKind.Break => "GoodBrush",
-            NotchActivityKind.Music => "TextBrush",
-            _ => "AccentBrush",
-        });
-        if (act.Kind == NotchActivityKind.Music)
-        {
-            MiniTimer.FontSize = 13;
-            MiniTimer.FontWeight = FontWeights.SemiBold;
-        }
-        else
-        {
-            MiniTimer.FontSize = 14;
-            MiniTimer.FontWeight = FontWeights.Bold;
-        }
-        EqBars.Visibility = music && !timer ? Visibility.Visible : Visibility.Collapsed;
-        SetEqualizer(!_expanded && music && !timer);
 
-        if (!_expanded)
+        if (timer)
+        {
+            var brush = kind == NotchActivityKind.Break ? "GoodBrush" : "AccentBrush";
+            MiniTimerGlyph.Kind = kind switch
+            {
+                NotchActivityKind.Break => AppIcon.Moon,
+                NotchActivityKind.Timer or NotchActivityKind.Stopwatch => AppIcon.Clock,
+                _ => AppIcon.Bolt,
+            };
+            MiniTimerGlyph.SetResourceReference(ForegroundProperty, brush);
+            MiniArc.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, brush);
+            MiniArc.Data = BuildMiniArc(act.Progress);
+            TimerText.SetResourceReference(TextBlock.ForegroundProperty, brush);
+        }
+
+        // At start time the reminder tile gently pulses so it catches the eye.
+        var pulse = reminder && EventReminderService.Instance.IsNow;
+        if (pulse != _reminderPulsing)
+        {
+            _reminderPulsing = pulse;
+            ReminderTile.BeginAnimation(OpacityProperty, pulse
+                ? new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever }
+                : null);
+        }
+        if (!reminder)
+        {
+            _peekQueue.RemoveAll(r => r.Key == ReminderPeekKey);
+            if (_currentPeek?.Key == ReminderPeekKey) EndPeek();
+        }
+
+        SetEqualizer(!_expanded && music);
+
+        if (!_expanded && !_peeking)
         {
             _width.Target = ActivityWidth();
             StartAnimation();
         }
     }
 
+    /// <summary>Waveform colour from the album art: the art's tint, lifted until it reads on black.</summary>
+    private Color WaveColor(Color? tint)
+    {
+        if (tint is not { } c) return ((SolidColorBrush)ThemeService.Get("AccentBrush")).Color;
+        static double Lum(Color x) => (0.299 * x.R + 0.587 * x.G + 0.114 * x.B) / 255;
+        for (var i = 0; i < 6 && Lum(c) < 0.55; i++)
+            c = Color.FromRgb((byte)(c.R + (255 - c.R) * 0.25), (byte)(c.G + (255 - c.G) * 0.25), (byte)(c.B + (255 - c.B) * 0.25));
+        return c;
+    }
+
+    /// <summary>Long track text drifts left to reveal the rest, pauses, and drifts back.</summary>
+    private void UpdateMarquee()
+    {
+        TrackShift.BeginAnimation(TranslateTransform.XProperty, null);
+        TrackShift.X = 0;
+        TrackText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var overflow = TrackText.DesiredSize.Width - TitleSlot.ActualWidth;
+        if (overflow <= 2 || _expanded) return;
+        var travel = TimeSpan.FromSeconds(overflow / 28);
+        var hold = TimeSpan.FromSeconds(1.6);
+        var slide = new DoubleAnimationUsingKeyFrames { RepeatBehavior = RepeatBehavior.Forever };
+        slide.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(hold)));
+        slide.KeyFrames.Add(new EasingDoubleKeyFrame(-overflow, KeyTime.FromTimeSpan(hold + travel), new SineEase()));
+        slide.KeyFrames.Add(new LinearDoubleKeyFrame(-overflow, KeyTime.FromTimeSpan(hold + travel + hold)));
+        slide.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(hold + travel + hold + travel), new SineEase()));
+        TrackShift.BeginAnimation(TranslateTransform.XProperty, slide);
+    }
+
+    private void OnDismissReminder(object sender, RoutedEventArgs e)
+    {
+        _hoverTimer.Stop();
+        if (_currentPeek?.Key == ReminderPeekKey) EndPeek();
+        EventReminderService.Instance.Dismiss();
+        e.Handled = true;
+    }
+
+    // ---------------------------------------------------------------- idle items
+
+    private readonly DispatcherTimer _idleRotate = new();
+    private int _idleIndex;
+    private const double IdleRowMax = 640;
+
+    private bool IdleActive => !NotchActivityService.Instance.HasActivity && IdleInfoService.Instance.Items.Count > 0;
+
+    /// <summary>Closed-notch width for the idle items under the current layout.</summary>
+    private double IdleWidth()
+    {
+        var items = IdleInfoService.Instance.Items;
+        if (items.Count == 0) return _idleW;
+        switch (App.Settings.IdleLayout)
+        {
+            case "Row":
+                IdleRow.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                return Math.Clamp(IdleRow.DesiredSize.Width + 30, _idleW, IdleRowMax);
+            case "Split" when items.Count > 1:
+                return _musicW;
+            default:
+                var current = items[_idleIndex % items.Count];
+                var longest = Math.Max(current.Value.Length,
+                    IdleWidthTemplates.TryGetValue(TemplateKey(current.Id), out var template) ? template.Length : 0);
+                return longest > 9 ? _musicW : _timerW;
+        }
+    }
+
+    /// <summary>Rebuilds the idle slots from the latest values (cheap; runs once a second).</summary>
+    private void RenderIdle()
+    {
+        var items = IdleInfoService.Instance.Items;
+        IdleSlotA.Content = null;
+        IdleSlotB.Content = null;
+        IdleRow.Children.Clear();
+        if (items.Count == 0) return;
+
+        switch (App.Settings.IdleLayout)
+        {
+            case "Row":
+                // Add whole items until the row would outgrow the widest notch; never clip one in half.
+                for (var i = 0; i < items.Count; i++)
+                {
+                    var dot = i > 0 ? IdleDot() : null;
+                    var chip = IdleChip(items[i]);
+                    if (dot is not null) IdleRow.Children.Add(dot);
+                    IdleRow.Children.Add(chip);
+                    IdleRow.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    if (IdleRow.DesiredSize.Width + 30 > IdleRowMax && i > 0)
+                    {
+                        IdleRow.Children.Remove(chip);
+                        IdleRow.Children.Remove(dot);
+                        break;
+                    }
+                }
+                break;
+            case "Split" when items.Count > 1:
+                IdleSlotA.Content = IdleChip(items[0]);
+                var rest = items.Skip(1).ToList();
+                IdleSlotB.Content = IdleChip(rest[_idleIndex % rest.Count]);
+                break;
+            default:
+                // Apple-style: glyph in the left ear, value in the right.
+                var item = items[_idleIndex % items.Count];
+                IdleSlotA.Content = IdleGlyph(item, 15);
+                IdleSlotB.Content = IdleValue(item);
+                break;
+        }
+    }
+
+    private void OnIdleChanged()
+    {
+        if (_expanded || !IdleActive)
+        {
+            if (!NotchActivityService.Instance.HasActivity && IdleInfoService.Instance.Items.Count == 0) UpdateActivity();
+            return;
+        }
+        if (IdlePart.Visibility != Visibility.Visible)
+        {
+            UpdateActivity();
+            return;
+        }
+        RenderIdle();
+        UpdateIdleRotation();
+        if (!_peeking)
+        {
+            var w = IdleWidth();
+            if (Math.Abs(_width.Target - w) > 0.5)
+            {
+                _width.Target = w;
+                StartAnimation();
+            }
+        }
+    }
+
+    /// <summary>Rotation runs only when there is more than one thing to cycle through.</summary>
+    private void UpdateIdleRotation()
+    {
+        var count = IdleInfoService.Instance.Items.Count;
+        var cycling = App.Settings.IdleLayout switch
+        {
+            "Row" => false,
+            "Split" => count > 2,
+            _ => count > 1,
+        };
+        var interval = TimeSpan.FromSeconds(Math.Max(2, App.Settings.IdleRotateSec));
+        if (cycling && !_expanded && IdleActive)
+        {
+            if (_idleRotate.Interval != interval) _idleRotate.Interval = interval;
+            if (!_idleRotate.IsEnabled) _idleRotate.Start();
+        }
+        else _idleRotate.Stop();
+    }
+
+    private void OnIdleRotate()
+    {
+        _idleIndex++;
+        RenderIdle();
+        // New item rises into place and fades in; the right slot trails a beat for a softer change.
+        foreach (var (slot, delay) in new[] { (IdleSlotA, 0), (IdleSlotB, 60) })
+        {
+            if (App.Settings.IdleLayout == "Split" && slot == IdleSlotA) continue; // left item stays put
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var begin = TimeSpan.FromMilliseconds(delay);
+            slot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(320)) { BeginTime = begin, EasingFunction = ease });
+            ((TranslateTransform)slot.RenderTransform).BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(7, 0, TimeSpan.FromMilliseconds(320)) { BeginTime = begin, EasingFunction = ease });
+        }
+        if (!_expanded && !_peeking)
+        {
+            _width.Target = IdleWidth();
+            StartAnimation();
+        }
+    }
+
+    private static ImageSource? _idleAvatar;
+    private static bool _idleAvatarLoaded;
+
+    private static ImageSource? IdleAvatar()
+    {
+        if (!_idleAvatarLoaded)
+        {
+            _idleAvatar = ProfileService.LoadAvatar();
+            _idleAvatarLoaded = true;
+        }
+        return _idleAvatar;
+    }
+
+    private static FrameworkElement IdleGlyph(IdleItem item, double size)
+    {
+        if (item.Logo is { } logo) return BrandLogos.Create(logo, size); // the AI tool's real mark, in its own colours
+        if (item.Avatar)
+        {
+            var grid = new Grid { Width = size + 5, Height = size + 5, VerticalAlignment = VerticalAlignment.Center };
+            var disc = new Ellipse();
+            disc.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentSoftBrush");
+            grid.Children.Add(disc);
+            var initial = new TextBlock
+            {
+                Text = ProfileService.FirstName[..1].ToUpperInvariant(),
+                FontSize = 10.5,
+                FontWeight = FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            initial.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+            grid.Children.Add(initial);
+            if (IdleAvatar() is { } image)
+                grid.Children.Add(new Ellipse { Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill } });
+            return grid;
+        }
+        var icon = new HeroIcon { Kind = item.Glyph ?? AppIcon.Info, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(ForegroundProperty, item.ValueBrush == "TextBrush" ? "SubTextBrush" : item.ValueBrush);
+        return icon;
+    }
+
+    /// <summary>
+    /// Widest value each live-changing item can show (digits are tabular, so "0" stands for any digit).
+    /// Values get at least this much room, so the notch doesn't twitch as numbers tick.
+    /// </summary>
+    private static readonly Dictionary<string, string> IdleWidthTemplates = new()
+    {
+        ["network"] = "00.0 MB/s",
+        ["cpu"] = "100% · 100%",
+        ["clock"] = "00:00 PM",
+        ["battery"] = "100%",
+        ["todos"] = "00 open",
+        ["streak"] = "00 today",
+        ["clipboard"] = "000 clips",
+        ["shelf"] = "00 files",
+        ["aiUsage"] = "Antigravity 100%",
+        ["weather"] = "-00°",
+    };
+
+    private static readonly Dictionary<(string, double), double> IdleWidthCache = new();
+
+    /// <summary>Per-tool AI items ("aiUsage:cursor") share the AI usage template.</summary>
+    private static string TemplateKey(string id) => id.StartsWith("aiUsage", StringComparison.Ordinal) ? "aiUsage" : id;
+
+    /// <summary>Reserved width for an item's value at a font size (0 = no reservation).</summary>
+    private static double IdleReservedWidth(IdleItem item, double fontSize)
+    {
+        if (!IdleWidthTemplates.TryGetValue(TemplateKey(item.Id), out var template)) return 0;
+        if (IdleWidthCache.TryGetValue((template, fontSize), out var cached)) return cached;
+        var probe = new TextBlock { Text = template, FontSize = fontSize, FontWeight = FontWeights.SemiBold };
+        probe.SetResourceReference(TextBlock.FontFamilyProperty, "UiFont");
+        System.Windows.Documents.Typography.SetNumeralAlignment(probe, FontNumeralAlignment.Tabular);
+        probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var width = Math.Ceiling(probe.DesiredSize.Width) + 1;
+        IdleWidthCache[(template, fontSize)] = width;
+        return width;
+    }
+
+    private static TextBlock IdleValue(IdleItem item, double fontSize = 13.5, TextAlignment align = TextAlignment.Right)
+    {
+        var text = new TextBlock
+        {
+            Text = item.Value,
+            FontSize = fontSize,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextAlignment = align,
+            MinWidth = IdleReservedWidth(item, fontSize),
+            MaxWidth = 230,
+        };
+        System.Windows.Documents.Typography.SetNumeralAlignment(text, FontNumeralAlignment.Tabular);
+        text.SetResourceReference(TextBlock.ForegroundProperty, item.ValueBrush);
+        return text;
+    }
+
+    /// <summary>Glyph + value side by side (split and row layouts).</summary>
+    private static StackPanel IdleChip(IdleItem item)
+    {
+        var chip = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        chip.Children.Add(IdleGlyph(item, 13));
+        var value = IdleValue(item, 13, TextAlignment.Left);
+        value.Margin = new Thickness(6, 0, 0, 0);
+        value.MaxWidth = 160;
+        chip.Children.Add(value);
+        return chip;
+    }
+
+    private static FrameworkElement IdleDot()
+    {
+        var dot = new Ellipse { Width = 3, Height = 3, Margin = new Thickness(9, 0, 9, 0), VerticalAlignment = VerticalAlignment.Center };
+        dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "TrackBrush");
+        return dot;
+    }
+
+    // ---------------------------------------------------------------- alert (peek)
+
+    private const double PeekH = 76;
+    private const double RadiusPeek = 24;
+    private const string ReminderPeekKey = "reminder";
+    private bool _peeking;
+    private readonly DispatcherTimer _peekTimer = new();
+
+    /// <summary>One alert: what to draw, and what dismiss / click do.</summary>
+    private sealed record PeekRequest(string Key, Func<FrameworkElement> Icon, string Title, string Sub,
+        TimeSpan Duration, Action? OnDismiss = null, Action? OnClick = null)
+    {
+        public DateTime QueuedAt { get; } = DateTime.Now;
+    }
+
+    // Reminder alerts and Windows notifications share one queue and show one after another.
+    private readonly List<PeekRequest> _peekQueue = new();
+    private PeekRequest? _currentPeek;
+
+    private double PeekW => Math.Max(_musicW + 40, 400);
+
+    private void EnqueuePeek(PeekRequest request)
+    {
+        // A newer alert with the same key (same app / same reminder) replaces the waiting one.
+        _peekQueue.RemoveAll(r => r.Key == request.Key);
+        _peekQueue.Add(request);
+        if (_peekQueue.Count > 4) _peekQueue.RemoveAt(0);
+        if (!_peeking) ShowNextPeek();
+    }
+
+    private void ShowNextPeek()
+    {
+        if (_expanded || Visibility != Visibility.Visible) return; // stays queued until the notch is closed again
+        _peekQueue.RemoveAll(r => DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
+        if (_peekQueue.Count == 0) return;
+        var next = _peekQueue[0];
+        _peekQueue.RemoveAt(0);
+
+        _currentPeek = next;
+        PeekIconHost.Content = next.Icon();
+        PeekTitle.Text = next.Title;
+        PeekSub.Text = next.Sub;
+        PeekSub.Visibility = string.IsNullOrWhiteSpace(next.Sub) ? Visibility.Collapsed : Visibility.Visible;
+        if (_peeking)
+        {
+            // Already open: swap the content with a quick fade instead of shrinking and growing again.
+            PeekLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
+        }
+        _peeking = true;
+        PeekLayer.Height = PeekH;
+        _peekTimer.Stop();
+        _peekTimer.Interval = next.Duration;
+        _peekTimer.Start();
+        _width.Target = PeekW;
+        _height.Target = PeekH;
+        StartAnimation();
+    }
+
+    /// <summary>Ends the current alert; the next queued one (if any) takes its place.</summary>
+    private void EndPeek()
+    {
+        _peekTimer.Stop();
+        if (!_peeking) return;
+        _currentPeek = null;
+        if (!_expanded && _peekQueue.Count > 0)
+        {
+            ShowNextPeek();
+            if (_currentPeek is not null) return;
+        }
+        _peeking = false;
+        PeekLayer.BeginAnimation(OpacityProperty, null);
+        PeekLayer.Visibility = Visibility.Collapsed;
+        if (_expanded) return;
+        _width.Target = ActivityWidth();
+        _height.Target = _collapsedH;
+        StartAnimation();
+    }
+
+    private void OnPeekDismiss(object sender, RoutedEventArgs e)
+    {
+        _hoverTimer.Stop();
+        var dismiss = _currentPeek?.OnDismiss;
+        EndPeek();
+        dismiss?.Invoke();
+        e.Handled = true;
+    }
+
+    private void OnPeekClick(object sender, MouseButtonEventArgs e)
+    {
+        var click = _currentPeek?.OnClick;
+        EndPeek();
+        click?.Invoke();
+        e.Handled = true;
+    }
+
+    private void ShowReminderPeek()
+    {
+        var r = EventReminderService.Instance;
+        if (!r.IsActive) return;
+        EnqueuePeek(new PeekRequest(ReminderPeekKey, () => GlyphTile(AppIcon.CalendarDays), r.Title, r.SubText,
+            TimeSpan.FromSeconds(5),
+            OnDismiss: () => EventReminderService.Instance.Dismiss(),
+            OnClick: () => Expand(activate: true))); // a live reminder routes this to Calendar
+    }
+
+    private void ShowNotificationPeek(NotchNotification n)
+    {
+        var sub = string.IsNullOrWhiteSpace(n.Body) ? n.AppName : $"{n.AppName} · {n.Body}";
+        EnqueuePeek(new PeekRequest("app:" + n.AppId, () => AppTile(n), n.Title, sub, TimeSpan.FromSeconds(4)));
+    }
+
+    /// <summary>Accent-soft rounded tile with a glyph (reminders).</summary>
+    private static FrameworkElement GlyphTile(AppIcon kind)
+    {
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        tile.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
+        var icon = new HeroIcon { Kind = kind, Width = 19, Height = 19, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(ForegroundProperty, "AccentBrush");
+        tile.Child = icon;
+        return tile;
+    }
+
+    /// <summary>The sending app's own icon, or its first letter on a tile when Windows has none.</summary>
+    private static FrameworkElement AppTile(NotchNotification n)
+    {
+        if (n.Icon is not null)
+        {
+            var image = new Image { Source = n.Icon, Width = 34, Height = 34, Stretch = Stretch.Uniform };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+            var frame = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11), Child = image };
+            frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
+            return frame;
+        }
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
+        var letter = new TextBlock
+        {
+            Text = n.AppName.Length > 0 ? n.AppName[..1].ToUpperInvariant() : "?",
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        letter.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+        tile.Child = letter;
+        return tile;
+    }
+
     /// <summary>Clockwise arc from 12 o'clock covering <paramref name="progress"/> of the mini ring.</summary>
     private static Geometry BuildMiniArc(double progress)
     {
-        const double size = 20, inset = 2.5;
+        const double size = 22, inset = 2.5;
         var radius = size / 2 - inset;
         var center = new Point(size / 2, size / 2);
         progress = Math.Clamp(progress, 0, 0.9999);
@@ -595,11 +1061,13 @@ public partial class NotchWindow : Window
 
     private void BuildEqualizer()
     {
-        var bars = new[] { Bar1, Bar2, Bar3, Bar4 };
-        var periods = new[] { 0.42, 0.55, 0.37, 0.6 };
+        // Bars breathe around their centre like a voice waveform, each at its own pace.
+        var bars = new[] { Bar1, Bar2, Bar3, Bar4, Bar5 };
+        var periods = new[] { 0.46, 0.33, 0.52, 0.38, 0.6 };
+        var lows = new[] { 0.3, 0.45, 0.25, 0.4, 0.3 };
         for (var i = 0; i < bars.Length; i++)
         {
-            var anim = new DoubleAnimation(0.25, 1.0, TimeSpan.FromSeconds(periods[i]))
+            var anim = new DoubleAnimation(lows[i], 1.0, TimeSpan.FromSeconds(periods[i]))
             {
                 AutoReverse = true,
                 RepeatBehavior = RepeatBehavior.Forever,
@@ -785,6 +1253,9 @@ public partial class NotchWindow : Window
     private void MoveTabIndicator(string id, bool animate = true)
     {
         var tab = Tabs.Children.OfType<RadioButton>().FirstOrDefault(t => (string)t.Tag == id);
+        // Tabs reordered while the bar was hidden (e.g. from Settings) still report their old
+        // positions until the next layout pass; measure now so the indicator lands on the right tab.
+        if (tab is not null && TabBar.IsVisible && !Tabs.IsArrangeValid) Tabs.UpdateLayout();
         if (tab is null || tab.ActualWidth <= 0 || !TabBar.IsVisible)
         {
             TabIndicator.Opacity = 0; // re-snapped by Tabs.LayoutUpdated once laid out

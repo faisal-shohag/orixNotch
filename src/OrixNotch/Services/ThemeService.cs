@@ -44,7 +44,6 @@ public static class ThemeService
         new("pink", "Pink", C("#FF4F79")),
         new("red", "Red", C("#FF453A")),
         new("mono", "Mono", C("#9A9AA2")),
-        new("white", "White", C("#FFFFFF")),
     ];
 
     public static event Action? Changed;
@@ -72,10 +71,21 @@ public static class ThemeService
         res["ThumbBrush"] = B(WithAlpha(s.Text, 0x40));
         res["AccentBrush"] = B(accent);
         res["AccentSoftBrush"] = B(WithAlpha(accent, 0x30));
-        res["OnAccentBrush"] = B(Luminance(accent) > 0.55 ? C("#111113") : C("#FFFFFF"));
-        res["GoodBrush"] = B(s.IsLight ? C("#1E9E46") : C("#32D74B"));
+        res["OnAccentBrush"] = B(Luminance(accent) > 0.55 ? C("#111113") : C("#FFFFFF"));        res["GoodBrush"] = B(s.IsLight ? C("#1E9E46") : C("#32D74B"));
         res["BadBrush"] = B(s.IsLight ? C("#D7362B") : C("#FF453A"));
         res["AccentColor"] = accent;
+
+        // Syntax colors for code blocks (GitHub-style palettes, tuned for dark and light schemes).
+        var dark = !s.IsLight;
+        res["CodeKeywordBrush"] = B(C(dark ? "#FF7B72" : "#CF222E"));
+        res["CodeStringBrush"] = B(C(dark ? "#A5D6FF" : "#0A3069"));
+        res["CodeCommentBrush"] = B(C(dark ? "#8B949E" : "#6E7781"));
+        res["CodeNumberBrush"] = B(C(dark ? "#79C0FF" : "#0550AE"));
+        res["CodeFunctionBrush"] = B(C(dark ? "#D2A8FF" : "#8250DF"));
+        res["CodeTypeBrush"] = B(C(dark ? "#FFA657" : "#953800"));
+        res["CodePropertyBrush"] = B(C(dark ? "#7EE787" : "#116329"));
+        res["CodeVariableBrush"] = B(C(dark ? "#FFA657" : "#953800"));
+        res["CodeTagBrush"] = B(C(dark ? "#7EE787" : "#116329"));
 
         Changed?.Invoke();
     }

@@ -13,36 +13,38 @@ namespace OrixNotch.Tools;
 /// pauses, the wheel nudges, the grab handle resizes the notch, and the opacity slider makes the
 /// notch see-through. While it is playing the notch stays open even when the pointer leaves.
 /// </summary>
+/// <remarks>
+/// Motion runs on the display's frame clock (<see cref="CompositionTarget.Rendering"/>) and moves the
+/// cached text bitmap by fractional pixels, so it glides instead of hopping a pixel at a time. Speed
+/// eases toward its target, which softens play, pause and slider changes; wheel nudges glide too.
+/// The loop only runs while something is moving and snaps to a whole pixel when it stops, so paused
+/// text is crisp and an idle prompter costs nothing.
+/// </remarks>
 public partial class TeleprompterView : UserControl, IToolView
 {
-    private const double MinHeight = 120;
-    private const double MaxHeight = 360;
+    private const double MinPrompterHeight = 120;
+    private const double MaxPrompterHeight = 360;
     private const double LineSpacing = 1.35;
     private const double SideMargin = 24;
+    private const double SpeedEase = 0.18;   // seconds: time constant for speed changes
+    private const double NudgeEase = 0.09;   // seconds: time constant for wheel nudges
 
     private bool _editing;
-    private bool _scrolling;
-    private readonly System.Windows.Threading.DispatcherTimer _ticker = new(System.Windows.Threading.DispatcherPriority.Render);
-    private readonly System.Windows.Threading.DispatcherTimer _watchdog = new(System.Windows.Threading.DispatcherPriority.Background);
-    private double _watchOffset;
-    private readonly System.Diagnostics.Stopwatch _clock = new();
-    private double _clockOffset;
-    private double _offset;
-    private int _startRetries;
-    private bool _dragging;    private double _dragStartY;
+    private bool _looping;
+    private TimeSpan _lastFrame;
+    private double _offset;        // DIPs scrolled from the start
+    private double _velocity;      // DIPs per second, eased toward the target speed
+    private double _pendingNudge;  // DIPs still to glide from wheel input
+    private bool _dragging;
+    private double _dragStartY;
     private double _dragStartHeight;
     private IDisposable? _keepOpen;
-    private PrompterSurface? _surface;
-    private bool _surfaceShown;
 
     private static TeleprompterService Service => TeleprompterService.Instance;
 
     public TeleprompterView()
     {
         InitializeComponent();
-        _ticker.Tick += OnTick;
-        _watchdog.Interval = TimeSpan.FromMilliseconds(500);
-        _watchdog.Tick += OnWatchdog;
         var s = App.Settings;
         SpeedSlider.Value = s.PrompterSpeed;
         SizeSlider.Value = s.PrompterFontSize;
@@ -52,68 +54,16 @@ public partial class TeleprompterView : UserControl, IToolView
         Service.PropertyChanged += OnServiceChanged;
         Service.Restarted += () =>
         {
-            var wasScrolling = _scrolling;
-            if (wasScrolling) StopScroll();
             _offset = 0;
+            _pendingNudge = 0;
             ApplyOffset();
-            if (wasScrolling) StartScroll();
+            UpdateRunning();
         };
         Editor.Text = Service.Script;
+        ScriptText.SizeChanged += OnScriptSizeChanged;
         ThemeService.Changed += UpdateFades;
         UpdateFades();
         UpdateMode();
-        IsVisibleChanged += (_, _) => UpdateSurface();
-        // Listen from the start: the first chance to show the surface is when the opening animation settles.
-        if (NotchWindow.Instance is { } notch)
-        {
-            notch.GeometryChanging += HideSurface;
-            notch.GeometrySettled += UpdateSurface;
-        }
-    }
-
-    // ---------------------------------------------------------------- solid scrolling surface
-
-    private PrompterSurface Surface
-    {
-        get
-        {
-            if (_surface is not null) return _surface;
-            var notch = NotchWindow.Instance!;
-            _surface = new PrompterSurface(notch);
-            _surface.ApplyBackground();
-            _surface.Clicked += () => Service.Toggle();
-            _surface.Wheel += Nudge;
-            return _surface;
-        }
-    }
-
-    /// <summary>Single-layer rendering: the WPF copy inside the notch is the only text.
-    /// The WinForms overlay window caused double-text and Z-order issues (hidden behind
-    /// the opaque notch, visible only when the notch turned translucent), so it stays
-    /// hidden and the in-notch text scrolls at every opacity.</summary>
-    private void UpdateSurface()
-    {
-        _surfaceShown = false;
-        _surface?.Hide();
-        // Make sure the in-notch copy is fully visible (recovers from the old dual-layer mode).
-        ScriptText.Opacity = 1;
-        FadeTop.Opacity = 1;
-        FadeBottom.Opacity = 1;
-        PausedHint.Opacity = 1;
-        ApplyOffset();
-    }
-
-    private void HideSurface()
-    {
-        if (!_surfaceShown) return;
-        _surfaceShown = false;
-        _surface?.Hide();
-        // Restore the in-notch copy that takes over while the surface is gone.
-        ScriptText.Opacity = 1;
-        FadeTop.Opacity = 1;
-        FadeBottom.Opacity = 1;
-        PausedHint.Opacity = 1;
-        ApplyOffset(); // the in-notch copy takes over at the current position
     }
 
     public void OnShown()
@@ -128,7 +78,7 @@ public partial class TeleprompterView : UserControl, IToolView
     {
         if (_editing) FinishEditing();
         Service.IsRunning = false;
-        HideSurface();
+        StopLoop();
     }
 
     private void OnServiceChanged(object? sender, PropertyChangedEventArgs e)
@@ -150,7 +100,8 @@ public partial class TeleprompterView : UserControl, IToolView
         ScriptText.Text = Service.Script;
         ApplyFont();
         UpdateRunning();
-        Dispatcher.BeginInvoke(UpdateSurface, System.Windows.Threading.DispatcherPriority.Loaded);
+        // The reading line depends on the stage height, known after layout.
+        Dispatcher.BeginInvoke(ApplyOffset, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     private void ApplyFont()
@@ -180,6 +131,7 @@ public partial class TeleprompterView : UserControl, IToolView
         _editing = false;
         Service.Script = Editor.Text.TrimEnd();
         _offset = 0;
+        _pendingNudge = 0;
         UpdateMode();
         ApplyOffset();
         Keyboard.ClearFocus();
@@ -191,18 +143,19 @@ public partial class TeleprompterView : UserControl, IToolView
 
     private void OnRestart(object sender, RoutedEventArgs e) => Service.Restart();
 
+    private bool Running => Service.IsRunning && !_editing;
+
     private void UpdateRunning()
     {
-        var running = Service.IsRunning && !_editing;
-        if (running && !_scrolling && _offset >= EndOffset - 1)
+        var running = Running;
+        if (running && !_looping && ContentMeasured() && _offset >= EndOffset - 1)
         {
             // Pressing play at the end starts over.
             _offset = 0;
             ApplyOffset();
         }
         PlayIcon.Kind = running ? AppIcon.Pause : AppIcon.Play;
-        PausedHint.Visibility = !running && !_editing && Service.HasScript && _offset > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (_surface is not null) _surface.ShowPaused = PausedHint.Visibility == Visibility.Visible;
+        UpdatePausedHint();
 
         // Keep the notch open while reading; the pointer is usually elsewhere.
         if (running && _keepOpen is null) _keepOpen = NotchWindow.Instance?.HoldOpen();
@@ -212,101 +165,68 @@ public partial class TeleprompterView : UserControl, IToolView
             _keepOpen = null;
         }
 
-        if (running && !_scrolling) StartScroll();
-        else if (!running && _scrolling) StopScroll();
-        if (running && !_watchdog.IsEnabled)
-        {
-            _watchOffset = _offset;
-            _watchdog.Start();
-        }
+        // Pausing lets the loop ease the text to a stop; it ends itself once still.
+        if (running) StartLoop();
     }
 
-    /// <summary>
-    /// Steps the text one whole pixel at a time on a timer paced to the reading speed, redrawing only
-    /// when it actually moves. The moving text is drawn by <see cref="PrompterSurface"/>, a normal
-    /// window, so each step is cheap; the transparent notch is left alone while scrolling.
-    /// </summary>
-    private void StartScroll()
+    private void UpdatePausedHint() =>
+        PausedHint.Visibility = !Running && !_editing && Service.HasScript && _offset > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    private void StartLoop()
     {
-        if (EndOffset - _offset <= 0)
-        {
-            // Play pressed before layout measured the script (opening animation
-            // still running): wait for a layout pass and try again instead of
-            // stopping playback. Genuinely at the end (or empty) stops below.
-            if (Service.HasScript && !ContentMeasured() && _startRetries < 5)
-            {
-                _startRetries++;
-                Dispatcher.BeginInvoke(() =>
-                {
-                    if (Service.IsRunning && !_scrolling) StartScroll();
-                }, System.Windows.Threading.DispatcherPriority.Loaded);
-                return;
-            }
-            _startRetries = 0;
-            Service.IsRunning = false;
-            return;
-        }
-        _startRetries = 0;
-        _scrolling = true;
-        _watchOffset = _offset;
-        _watchdog.Start();
-        _clock.Restart();
-        _clockOffset = _offset;
-        _ticker.Interval = TimeSpan.FromSeconds(Math.Clamp(1 / TeleprompterService.PixelsPerSecond, 1 / 60.0, 0.1));
-        _ticker.Start();
+        if (_looping) return;
+        _looping = true;
+        _lastFrame = TimeSpan.Zero;
+        CompositionTarget.Rendering += OnFrame;
     }
 
-    private void OnTick(object? sender, EventArgs e)
+    /// <summary>Stops immediately and snaps to a whole pixel so the resting text is crisp.</summary>
+    private void StopLoop()
     {
-        // Position from elapsed time, so a late tick catches up instead of drifting.
-        _offset = Math.Min(EndOffset, _clockOffset + _clock.Elapsed.TotalSeconds * TeleprompterService.PixelsPerSecond);
+        if (_looping)
+        {
+            CompositionTarget.Rendering -= OnFrame;
+            _looping = false;
+        }
+        _velocity = 0;
+        _offset += _pendingNudge;
+        _pendingNudge = 0;
+        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        _offset = Math.Clamp(Math.Round(_offset * dpi) / dpi, 0, EndOffset);
         ApplyOffset();
-        if (_offset >= EndOffset) Service.IsRunning = false;
+        UpdatePausedHint();
     }
 
-    /// <summary>Freezes the text where it is right now.</summary>
-    private void StopScroll()
+    private void OnFrame(object? sender, EventArgs e)
     {
-        _ticker.Stop();
-        _watchdog.Stop();
-        _clock.Stop();
-        _scrolling = false;
+        var now = ((RenderingEventArgs)e).RenderingTime;
+        if (now == _lastFrame) return; // Rendering can fire more than once per frame
+        var dt = _lastFrame == TimeSpan.Zero ? 1 / 60.0 : (now - _lastFrame).TotalSeconds;
+        _lastFrame = now;
+        dt = Math.Clamp(dt, 0, 0.1); // a stalled frame shouldn't make the text jump
+
+        var running = Running;
+        if (running && !ContentMeasured())
+        {
+            // Play pressed before layout measured the script (opening animation still running).
+            if (!Service.HasScript) Service.IsRunning = false;
+            return;
+        }
+
+        var target = running ? TeleprompterService.PixelsPerSecond : 0;
+        _velocity += (target - _velocity) * (1 - Math.Exp(-dt / SpeedEase));
+        var nudge = _pendingNudge * (1 - Math.Exp(-dt / NudgeEase));
+        _pendingNudge -= nudge;
+        _offset = Math.Clamp(_offset + _velocity * dt + nudge, 0, EndOffset);
         ApplyOffset();
-    }
 
-    /// <summary>
-    /// Safety net: if playback is on but the offset hasn't moved (dead ticker)
-    /// or the overlay was lost, recover instead of sitting frozen on pause.
-    /// </summary>
-    private void OnWatchdog(object? sender, EventArgs e)
-    {
-        if (!Service.IsRunning)
+        if (running && _offset >= EndOffset)
         {
-            _watchdog.Stop();
+            Service.IsRunning = false; // reached the end
+            StopLoop();
             return;
         }
-        if (_surfaceShown && (_surface is null || _surface.IsDisposed || !_surface.IsShown)) HideSurface();
-        if (!_scrolling)
-        {
-            StartScroll();
-            return;
-        }
-        if (EndOffset - _offset > 1 && Math.Abs(_offset - _watchOffset) < 0.5)
-        {
-            _ticker.Stop();
-            _ticker.Start();
-            _surface?.Invalidate();
-            ApplyOffset();
-        }
-        _watchOffset = _offset;
-    }
-
-    /// <summary>Re-times a running scroll after speed, size or position changes.</summary>
-    private void Retime()
-    {
-        if (!_scrolling) return;
-        StopScroll();
-        StartScroll();
+        if (!running && _velocity < 0.5 && Math.Abs(_pendingNudge) < 0.25) StopLoop();
     }
 
     /// <summary>Scrolled far enough that the last line has passed the reading line.</summary>
@@ -315,22 +235,25 @@ public partial class TeleprompterView : UserControl, IToolView
     /// <summary>The reading line: the first line starts 40% down the stage and the text moves up from there.</summary>
     private double BaseY => Math.Round(Stage.ActualHeight * 0.4);
 
-    /// <summary>Whether any copy of the script has a measurable height yet.</summary>
     private bool ContentMeasured() => ScriptText.ActualHeight > 0;
 
-    /// <summary>Moves the in-notch text; the single rendering layer, visible at every opacity.</summary>
-    private void ApplyOffset()
+    /// <summary>Moves the cached text; fractional while gliding, whole pixels at rest.</summary>
+    private void ApplyOffset() => Scroll.Y = BaseY - _offset;
+
+    /// <summary>Re-wrapping (text size, notch width) changes the script height: keep the same place in it.</summary>
+    private void OnScriptSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var y = Math.Round(BaseY - _offset);
-        if (y != Scroll.Y) Scroll.Y = y;
+        if (!e.HeightChanged || e.PreviousSize.Height <= 0) return;
+        var ratio = e.NewSize.Height / e.PreviousSize.Height;
+        _offset = Math.Clamp(_offset * ratio, 0, EndOffset);
+        _pendingNudge *= ratio;
+        ApplyOffset();
     }
 
     private void OnStageSizeChanged(object sender, SizeChangedEventArgs e)
     {
         ScriptText.Width = Math.Max(50, e.NewSize.Width - 2 * SideMargin);
-        if (_scrolling) Dispatcher.BeginInvoke(Retime); // after the text re-wraps
-        else ApplyOffset();
-        Dispatcher.BeginInvoke(UpdateSurface, System.Windows.Threading.DispatcherPriority.Loaded);
+        ApplyOffset();
     }
 
     /// <summary>Gradients from the notch color (at its current opacity) to transparent over the text edges.</summary>
@@ -350,21 +273,15 @@ public partial class TeleprompterView : UserControl, IToolView
 
     private void OnStageClick(object sender, MouseButtonEventArgs e) => Service.Toggle();
 
-    /// <summary>Wheel nudges the script up/down, e.g. to back up a line while paused.</summary>
+    /// <summary>Wheel nudges the script up/down, e.g. to back up a line while paused. The move glides.</summary>
     private void OnStageWheel(object sender, MouseWheelEventArgs e)
     {
-        Nudge(e.Delta);
+        _pendingNudge -= e.Delta * 0.4;
+        // Don't queue travel past either end.
+        _pendingNudge = Math.Clamp(_pendingNudge, -_offset, EndOffset - _offset);
+        StartLoop();
+        UpdatePausedHint();
         e.Handled = true;
-    }
-
-    private void Nudge(int delta)
-    {
-        var wasScrolling = _scrolling;
-        if (wasScrolling) StopScroll();
-        _offset = Math.Clamp(_offset - delta * 0.4, 0, EndOffset);
-        ApplyOffset();
-        if (wasScrolling) StartScroll();
-        UpdateRunning();
     }
 
     // ---------------------------------------------------------------- controls
@@ -372,9 +289,8 @@ public partial class TeleprompterView : UserControl, IToolView
     private void OnSpeedChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!IsLoaded) return;
-        App.Settings.PrompterSpeed = e.NewValue;
+        App.Settings.PrompterSpeed = e.NewValue; // a running scroll eases to the new speed
         SettingsService.Save(notify: false);
-        Retime();
     }
 
     private void OnSizeChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -382,8 +298,6 @@ public partial class TeleprompterView : UserControl, IToolView
         if (!IsLoaded) return;
         App.Settings.PrompterFontSize = Math.Round(e.NewValue);
         ApplyFont();
-        if (_surfaceShown) _surface!.SetContent(Service.Script, App.Settings.PrompterFontSize);
-        if (_scrolling) Dispatcher.BeginInvoke(Retime); // after the text re-wraps
         SettingsService.Save(notify: false);
     }
 
@@ -393,7 +307,6 @@ public partial class TeleprompterView : UserControl, IToolView
         App.Settings.PrompterOpacity = e.NewValue;
         NotchWindow.Instance?.SetBackgroundOpacity(e.NewValue);
         UpdateFades();
-        _surface?.ApplyBackground();
         SettingsService.Save(notify: false);
     }
 
@@ -401,7 +314,6 @@ public partial class TeleprompterView : UserControl, IToolView
     {
         App.Settings.PrompterMirror = !App.Settings.PrompterMirror;
         Mirror.ScaleX = App.Settings.PrompterMirror ? -1 : 1;
-        if (_surface is not null) _surface.Mirrored = App.Settings.PrompterMirror;
         SettingsService.Save(notify: false);
     }
 
@@ -419,7 +331,7 @@ public partial class TeleprompterView : UserControl, IToolView
         if (!_dragging) return;
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
         var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        App.Settings.PrompterHeight = Math.Clamp(_dragStartHeight + dy, MinHeight, MaxHeight);
+        App.Settings.PrompterHeight = Math.Clamp(_dragStartHeight + dy, MinPrompterHeight, MaxPrompterHeight);
         NotchWindow.Instance?.SetToolSize(690, App.Settings.PrompterHeight);
     }
 

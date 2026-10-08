@@ -1,21 +1,11 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:svc="clr-namespace:OrixNotch.Services"
-                    xmlns:shell="clr-namespace:OrixNotch.Shell"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
-                    xmlns:comp="http://schemas.microsoft.com/winfx/2006/xaml/composite-font">
+                    xmlns:shell="clr-namespace:OrixNotch.Shell">
 
-    <!-- Inter ships with the app (Fonts/*.ttf). Bengali script (U+0980–U+09FF) is mapped
-         to Noto Sans Bengali (bundled; installed per-user on first run if missing), so Latin
-         keeps Inter while Bengali renders in Noto — even inside mixed strings. -->
-    <FontFamily x:Key="UiFont">
-        <FontFamily.FamilyNames>
-            <sys:String x:Key="en-US">../Fonts/#Inter</sys:String>
-        </FontFamily.FamilyNames>
-        <FontFamily.FamilyMaps>
-            <comp:FontFamilyMap Unicode="0980-09FF" Target="Noto Sans Bengali" Scale="1.0" />
-        </FontFamily.FamilyMaps>
-    </FontFamily>
+    <!-- Composite UI font (Fonts/OrixUI.CompositeFont): Inter for Latin, Noto Sans Bengali for
+         Bengali. App.BuildUiFont() swaps in the SF Pro variant when SF Pro is installed. -->
+    <FontFamily x:Key="UiFont">../Fonts/#OrixUI</FontFamily>
 
     <!-- Defaults; ThemeService.Apply() replaces these at startup and on every theme change.
          Always reference brushes with DynamicResource so changes apply live. -->
@@ -31,9 +21,18 @@
     <SolidColorBrush x:Key="ThumbBrush" Color="#40F5F5F7" />
     <SolidColorBrush x:Key="AccentBrush" Color="#FF8A3D" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#30FF8A3D" />
-    <SolidColorBrush x:Key="OnAccentBrush" Color="#111113" />
-    <SolidColorBrush x:Key="GoodBrush" Color="#32D74B" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="#111113" />    <SolidColorBrush x:Key="GoodBrush" Color="#32D74B" />
     <SolidColorBrush x:Key="BadBrush" Color="#FF453A" />
+    <!-- Syntax colors for code blocks (dark defaults; ThemeService swaps in light ones). -->
+    <SolidColorBrush x:Key="CodeKeywordBrush" Color="#FF7B72" />
+    <SolidColorBrush x:Key="CodeStringBrush" Color="#A5D6FF" />
+    <SolidColorBrush x:Key="CodeCommentBrush" Color="#8B949E" />
+    <SolidColorBrush x:Key="CodeNumberBrush" Color="#79C0FF" />
+    <SolidColorBrush x:Key="CodeFunctionBrush" Color="#D2A8FF" />
+    <SolidColorBrush x:Key="CodeTypeBrush" Color="#FFA657" />
+    <SolidColorBrush x:Key="CodePropertyBrush" Color="#7EE787" />
+    <SolidColorBrush x:Key="CodeVariableBrush" Color="#FFA657" />
+    <SolidColorBrush x:Key="CodeTagBrush" Color="#7EE787" />
 
     <!-- OrixNotch brand gradient (logo board: blue → indigo → violet → pink). Static: brand stays constant across themes. -->
     <LinearGradientBrush x:Key="BrandGradientBrush" StartPoint="0,0.5" EndPoint="1,0.5">
@@ -301,6 +300,27 @@
         </Setter>
     </Style>
 
+    <!-- Read-only formatted text (chat replies): selectable, no chrome, no own scrolling. -->
+    <Style x:Key="BareRich" TargetType="RichTextBox">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="SelectionOpacity" Value="0.35" />
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="IsDocumentEnabled" Value="True" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RichTextBox">
+                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="PasswordBox">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="Background" Value="{DynamicResource Surface2Brush}" />
@@ -397,7 +417,7 @@
                                 <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
                                     <RepeatButton.Template>
                                         <ControlTemplate TargetType="RepeatButton">
-                                            <Border Height="3" CornerRadius="1.5" Background="{DynamicResource TextBrush}" />
+                                            <Border Height="3" CornerRadius="1.5" Background="{DynamicResource AccentBrush}" />
                                         </ControlTemplate>
                                     </RepeatButton.Template>
                                 </RepeatButton>
@@ -444,8 +464,7 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}" />
-                            <Trigger.EnterActions>
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}" />                            <Trigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="KnobShift" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.18">

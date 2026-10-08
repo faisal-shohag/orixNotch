@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using OrixNotch.Services;
 using OrixNotch.Shell;
@@ -50,6 +52,8 @@ public partial class ClipboardView : UserControl, IToolView
         }
 
         Service.Items.CollectionChanged += (_, _) => UpdateEmpty();
+        ThemeService.Changed += UpdateEdgeFades;
+        UpdateEdgeFades();
         _statusTimer.Tick += (_, _) =>
         {
             _statusTimer.Stop();
@@ -87,11 +91,32 @@ public partial class ClipboardView : UserControl, IToolView
         UpdateEmpty();
     }
 
-    /// <summary>Mouse wheel scrolls the strip sideways.</summary>
-    private void OnStripWheel(object sender, MouseWheelEventArgs e)
+    /// <summary>Shows the left/right hint only when there is more to scroll that way.</summary>
+    private void OnStripScrolled(object sender, ScrollChangedEventArgs e)
     {
-        Strip.ScrollToHorizontalOffset(Strip.HorizontalOffset - e.Delta * 0.6);
-        e.Handled = true;
+        if (e.OriginalSource != Strip) return; // card text boxes raise their own ScrollChanged
+        FadeTo(EdgeLeft, Strip.HorizontalOffset > 1);
+        FadeTo(EdgeRight, Strip.HorizontalOffset < Strip.ScrollableWidth - 1);
+    }
+
+    private static void FadeTo(FrameworkElement element, bool visible)
+    {
+        if (element.Tag is bool shown && shown == visible) return;
+        element.Tag = visible;
+        element.BeginAnimation(OpacityProperty, new DoubleAnimation(visible ? 1.0 : 0.0, TimeSpan.FromMilliseconds(160)));
+    }
+
+    /// <summary>Edge fades go from the notch color to transparent, so cards dissolve into the edge.</summary>
+    private void UpdateEdgeFades()
+    {
+        var pill = ((SolidColorBrush)ThemeService.Get("PillBrush")).Color;
+        var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);
+        var left = new LinearGradientBrush(pill, clear, 0);
+        var right = new LinearGradientBrush(clear, pill, 0);
+        left.Freeze();
+        right.Freeze();
+        EdgeLeftFade.Fill = left;
+        EdgeRightFade.Fill = right;
     }
 
     private void OnCardClick(object sender, MouseButtonEventArgs e)

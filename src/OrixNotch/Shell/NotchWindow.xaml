@@ -15,44 +15,109 @@
             <Path x:Name="Shape" Fill="{DynamicResource PillBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1" />
 
             <Grid x:Name="Body">
-                <!-- Collapsed: live activity (album art + equalizer, or timer) -->
+                <!-- Collapsed: one live activity at a time, Dynamic Island style: a leading glyph in the
+                     left ear, the live value in the right one. -->
                 <Grid x:Name="CollapsedLayer" Height="32" VerticalAlignment="Top">
-                    <Border x:Name="MiniArt" Width="18" Height="18" CornerRadius="5" Margin="10,0,0,0"
-                            HorizontalAlignment="Left" VerticalAlignment="Center" Background="{DynamicResource HoverBrush}"
-                            Visibility="Collapsed">
-                        <Border.Clip>
-                            <RectangleGeometry Rect="0,0,18,18" RadiusX="5" RadiusY="5" />
-                        </Border.Clip>
-                        <Grid>
-                            <hero:HeroIcon Kind="MusicNote" Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <Image Source="{Binding Art, Source={x:Static svc:NowPlayingService.Instance}}" Stretch="UniformToFill" />
-                        </Grid>
-                    </Border>
-
-                    <!-- Timer activity: mode glyph inside a radial progress ring. -->
-                    <Grid x:Name="MiniTimerRing" Width="20" Height="20" Margin="13,0,0,0"
-                          HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed">
-                        <Ellipse Stroke="{DynamicResource TrackBrush}" StrokeThickness="2" Margin="1" />
-                        <Path x:Name="MiniArc" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                        <hero:HeroIcon x:Name="MiniTimerGlyph" Kind="Bolt" Width="9" Height="9"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              Foreground="{DynamicResource TextBrush}" />
+                    <!-- Music: art, title and artist (scrolls when long), waveform tinted from the album art -->
+                    <Grid x:Name="MusicPart" Margin="9,0,12,0" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="MiniArt" Width="22" Height="22" CornerRadius="6" VerticalAlignment="Center"
+                                Background="{DynamicResource HoverBrush}">
+                            <Border.Clip>
+                                <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6" />
+                            </Border.Clip>
+                            <Grid>
+                                <hero:HeroIcon Kind="MusicNote" Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource SubTextBrush}" />
+                                <Image Source="{Binding Art, Source={x:Static svc:NowPlayingService.Instance}}" Stretch="UniformToFill" />
+                            </Grid>
+                        </Border>
+                        <Canvas x:Name="TitleSlot" Grid.Column="1" Margin="10,0,10,0" ClipToBounds="True" Height="18" VerticalAlignment="Center">
+                            <TextBlock x:Name="TrackText" FontSize="12.5">
+                                <TextBlock.RenderTransform>
+                                    <TranslateTransform x:Name="TrackShift" />
+                                </TextBlock.RenderTransform>
+                                <Run x:Name="TrackTitle" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" /><Run x:Name="TrackArtist" Foreground="{DynamicResource SubTextBrush}" />
+                            </TextBlock>
+                        </Canvas>
+                        <StackPanel x:Name="EqBars" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Height="14">
+                            <Rectangle x:Name="Bar1" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Margin="1.25,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.4" /></Rectangle.RenderTransform></Rectangle>
+                            <Rectangle x:Name="Bar2" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Margin="1.25,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.8" /></Rectangle.RenderTransform></Rectangle>
+                            <Rectangle x:Name="Bar3" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Margin="1.25,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.55" /></Rectangle.RenderTransform></Rectangle>
+                            <Rectangle x:Name="Bar4" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Margin="1.25,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.9" /></Rectangle.RenderTransform></Rectangle>
+                            <Rectangle x:Name="Bar5" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Margin="1.25,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.5" /></Rectangle.RenderTransform></Rectangle>
+                        </StackPanel>
                     </Grid>
 
-                    <StackPanel x:Name="EqBars" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                Margin="0,0,12,0" Height="12" Visibility="Collapsed">
-                        <Rectangle x:Name="Bar1" Width="2.5" Height="12" RadiusX="1.25" RadiusY="1.25" Margin="1,0" Fill="{DynamicResource AccentBrush}" RenderTransformOrigin="0.5,1"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.4" /></Rectangle.RenderTransform></Rectangle>
-                        <Rectangle x:Name="Bar2" Width="2.5" Height="12" RadiusX="1.25" RadiusY="1.25" Margin="1,0" Fill="{DynamicResource AccentBrush}" RenderTransformOrigin="0.5,1"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.8" /></Rectangle.RenderTransform></Rectangle>
-                        <Rectangle x:Name="Bar3" Width="2.5" Height="12" RadiusX="1.25" RadiusY="1.25" Margin="1,0" Fill="{DynamicResource AccentBrush}" RenderTransformOrigin="0.5,1"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.5" /></Rectangle.RenderTransform></Rectangle>
-                        <Rectangle x:Name="Bar4" Width="2.5" Height="12" RadiusX="1.25" RadiusY="1.25" Margin="1,0" Fill="{DynamicResource AccentBrush}" RenderTransformOrigin="0.5,1"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.7" /></Rectangle.RenderTransform></Rectangle>
-                    </StackPanel>
+                    <!-- Timer / Pomodoro / Stopwatch: progress ring with mode glyph, then the time -->
+                    <Grid x:Name="TimerPart" Margin="11,0,14,0" Visibility="Collapsed">
+                        <Grid x:Name="MiniTimerRing" Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <Ellipse Stroke="{DynamicResource TrackBrush}" StrokeThickness="2.5" Margin="1.25" />
+                            <Path x:Name="MiniArc" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            <hero:HeroIcon x:Name="MiniTimerGlyph" Kind="Bolt" Width="10" Height="10"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                        <TextBlock x:Name="TimerText" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   FontSize="15" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular"
+                                   Text="{Binding Text, Source={x:Static svc:NotchActivityService.Instance}}" />
+                    </Grid>
 
-                    <TextBlock x:Name="MiniTimer" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"
-                               FontSize="14" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"
-                               Typography.NumeralAlignment="Tabular" TextTrimming="CharacterEllipsis" MaxWidth="200"
-                               Text="{Binding Text, Source={x:Static svc:NotchActivityService.Instance}}"
-                               Visibility="Collapsed" />
+                    <!-- Idle: items the user picked in Settings → Display (rotate, split left/right, or all in a row).
+                         Slots are filled in code; animations live on the slots so 1 s value refreshes don't reset them. -->
+                    <Grid x:Name="IdlePart" Margin="12,0,13,0" Visibility="Collapsed">
+                        <ContentControl x:Name="IdleSlotA" Focusable="False" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <ContentControl.RenderTransform><TranslateTransform /></ContentControl.RenderTransform>
+                        </ContentControl>
+                        <ContentControl x:Name="IdleSlotB" Focusable="False" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ContentControl.RenderTransform><TranslateTransform /></ContentControl.RenderTransform>
+                        </ContentControl>
+                        <StackPanel x:Name="IdleRow" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <!-- Event reminder (compact): calendar tile, "10m", dismiss -->
+                    <Grid x:Name="ReminderPart" Margin="9,0,7,0" Visibility="Collapsed">
+                        <Border x:Name="ReminderTile" Width="22" Height="22" CornerRadius="6" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Background="{DynamicResource AccentSoftBrush}">
+                            <hero:HeroIcon Kind="CalendarDays" Width="12" Height="12" Foreground="{DynamicResource AccentBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock x:Name="ReminderWhen" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"
+                                       Typography.NumeralAlignment="Tabular" VerticalAlignment="Center" Margin="0,0,4,0"
+                                       Text="{Binding ShortWhen, Source={x:Static svc:EventReminderService.Instance}}" />
+                            <Button x:Name="ReminderDismiss" Style="{StaticResource IconButton}" Width="22" Height="22"
+                                    Foreground="{DynamicResource SubTextBrush}" ToolTip="Dismiss reminder"
+                                    AutomationProperties.Name="Dismiss reminder" Click="OnDismissReminder">
+                                <hero:HeroIcon Kind="XMark" Width="10" Height="10" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <!-- Alert: the notch grows for a few seconds for a reminder or a Windows notification (filled in code) -->
+                <Grid x:Name="PeekLayer" Margin="18,0,12,0" VerticalAlignment="Stretch" Visibility="Collapsed" Opacity="0"
+                      Background="Transparent" Cursor="Hand" MouseLeftButtonUp="OnPeekClick">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ContentControl x:Name="PeekIconHost" Width="40" Height="40" Focusable="False" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Margin="13,0,10,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="PeekTitle" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="PeekSub" FontSize="12.5" Foreground="{DynamicResource SubTextBrush}" Margin="0,1,0,0"
+                                   Typography.NumeralAlignment="Tabular" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button x:Name="PeekDismiss" Grid.Column="2" Width="28" Height="28" Style="{StaticResource IconButton}"
+                            Foreground="{DynamicResource SubTextBrush}" Background="{DynamicResource HoverBrush}" VerticalAlignment="Center"
+                            ToolTip="Dismiss" AutomationProperties.Name="Dismiss alert" Click="OnPeekDismiss">
+                        <hero:HeroIcon Kind="XMark" Width="11" Height="11" />
+                    </Button>
                 </Grid>
 
                 <!-- Expanded: header (title + pin) / tool / tab bar at the bottom -->

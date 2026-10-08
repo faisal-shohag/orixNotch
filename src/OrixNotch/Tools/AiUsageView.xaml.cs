@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using OrixNotch.Services;
 using OrixNotch.Shell;
 
@@ -13,15 +14,44 @@ public partial class AiUsageView : UserControl, IToolView
 {
     private DateTime _lastLoad = DateTime.MinValue;
     private bool _loading;
+    private bool _hasData;
+    private readonly Border _todaySkeleton = Skeleton.Block(44, 13, 4, new Thickness(5, 0, 14, 0));
+    private readonly Border _monthSkeleton = Skeleton.Block(64, 13, 4, new Thickness(5, 0, 0, 0));
 
     public AiUsageView()
     {
         InitializeComponent();
-        Strip.PreviewMouseWheel += (_, e) =>
-        {
-            Strip.ScrollToHorizontalOffset(Strip.HorizontalOffset - e.Delta * 0.6);
-            e.Handled = true;
-        };
+        Totals.Children.Insert(Totals.Children.IndexOf(TodayCost) + 1, _todaySkeleton);
+        Totals.Children.Insert(Totals.Children.IndexOf(MonthCost) + 1, _monthSkeleton);
+        ThemeService.Changed += UpdateEdgeFades;
+        UpdateEdgeFades();
+    }
+
+    private void OnStripScrolled(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.OriginalSource != Strip) return;
+        FadeTo(EdgeLeft, Strip.HorizontalOffset > 1);
+        FadeTo(EdgeRight, Strip.HorizontalOffset < Strip.ScrollableWidth - 1);
+    }
+
+    private static void FadeTo(FrameworkElement element, bool visible)
+    {
+        if (element.Tag is bool shown && shown == visible) return;
+        element.Tag = visible;
+        element.BeginAnimation(OpacityProperty, new DoubleAnimation(visible ? 1.0 : 0.0, TimeSpan.FromMilliseconds(160)));
+    }
+
+    /// <summary>Edge fades go from the notch color to transparent, so cards dissolve into the edge (same as Clipboard).</summary>
+    private void UpdateEdgeFades()
+    {
+        var pill = ((SolidColorBrush)ThemeService.Get("PillBrush")).Color;
+        var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);
+        var left = new LinearGradientBrush(pill, clear, 0);
+        var right = new LinearGradientBrush(clear, pill, 0);
+        left.Freeze();
+        right.Freeze();
+        EdgeLeftFade.Fill = left;
+        EdgeRightFade.Fill = right;
     }
 
     public void OnShown()
@@ -39,11 +69,15 @@ public partial class AiUsageView : UserControl, IToolView
     {
         if (_loading) return;
         _loading = true;
+        // Skeleton until the first load lands; later refreshes keep the cards on screen.
+        if (!_hasData) ShowSkeleton(true);
         Status.Text = "Reading logs…";
         try
         {
             var providers = await AiUsageService.LoadAsync();
             _lastLoad = DateTime.Now;
+            _hasData = true;
+            ShowSkeleton(false);
             TodayCost.Text = Money(providers.Where(p => p.HasCost).Sum(p => p.TodayCost));
             MonthCost.Text = Money(providers.Where(p => p.HasCost).Sum(p => p.MonthCost));
             Cards.Children.Clear();
@@ -55,6 +89,11 @@ public partial class AiUsageView : UserControl, IToolView
         {
             App.Log(ex);
             Status.Text = "Could not read logs";
+            if (!_hasData)
+            {
+                ShowSkeleton(false);
+                Cards.Children.Clear();
+            }
         }
         finally
         {
@@ -62,33 +101,126 @@ public partial class AiUsageView : UserControl, IToolView
         }
     }
 
-    private FrameworkElement Card(ProviderUsage p)
+    private void ShowSkeleton(bool on)
+    {
+        TodayCost.Visibility = MonthCost.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        _todaySkeleton.Visibility = _monthSkeleton.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (!on) return;
+        Empty.Visibility = Visibility.Collapsed;
+        Cards.Children.Clear();
+        for (var i = 0; i < 2; i++) Cards.Children.Add(SkeletonCard());
+    }
+
+    /// <summary>Placeholder shaped like <see cref="Card"/>: header, then three meter rows.</summary>
+    private static FrameworkElement SkeletonCard()
     {
         var stack = new StackPanel();
+        var head = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 9) };
+        head.Children.Add(Skeleton.Circle(15));
+        head.Children.Add(Skeleton.Block(96, 14, 4, new Thickness(7, 0, 7, 0)));
+        head.Children.Add(Skeleton.Block(34, 16, 5));
+        stack.Children.Add(head);
 
+        for (var i = 0; i < 3; i++)
+        {
+            var top = new DockPanel { Margin = new Thickness(0, i == 0 ? 0 : 2, 0, 0) };
+            var right = Skeleton.Block(52, 12, 4, default, HorizontalAlignment.Right);
+            DockPanel.SetDock(right, Dock.Right);
+            top.Children.Add(right);
+            top.Children.Add(Skeleton.Block(i == 2 ? 44 : 58, 12));
+            stack.Children.Add(top);
+            stack.Children.Add(Skeleton.Block(double.NaN, 6, 3, new Thickness(0, 6, 0, 5)));
+
+            var captions = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+            var capRight = Skeleton.Block(40, 9, 3, default, HorizontalAlignment.Right);
+            DockPanel.SetDock(capRight, Dock.Right);
+            captions.Children.Add(capRight);
+            captions.Children.Add(Skeleton.Block(i == 2 ? 104 : 78, 9, 3));
+            stack.Children.Add(captions);
+        }
+
+        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Child = stack };
+        card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+        return card;
+    }
+
+    /// <summary>Logo, name and a small badge ("Plan", "Local", "Pro"…).</summary>
+    private static FrameworkElement CardHeader(ProviderUsage p)
+    {
         var head = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-        head.Children.Add(new HeroIcon { Kind = p.Name.StartsWith("Claude") ? AppIcon.Sparkles : AppIcon.Terminal, Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center });
+        head.Children.Add(BrandLogos.Create(p.Logo, 15));
         head.Children.Add(new TextBlock { Text = p.Name, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(7, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center });
         var badge = new Border { CornerRadius = new CornerRadius(5), Padding = new Thickness(7, 1, 7, 2), VerticalAlignment = VerticalAlignment.Center };
         badge.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
-        var badgeText = new TextBlock { Text = "Local", FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center };
+        var badgeText = new TextBlock
+        {
+            Text = p.Badge ?? (p.SessionPercent is not null || p.WeeklyPercent is not null ? "Plan" : "Local"),
+            FontSize = 10.5,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 120,
+        };
         badgeText.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
         badge.Child = badgeText;
         head.Children.Add(badge);
-        stack.Children.Add(head);
+        return head;
+    }
 
+    private static Border CardFrame(FrameworkElement content)
+    {
+        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Child = content };
+        card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+        return card;
+    }
+
+    /// <summary>Cursor / Antigravity / DeepSeek / Perplexity: headline, meters, note and link from the loader.</summary>
+    private FrameworkElement GenericCard(ProviderUsage p)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(CardHeader(p));
+        if (p.Headline is not null)
+        {
+            stack.Children.Add(new TextBlock { Text = p.Headline, FontSize = 26, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 2, 0, 0) });
+            if (p.HeadlineSub is not null)
+                stack.Children.Add(new TextBlock { Text = p.HeadlineSub, Style = (Style)FindResource("SubText"), FontSize = 10.5, FontWeight = FontWeights.Normal, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 8) });
+        }
+        foreach (var m in p.Meters)
+            stack.Children.Add(Meter(m.Label, 0, m.Percent ?? 0, m.Percent is not null, m.Left, m.Right, valueText: m.Value));
+        if (p.Note is not null)
+            stack.Children.Add(new TextBlock { Text = p.Note, Style = (Style)FindResource("SubText"), FontSize = 11.5, FontWeight = FontWeights.Normal, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 6) });
+        if (p.LinkUrl is not null)
+        {
+            var link = new Button { Content = p.LinkText ?? "Open", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+            var url = p.LinkUrl;
+            link.Click += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            stack.Children.Add(link);
+        }
+        return CardFrame(stack);
+    }
+
+    private FrameworkElement Card(ProviderUsage p)
+    {
+        if (p.IsGeneric) return GenericCard(p);
+        var stack = new StackPanel();
+        stack.Children.Add(CardHeader(p));
+
+        // Prefer the provider's own plan percentages; fall back to the manual token limits in Settings.
         var isClaude = p.Name.StartsWith("Claude");
         var sessionLimit = isClaude ? App.Settings.ClaudeSessionTokenLimit : 0;
         var weeklyLimit = isClaude ? App.Settings.ClaudeWeeklyTokenLimit : 0;
 
-        var spct = Pct(p.SessionTokens, sessionLimit);
-        var resets = p.SessionStarted is { } start ? $"Resets {start.AddHours(5):t}" : "No active session";
-        var spare = sessionLimit > 0 ? $"~{Math.Max(0, 100 - spct):0}% left at reset" : Tokens(p.SessionTokens);
-        stack.Children.Add(Meter("Session", p.SessionTokens, spct, sessionLimit > 0, resets, spare));
+        var sessionHas = p.SessionPercent is not null || sessionLimit > 0;
+        var spct = p.SessionPercent ?? Pct(p.SessionTokens, sessionLimit);
+        var resets = p.SessionResets is { } sr ? $"Resets {sr:t}"
+            : p.SessionStarted is { } start ? $"Resets {start.AddHours(5):t}" : "No active session";
+        var spare = sessionHas ? $"{Math.Max(0, 100 - spct):0}% left" : Tokens(p.SessionTokens);
+        stack.Children.Add(Meter("Session", p.SessionTokens, spct, sessionHas, resets, spare));
 
-        var wpct = Pct(p.WeeklyTokens, weeklyLimit);
-        var wspare = weeklyLimit > 0 ? $"~{Math.Max(0, 100 - wpct):0}% spare" : Tokens(p.WeeklyTokens);
-        stack.Children.Add(Meter("Weekly", p.WeeklyTokens, wpct, weeklyLimit > 0, $"Today {Tokens(p.TodayTokens)}", wspare));
+        var weeklyHas = p.WeeklyPercent is not null || weeklyLimit > 0;
+        var wpct = p.WeeklyPercent ?? Pct(p.WeeklyTokens, weeklyLimit);
+        var wleft = p.WeeklyResets is { } wr ? $"Resets {wr:ddd h:mm tt}" : $"Today {Tokens(p.TodayTokens)}";
+        var wspare = weeklyHas ? $"{Math.Max(0, 100 - wpct):0}% left" : Tokens(p.WeeklyTokens);
+        stack.Children.Add(Meter("Weekly", p.WeeklyTokens, wpct, weeklyHas, wleft, wspare));
 
         // Third row: top session model (Claude) or the usage trend.
         var top = p.SessionModels.OrderByDescending(kv => kv.Value).FirstOrDefault();
@@ -106,16 +238,14 @@ public partial class AiUsageView : UserControl, IToolView
             stack.Children.Add(Trend(p.Daily));
         }
 
-        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Child = stack };
-        card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
-        return card;
+        return CardFrame(stack);
     }
 
     private static double Pct(long tokens, long limit) =>
         limit > 0 ? Math.Min(100, 100.0 * tokens / limit) : 0;
 
     /// <summary>"Label .... 42% used" + bar with a tick + left/right captions.</summary>
-    private FrameworkElement Meter(string label, long tokens, double pct, bool hasLimit, string left, string right, bool plainBar = false)
+    private FrameworkElement Meter(string label, long tokens, double pct, bool hasLimit, string left, string right, bool plainBar = false, string? valueText = null)
     {
         pct = Math.Clamp(pct, 0, 100);
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
@@ -126,7 +256,7 @@ public partial class AiUsageView : UserControl, IToolView
         top.Children.Add(labelText);
         top.Children.Add(new TextBlock
         {
-            Text = hasLimit ? $"{pct:0}% used" : Tokens(tokens),
+            Text = valueText ?? (hasLimit ? $"{pct:0}% used" : Tokens(tokens)),
             FontSize = 12.5,
             FontWeight = FontWeights.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Right,
@@ -134,7 +264,8 @@ public partial class AiUsageView : UserControl, IToolView
         });
         Grid.SetColumn(top.Children[1], 1);
         panel.Children.Add(top);
-        panel.Children.Add(Bar(pct, plainBar ? "TextBrush" : BrushFor(pct)));
+        if (hasLimit || valueText is null) panel.Children.Add(Bar(pct, plainBar ? "AccentBrush" : BrushFor(pct)));
+        else panel.Children.Add(new Border { Height = 4 });
 
         var captions = new Grid();
         captions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -147,7 +278,7 @@ public partial class AiUsageView : UserControl, IToolView
         return panel;
     }
 
-    private static string BrushFor(double pct) => pct > 85 ? "BadBrush" : pct > 60 ? "AccentBrush" : "TextBrush";
+    private static string BrushFor(double pct) => pct > 85 ? "BadBrush" : "AccentBrush";
 
     /// <summary>Rounded track with a proportional fill and a light tick at the value.</summary>
     private static FrameworkElement Bar(double pct, string fillBrush)

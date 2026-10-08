@@ -161,7 +161,7 @@ public partial class SystemMonitorView : UserControl, IToolView
                 ? $"{TimeSpan.FromSeconds(power.BatteryLifeRemaining):h\\:mm} remaining"
                 : "On battery";
         BatteryIcon.Kind = charging ? AppIcon.Bolt : AppIcon.BatteryFull;
-        BatteryBar.SetResourceReference(ForegroundProperty, pct < 20 && !charging ? "BadBrush" : "GoodBrush");
+        BatteryBar.SetResourceReference(ForegroundProperty, pct < 20 && !charging ? "BadBrush" : "AccentBrush");
     }
 
     private static string Gb(ulong bytes) => $"{bytes / 1024d / 1024 / 1024:0.#} GB";
