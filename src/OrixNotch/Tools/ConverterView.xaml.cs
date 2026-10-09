@@ -77,6 +77,13 @@ public partial class ConverterView : UserControl
         Cat0.IsChecked = true;
 
         InputBox.TextChanged += (_, _) => Recalculate();
+        // Numbers only: digits, separators, sign and exponent (pasting other text is filtered the same way).
+        InputBox.PreviewTextInput += (_, e) => e.Handled = !e.Text.All(IsNumberChar);
+        DataObject.AddPastingHandler(InputBox, (_, e) =>
+        {
+            if (e.DataObject.GetData(DataFormats.UnicodeText) is not string text || !text.Trim().All(IsNumberChar))
+                e.CancelCommand();
+        });
         FromBox.SelectionChanged += (_, _) => { if (!_syncing) Recalculate(); };
         ToBox.SelectionChanged += (_, _) => { if (!_syncing) Recalculate(); };
 
@@ -124,8 +131,7 @@ public partial class ConverterView : UserControl
     {
         if (InputBox is null || FromBox?.SelectedItem is not Unit from || ToBox?.SelectedItem is not Unit to)
             return;
-        var text = InputBox.Text.Trim().Replace(',', '.');
-        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        if (!TryParseNumber(InputBox.Text.Trim(), out var value))
         {
             OutputText.Text = "—";
             _lastOutput = "";
@@ -136,6 +142,22 @@ public partial class ConverterView : UserControl
         var formatted = Format(result);
         OutputText.Text = formatted;
         _lastOutput = formatted;
+    }
+
+    private static bool IsNumberChar(char c) => char.IsDigit(c) || c is '.' or ',' or '-' or '+' or 'e' or 'E' or ' ';
+
+    /// <summary>
+    /// "1,000" is a thousand in en-US but "1,5" is one and a half in de-DE: parse in the
+    /// user's culture (thousands separators allowed) first, then fall back to a plain
+    /// invariant number, then to a lone comma used as the decimal point.
+    /// </summary>
+    private static bool TryParseNumber(string text, out double value)
+    {
+        const NumberStyles styles = NumberStyles.Float | NumberStyles.AllowThousands;
+        text = text.Replace(" ", "");
+        return double.TryParse(text, styles, CultureInfo.CurrentCulture, out value)
+            || double.TryParse(text, styles, CultureInfo.InvariantCulture, out value)
+            || double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 
     private static string Format(double v)

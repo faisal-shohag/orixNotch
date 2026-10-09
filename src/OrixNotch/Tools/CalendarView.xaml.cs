@@ -19,7 +19,7 @@ public sealed class CalendarEvent
     [JsonIgnore] public string TimeLabel => string.IsNullOrEmpty(Time) ? "All day" : Time;
 }
 
-public partial class CalendarView : UserControl, IToolView
+public partial class CalendarView : UserControl, IToolView, IEscapeHandler
 {
     private const string FileName = "events.json";
     private readonly List<CalendarEvent> _events = Storage.Load<List<CalendarEvent>>(FileName);
@@ -276,7 +276,8 @@ public partial class CalendarView : UserControl, IToolView
         {
             if (!TryParseTime(rawTime, out var t))
             {
-                TimeInput.Focus();
+                Field.ShowError(TimeInput); // red until the time is edited
+                TimeInput.SelectAll();
                 return;
             }
             time = $"{t.Hours:00}:{t.Minutes:00}";
@@ -313,6 +314,14 @@ public partial class CalendarView : UserControl, IToolView
     {
         if (TimePicker.Visibility == Visibility.Visible) ClosePicker();
         else OpenPicker();
+    }
+
+    /// <summary>Esc closes the time picker before it closes the notch.</summary>
+    public bool OnEscape()
+    {
+        if (TimePicker.Visibility != Visibility.Visible) return false;
+        ClosePicker();
+        return true;
     }
 
     private void OnTimeInputClick(object sender, MouseButtonEventArgs e)

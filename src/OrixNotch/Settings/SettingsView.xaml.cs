@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -123,6 +124,8 @@ public partial class SettingsView : UserControl, IToolView
                 i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(); }));
         Row("Hide in full screen", "Stay out of the way of full-screen apps, games and videos.",
             Toggle(S.HideInFullscreen, v => { S.HideInFullscreen = v; Save(); }));
+        Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
+            Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); }));
 
         Section("SYSTEM");
         Row("Open at login", StartupService.DisabledByUser
@@ -858,7 +861,7 @@ public partial class SettingsView : UserControl, IToolView
 
     private static ComboBox Combo(IEnumerable<string> items, int selected, Action<int> changed, double width = 140)
     {
-        var box = new ComboBox { Width = width };
+        var box = new ComboBox { Width = width, Height = RowControlHeight };
         foreach (var item in items) box.Items.Add(item);
         box.SelectedIndex = selected;
         box.SelectionChanged += (_, _) =>
@@ -868,9 +871,20 @@ public partial class SettingsView : UserControl, IToolView
         return box;
     }
 
+    /// <summary>Settings rows are denser than the tools: fields, combos and buttons share this height.</summary>
+    private const double RowControlHeight = 30;
+
+    private static void Compact(Control field)
+    {
+        field.Height = RowControlHeight;
+        field.MinHeight = 0;
+        field.FontSize = 13.5;
+    }
+
     private static TextBox TextInput(string value, string placeholder, Action<string> changed)
     {
         var box = new TextBox { Text = value, Tag = placeholder, Width = 200 };
+        Compact(box);
         var pause = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         pause.Tick += (_, _) =>
         {
@@ -895,24 +909,22 @@ public partial class SettingsView : UserControl, IToolView
     public static FrameworkElement ApiKeyInput(Func<bool> hasKey, Action<string> saveKey, Action saved,
         string placeholder, string tooltip)
     {
-        var box = new PasswordBox { Width = 240, ToolTip = tooltip };
-        var hint = new TextBlock
-        {
-            Text = hasKey() ? "••••••••  saved" : placeholder,
-            IsHitTestVisible = false,
-            Margin = new Thickness(11, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 12.5,
-        };
-        hint.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
-        box.PasswordChanged += (_, _) => hint.Visibility = box.Password.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var idleHint = hasKey() ? "••••••••  saved" : placeholder;
+        var box = new PasswordBox { Width = 240, ToolTip = tooltip, Tag = idleHint };
+        Compact(box);
 
-        var field = new Grid();
-        field.Children.Add(box);
-        field.Children.Add(hint);
-
-        var save = new Button { Content = "Save", Height = 32, Margin = new Thickness(6, 0, 0, 0) };
+        var save = new Button { Content = "Save", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = false };
         save.SetResourceReference(StyleProperty, "AccentButton");
+        box.PasswordChanged += (_, _) =>
+        {
+            save.IsEnabled = box.Password.Trim().Length > 0;
+            // A rejected key's message stays in the hint only until the user tries again.
+            if (box.Password.Length > 0 && !Equals(box.Tag, idleHint))
+            {
+                box.Tag = idleHint;
+                box.ToolTip = tooltip;
+            }
+        };
         void Commit()
         {
             var key = box.Password.Trim();
@@ -924,10 +936,9 @@ public partial class SettingsView : UserControl, IToolView
             catch (ArgumentException ex)
             {
                 box.Clear();
-                hint.Text = ex.Message;
-                hint.SetResourceReference(TextBlock.ForegroundProperty, "BadBrush");
-                hint.TextTrimming = TextTrimming.CharacterEllipsis;
-                field.ToolTip = ex.Message;
+                box.Tag = ex.Message;
+                box.ToolTip = ex.Message;
+                Field.ShowError(box);
                 return;
             }
             box.Clear();
@@ -936,11 +947,13 @@ public partial class SettingsView : UserControl, IToolView
         save.Click += (_, _) => Commit();
         box.KeyDown += (_, e) =>
         {
-            if (e.Key == Key.Enter) Commit();
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            Commit();
         };
 
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        panel.Children.Add(field);
+        panel.Children.Add(box);
         panel.Children.Add(save);
         return panel;
     }
@@ -989,11 +1002,26 @@ public partial class SettingsView : UserControl, IToolView
 
     private static TextBox NumberInput(long value, Action<long> changed)
     {
-        var box = new TextBox { Text = value.ToString(), Tag = "0", Width = 120 };
-        box.LostFocus += (_, _) =>
+        var current = value;
+        var box = new TextBox { Text = value.ToString("N0"), Tag = "0", Width = 120 };
+        Compact(box);
+        void Commit()
         {
-            if (long.TryParse(box.Text.Replace(",", "").Trim(), out var v) && v >= 0) changed(v);
-            else box.Text = value.ToString();
+            var text = box.Text.Trim();
+            if (long.TryParse(text, NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var v) && v >= 0)
+            {
+                if (v != current) changed(v);
+                current = v;
+            }
+            box.Text = current.ToString("N0");
+        }
+        box.LostKeyboardFocus += (_, _) => Commit();
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            Commit();
+            box.SelectAll();
         };
         return box;
     }

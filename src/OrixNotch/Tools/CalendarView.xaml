@@ -241,7 +241,20 @@
 
             <!-- Composer: time | title | add, in one pill -->
             <Border Grid.Row="2" Margin="0,6,0,0" Height="40" CornerRadius="20" Padding="12,0,5,0"
-                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
+                    Background="{DynamicResource SurfaceBrush}" BorderThickness="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource TrackBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -256,10 +269,10 @@
                     </Button>
                     <TextBox x:Name="TimeInput" Grid.Column="1" Tag="Time" ToolTip="Time (optional) — type 9 or 09:30, or click to pick"
                              KeyDown="OnInputKeyDown" PreviewMouseLeftButtonUp="OnTimeInputClick"
-                             Background="Transparent" BorderThickness="0" MinHeight="0" Padding="4,0,0,0" FontSize="13" />
+                             Style="{StaticResource InlineField}" Padding="4,0,0,0" FontSize="13" />
                     <Border Grid.Column="2" Width="1" Height="18" Margin="4,0,2,0" Background="{DynamicResource StrokeBrush}" />
                     <TextBox x:Name="TitleInput" Grid.Column="3" Tag="New event…" KeyDown="OnInputKeyDown"
-                             Background="Transparent" BorderThickness="0" MinHeight="0" Padding="8,0,0,0" FontSize="13" />
+                             Style="{StaticResource InlineField}" Padding="8,0,0,0" FontSize="13" />
                     <Button Grid.Column="4" Style="{StaticResource AddButton}" Click="OnAdd" ToolTip="Add event (Enter)">
                         <hero:HeroIcon Kind="Plus" Width="14" Height="14" />
                     </Button>

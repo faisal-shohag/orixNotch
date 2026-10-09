@@ -37,6 +37,7 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+        Field.Register(); // class handlers for the themed text fields
         DispatcherUnhandledException += (_, args) =>
         {
             Log(args.Exception);

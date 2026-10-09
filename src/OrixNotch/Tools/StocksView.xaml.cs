@@ -97,7 +97,13 @@ public partial class StocksView : UserControl, IToolView
     private void Add()
     {
         var symbol = TickerInput.Text.Trim().ToUpperInvariant();
-        if (symbol.Length == 0 || App.Settings.StockTickers.Contains(symbol)) return;
+        if (symbol.Length == 0) return;
+        if (App.Settings.StockTickers.Contains(symbol))
+        {
+            Field.ShowError(TickerInput);
+            Status.Text = $"{symbol} is already in the list";
+            return;
+        }
         App.Settings.StockTickers.Add(symbol);
         SettingsService.Save(notify: false);
         TickerInput.Clear();

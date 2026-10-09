@@ -16,7 +16,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox x:Name="TickerInput" Tag="Add ticker, e.g. TSLA" KeyDown="OnTickerKeyDown" CharacterCasing="Upper" />
-            <Button Grid.Column="1" Style="{StaticResource AccentButton}" Width="32" Height="32" Padding="0" Margin="8,0,0,0" Click="OnAdd" ToolTip="Add">
+            <Button Grid.Column="1" Style="{StaticResource AccentButton}" Width="34" Height="34" Padding="0" Margin="8,0,0,0" Click="OnAdd" ToolTip="Add (Enter)">
                 <hero:HeroIcon Kind="Plus" Width="15" Height="15" />
             </Button>
             <TextBlock x:Name="Status" Grid.Column="2" Style="{StaticResource SubText}" VerticalAlignment="Center" Margin="10,0" />

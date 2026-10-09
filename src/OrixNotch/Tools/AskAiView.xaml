@@ -64,8 +64,10 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="Input" Tag="Ask anything…" Height="40" Padding="14,0" KeyDown="OnInputKeyDown" TextChanged="OnInputChanged" />
-            <Button x:Name="SendButton" Grid.Column="1" Width="34" Height="34" Margin="8,0,0,0" Padding="0" Cursor="Hand" Focusable="False"
+            <TextBox x:Name="Input" Tag="Ask anything…  (Shift+Enter for a new line)" MinHeight="40" MaxHeight="116" Padding="14,10"
+                     AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"
+                     PreviewKeyDown="OnInputKeyDown" TextChanged="OnInputChanged" />
+            <Button x:Name="SendButton" Grid.Column="1" Width="34" Height="34" Margin="8,0,0,3" VerticalAlignment="Bottom" Padding="0" Cursor="Hand" Focusable="False"
                     Template="{StaticResource RoundButton}" Background="{DynamicResource AccentBrush}"
                     ToolTip="Send (Enter)" Click="OnSend" IsEnabled="False">
                 <hero:HeroIcon x:Name="SendIcon" Kind="ArrowUp" Width="15" Height="15" Foreground="{DynamicResource OnAccentBrush}" />

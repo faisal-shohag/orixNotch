@@ -15,11 +15,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Grid>
-                <TextBox x:Name="Search" Tag="Search emoji…" Padding="30,0,10,0" TextChanged="OnSearchChanged" />
-                <hero:HeroIcon Kind="Magnifier" Width="15" Height="15" Margin="11,0,0,0" IsHitTestVisible="False"
-                                      HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
-            </Grid>
+            <TextBox x:Name="Search" Tag="Search emoji…" hero:Field.Icon="Magnifier" hero:Field.Clearable="True"
+                     TextChanged="OnSearchChanged" />
             <TextBlock x:Name="Status" Grid.Column="1" Style="{StaticResource SubText}" VerticalAlignment="Center"
                        Margin="10,0,2,0" MaxWidth="160" TextTrimming="CharacterEllipsis" />
         </Grid>

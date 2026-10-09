@@ -32,13 +32,14 @@
             </Setter>
         </Style>
 
-        <!-- Big editable value: no chrome, centered text + caret, Tag is the placeholder. -->
+        <!-- Big editable value: no box, centered text + caret, short underline when hovered or focused. Tag is the placeholder. -->
         <Style x:Key="ValueInput" TargetType="TextBox">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}" />
             <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="SelectionOpacity" Value="0.35" />
             <Setter Property="FontSize" Value="30" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="TextAlignment" Value="Center" />
@@ -56,8 +57,19 @@
                                        Foreground="{DynamicResource SubTextBrush}" Visibility="Collapsed" />
                             <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
                                           HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                            <!-- Underline: shows the number is editable (hover) and where typing goes (focus). -->
+                            <Border x:Name="Underline" Height="2" CornerRadius="1" Width="64" Margin="0,0,0,-3"
+                                    HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                    Background="{DynamicResource TrackBrush}" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Underline" Property="Opacity" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Underline" Property="Opacity" Value="1" />
+                                <Setter TargetName="Underline" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
                             <Trigger Property="Text" Value="">
                                 <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
                             </Trigger>

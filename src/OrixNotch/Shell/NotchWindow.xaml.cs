@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -35,6 +36,27 @@ public partial class NotchWindow : Window
 
     private readonly Spring _width = new(207);
     private readonly Spring _height = new(32);
+
+    // Dodge: the closed notch runs from a pointer coming at it from the left or right, always
+    // keeping DodgeGap away from it, and drifts home when the pointer backs off. It can only be
+    // caught from below. The whole window slides (the notch can cross the screen; the window
+    // itself stays small). Stiff, slightly under-damped spring: it keeps up with a quick flick
+    // and wobbles a little when it stops. Smoothness: while the pointer is near, the dodge runs
+    // on every render frame (vsync), and only the window moves (DWM composites that for free);
+    // the notch's own pixels aren't redrawn, so the motion is as smooth as the pointer itself.
+    private const double DodgeGap = 28;      // DIPs kept between the pointer and the notch's side
+    private const double DodgeBand = 24;     // DIPs below the notch that still count as "beside" it
+    private const double DodgeEdge = 6;      // DIPs kept clear of the screen edges
+    private readonly Spring _shove = new(0) { Stiffness = 900, Damping = 40 };
+    private readonly DispatcherTimer _repelTimer = new() { Interval = TimeSpan.FromMilliseconds(40) }; // idle watch only
+    private double _dodgeSpeed;  // smoothed escape speed (DIP/s), handed to the spring as momentum
+    private double _pointerX = double.NaN, _pointerSpeed; // last pointer x (DIP from home) and its smoothed speed
+    private (double W, double H, double Ear, double Radius, double P, double Peek, bool Peeking, bool Expanded) _shapeDrawn;
+    private bool _dodging;       // the pointer came from a side; keep running until it leaves the band
+    private int _dodgeSide;      // -1: pointer is on the notch's left, +1: on its right (kept while it overlaps mid-flick)
+    private int _homeX, _homeY;  // window position (px) with the notch centred
+    private int _shovePx;        // offset currently applied to the window (px)
+    private double _maxShove = 600; // DIPs the notch may travel each way before hitting the screen edge
     private readonly DispatcherTimer _hoverTimer = new();
     private readonly DispatcherTimer _leaveTimer = new() { Interval = TimeSpan.FromMilliseconds(80) };
     private readonly DispatcherTimer _guardTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -49,6 +71,7 @@ public partial class NotchWindow : Window
     private bool _pinned;
     private TimeSpan _lastFrame;
     private DateTime? _outsideSince;
+    private bool _typedInFocus; // the user has typed into the focused field (auto-focus alone doesn't hold the notch open)
 
     // Opened by hotkey/tray while the cursor is elsewhere: stay open until the cursor
     // visits the pill or the window loses focus.
@@ -83,6 +106,10 @@ public partial class NotchWindow : Window
             if (Pill.IsMouseOver && !_expanded && !_peeking && !ReminderDismiss.IsMouseOver) Expand(activate: false);
         };
         _leaveTimer.Tick += (_, _) => CheckLeave();
+        _repelTimer.Tick += (_, _) =>
+        {
+            if (!(_dodging && _animating)) Repel(_repelTimer.Interval.TotalSeconds); // the frame loop owns it while dodging
+        };
         _guardTimer.Tick += (_, _) => Guard();
 
         Pill.MouseEnter += OnPillMouseEnter;
@@ -95,6 +122,8 @@ public partial class NotchWindow : Window
         Pill.Drop += OnPillDrop;
 
         PreviewKeyDown += OnKeyDown;
+        PreviewGotKeyboardFocus += (_, _) => _typedInFocus = false;
+        PreviewTextInput += (_, _) => _typedInFocus = true;
         Deactivated += (_, _) =>
         {
             if (_expanded && !_pinned && _holdOpen == 0 && !IsCursorOverPill() && Mouse.Captured is null) Collapse();
@@ -146,6 +175,7 @@ public partial class NotchWindow : Window
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(Place);
         Place();
         _guardTimer.Start();
+        _repelTimer.Start();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -199,7 +229,10 @@ public partial class NotchWindow : Window
         var h = (int)Math.Round(Height * dpi.DpiScaleY);
         var x = screen.Bounds.Left + (screen.Bounds.Width - w) / 2;
         var y = screen.Bounds.Top;
-        Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, x, y, w, h, Win32.SWP_NOACTIVATE);
+        (_homeX, _homeY) = (x, y);
+        _maxShove = screen.Bounds.Width / dpi.DpiScaleX / 2;
+        _shovePx = (int)Math.Round(_shove.Value * dpi.DpiScaleX);
+        Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, x + _shovePx, y, w, h, Win32.SWP_NOACTIVATE);
     }
 
     /// <summary>Keeps the notch above other topmost windows and out of the way of fullscreen apps.</summary>
@@ -264,6 +297,8 @@ public partial class NotchWindow : Window
             }
             _expanded = true;
             _idleRotate.Stop();
+            _repelTimer.Stop();
+            SetShove(0);
             if (EventReminderService.Instance.IsActive) ShowTool("calendar");
             else ShowTool(_activeTool == SettingsId ? App.Settings.LastTool : _activeTool);
             _outsideSince = null;
@@ -296,6 +331,7 @@ public partial class NotchWindow : Window
         if (!_expanded) return;
         _expanded = false;
         _leaveTimer.Stop();
+        _repelTimer.Start();
         _height.Target = _collapsedH;
         _width.Target = ActivityWidth();
         if (ToolHost.Content is IToolView view) view.OnHidden();
@@ -342,7 +378,137 @@ public partial class NotchWindow : Window
         }
     }
 
-    private bool IsTyping() => IsActive && Keyboard.FocusedElement is TextBox tb && tb.IsDescendantOf(Pill);
+    /// <summary>An editable field in the notch has keyboard focus (read-only chat text doesn't count).</summary>
+    private bool IsEditing() => IsActive && Keyboard.FocusedElement is (TextBox { IsReadOnly: false } or PasswordBox)
+        && ((Visual)Keyboard.FocusedElement).IsDescendantOf(Pill);
+
+    /// <summary>Holds the notch open: the user is mid-edit in a field, not just a field that was focused for them.</summary>
+    private bool IsTyping() => IsEditing() && _typedInFocus;
+
+    /// <summary>
+    /// Polled (the transparent window gets no mouse events beside the pill). A pointer that comes
+    /// at the closed notch from the left or right is out-run: the notch slides so its near side
+    /// stays <see cref="DodgeGap"/> ahead of the pointer, follows it back toward home as it
+    /// retreats, and stops at the screen edge. Coming from below is how you catch it: a pointer
+    /// that reaches the notch without approaching from a side doesn't move it, so hover-open works.
+    /// </summary>
+    /// <returns>True while the pointer is being dodged (keeps the per-frame loop running).</returns>
+    private bool Repel(double dt)
+    {
+        if (!App.Settings.RepelCursor || _expanded || _peeking || !IsVisible || !SystemParameters.ClientAreaAnimation
+            || (Win32.GetAsyncKeyState(Win32.VK_LBUTTON) & 0x8000) != 0 // mid-drag: dropping onto the notch must stay easy
+            || !Win32.GetCursorPos(out var p) || _hwnd == IntPtr.Zero)
+        {
+            _dodging = false;
+            SetShove(0);
+            return false;
+        }
+
+        // Pointer relative to the notch's home centre, in DIPs, from screen coordinates: the window
+        // is moving under us, and its cached position (PointFromScreen) can trail the last move.
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var x = (p.X - (_homeX + Width * dpi.DpiScaleX / 2)) / dpi.DpiScaleX;
+        var y = (p.Y - _homeY) / dpi.DpiScaleY;
+        var half = Body.ActualWidth / 2;
+        var inBand = y >= -8 && y <= Body.ActualHeight + DodgeBand;
+        var beside = Math.Abs(x - _shove.Value) > half;
+
+        if (!inBand)
+        {
+            _pointerX = double.NaN;
+            _pointerSpeed = 0;
+            _dodging = false;
+            SetShove(0);
+            return false;
+        }
+        if (beside)
+        {
+            _dodging = true;
+            // Only decided while the pointer is clear of the notch: a flick that overlaps it
+            // mustn't flip the direction and send the notch back through the pointer.
+            _dodgeSide = x < _shove.Value ? -1 : 1;
+        }
+        // Pointer speed, smoothed: used to aim a frame ahead, since the window lands a frame
+        // after we read the pointer and a fast pointer would otherwise eat into the gap.
+        if (!double.IsNaN(_pointerX))
+            _pointerSpeed += ((x - _pointerX) / Math.Max(dt, 1 / 240.0) - _pointerSpeed) * 0.5;
+        _pointerX = x;
+
+        if (!_dodging) return false; // reached it from below: hold still and let it be caught
+        StartAnimation(); // from here on, follow the pointer every frame
+
+        // Keep the near side DodgeGap past the pointer; drift home once the pointer is far enough away.
+        var limit = Math.Max(0, _maxShove - half - DodgeEdge);
+        // Lead only in the direction of the chase (never toward the pointer).
+        var lead = Math.Clamp(_pointerSpeed * 0.022, -60, 60);
+        var aimX = _dodgeSide < 0 ? x + Math.Max(0, lead) : x + Math.Min(0, lead);
+        var target = DodgeTarget(aimX, half);
+        if (Math.Abs(target) > limit)
+        {
+            // Cornered against the screen edge: hop over the pointer to its other side in one
+            // frame (sliding would pass under it) and fade back in there, then run home.
+            _dodgeSide = -_dodgeSide;
+            _shove.Value = Math.Clamp(DodgeTarget(x, half, toward: false), -limit, limit);
+            _shove.Velocity = 0;
+            _dodgeSpeed = 0;
+            target = DodgeTarget(x, half);
+            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            };
+            Timeline.SetDesiredFrameRate(fadeIn, 60);
+            Pill.BeginAnimation(OpacityProperty, fadeIn);
+        }
+        target = Math.Clamp(target, -limit, limit);
+
+        // Running away can't lag: a spring chasing a moving target trails it, and a quick pointer
+        // would catch up. Jump straight to the escape position and carry the pointer's speed, so
+        // the spring only adds the overshoot and wobble once the pointer stops.
+        if (_dodgeSide < 0 ? target > _shove.Value : target < _shove.Value)
+        {
+            // Momentum = smoothed pointer speed, so the stop-and-settle doesn't jerk with one noisy frame.
+            var speed = Math.Clamp((target - _shove.Value) / Math.Max(dt, 1 / 240.0), -2000, 2000);
+            _dodgeSpeed += (speed - _dodgeSpeed) * 0.35;
+            _shove.Value = target;
+            _shove.Velocity = _dodgeSpeed * 0.4;
+            _shove.Target = target;
+            return true;
+        }
+        _dodgeSpeed *= 0.8;
+        SetShove(target);
+        return true;
+    }
+
+    /// <summary>
+    /// Where the notch's centre goes to stay <see cref="DodgeGap"/> clear of a pointer at
+    /// <paramref name="x"/> on the current dodge side (0 = home, once the pointer is far enough
+    /// away). With <paramref name="toward"/> false: the exact spot on that side, even past home.
+    /// </summary>
+    private double DodgeTarget(double x, double half, bool toward = true)
+    {
+        var spot = _dodgeSide < 0 ? x + half + DodgeGap : x - half - DodgeGap;
+        if (!toward) return spot;
+        return _dodgeSide < 0 ? Math.Max(0, spot) : Math.Min(0, spot);
+    }
+
+    private void SetShove(double target)
+    {
+        if (Math.Abs(_shove.Target - target) < 0.5 && !(target == 0 && _shove.Target != 0)) return;
+        _shove.Target = target;
+        StartAnimation();
+    }
+
+    /// <summary>Slides the whole window <paramref name="dip"/> DIPs from its centred home position.</summary>
+    private void MoveWindowBy(double dip)
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        var px = (int)Math.Round(dip * VisualTreeHelper.GetDpi(this).DpiScaleX);
+        if (px == _shovePx) return;
+        _shovePx = px;
+        // Position only: no z-order, activation, size or owner-redraw work, so a move costs DWM a recomposite and nothing more.
+        Win32.SetWindowPos(_hwnd, IntPtr.Zero, _homeX + px, _homeY, 0, 0,
+            Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOREDRAW);
+    }
 
     private bool IsCursorOverPill()
     {
@@ -356,14 +522,29 @@ public partial class NotchWindow : Window
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (!_expanded) return;
+        if (e.Key is not (Key.Escape or Key.Tab or Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl))
+            _typedInFocus |= IsEditing(); // Backspace, Delete, arrows… count as typing too
         if (e.Key == Key.Escape)
         {
+            // Esc unwinds one step at a time: the tool's own state (e.g. an open editor),
+            // then a filled search field, then back/collapse.
+            if (ToolHost.Content is IEscapeHandler handler && handler.OnEscape())
+            {
+                e.Handled = true;
+                return;
+            }
+            if (Keyboard.FocusedElement is TextBox { IsReadOnly: false } field && Field.GetClearable(field) && field.Text.Length > 0)
+            {
+                field.Clear();
+                e.Handled = true;
+                return;
+            }
             if (_backTarget is not null) GoBack();
             else Collapse();
             e.Handled = true;
             return;
         }
-        if (IsTyping() || _activeTool == SettingsId) return;
+        if (Keyboard.FocusedElement is TextBoxBase or PasswordBox || _activeTool == SettingsId) return;
 
         if (e.Key == Key.Space && _activeTool == "teleprompter")
         {
@@ -430,14 +611,16 @@ public partial class NotchWindow : Window
         if (dt <= 0) return;
         dt = Math.Min(dt, 0.05);
 
+        var moving = _dodging && Repel(dt);
+
         // Sub-step for stability on slow frames.
         var steps = (int)Math.Ceiling(dt / (1 / 240.0));
         var sub = dt / steps;
-        var moving = false;
         for (var i = 0; i < steps; i++)
         {
             moving |= _width.Step(sub);
             moving |= _height.Step(sub);
+            moving |= _shove.Step(sub);
         }
 
         ApplyGeometry();
@@ -459,6 +642,14 @@ public partial class NotchWindow : Window
         var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((h - _collapsedH) / Math.Max(1, _expandedH - _collapsedH), 0, 1);
         var ear = EarCollapsed + (EarExpanded - EarCollapsed) * p;
         var radius = RadiusCollapsed + (RadiusExpanded - RadiusCollapsed) * p + (RadiusPeek - RadiusCollapsed) * peek;
+
+        MoveWindowBy(_shove.Value);
+
+        // A pure slide changes nothing inside the window: skip the visual updates so WPF doesn't
+        // re-render (and re-upload) the whole transparent window every frame.
+        var shape = (w, h, ear, radius, p, peek, _peeking, _expanded);
+        if (shape == _shapeDrawn) return;
+        _shapeDrawn = shape;
 
         Pill.Width = w + 2 * EarExpanded;
         Pill.Height = h;

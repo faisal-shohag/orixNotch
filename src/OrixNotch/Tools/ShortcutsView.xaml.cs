@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using OrixNotch.Services;
@@ -9,7 +10,7 @@ using OrixNotch.Shell;
 namespace OrixNotch.Tools;
 
 /// <summary>Grid of one-click actions (apps, folders, URLs, Windows settings pages).</summary>
-public partial class ShortcutsView : UserControl
+public partial class ShortcutsView : UserControl, IEscapeHandler
 {
     private readonly ListCollectionView _view;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -74,6 +75,21 @@ public partial class ShortcutsView : UserControl
 
     private void OnCancel(object sender, RoutedEventArgs e) => EditorPanel.Visibility = Visibility.Collapsed;
 
+    /// <summary>Esc closes the editor first; only a second Esc leaves the tool.</summary>
+    public bool OnEscape()
+    {
+        if (EditorPanel.Visibility != Visibility.Visible) return false;
+        EditorPanel.Visibility = Visibility.Collapsed;
+        return true;
+    }
+
+    private void OnEditorKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        OnSave(sender, e);
+    }
+
     private void OnBrowse(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog { Title = "Choose an app or file", Filter = "Apps and files|*.*" };
@@ -90,7 +106,12 @@ public partial class ShortcutsView : UserControl
     {
         var name = NameInput.Text.Trim();
         var (target, args) = SplitCommand(TargetInput.Text.Trim());
-        if (name.Length == 0 || target.Length == 0) return;
+        if (name.Length == 0 || target.Length == 0)
+        {
+            // Point at the first missing field instead of silently doing nothing.
+            Field.ShowError(name.Length == 0 ? NameInput : TargetInput);
+            return;
+        }
 
         if (_editing is null)
         {

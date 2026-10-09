@@ -14,12 +14,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Grid>
-                <TextBox x:Name="Search" Tag="Search shortcuts…" Padding="30,0,10,0"
-                         TextChanged="OnSearchChanged" />
-                <hero:HeroIcon Kind="Magnifier" Width="15" Height="15" Margin="11,0,0,0" IsHitTestVisible="False"
-                                      HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
-            </Grid>
+            <TextBox x:Name="Search" Tag="Search shortcuts…" hero:Field.Icon="Magnifier" hero:Field.Clearable="True"
+                     TextChanged="OnSearchChanged" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
                 <TextBlock x:Name="Status" Style="{StaticResource SubText}" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <Button Style="{StaticResource IconButton}" Width="34" Height="34" ToolTip="New shortcut"
@@ -40,10 +36,12 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="NameInput" Tag="Name" />
-                <TextBox x:Name="TargetInput" Grid.Column="1" Margin="6,0" Tag="App, file, folder, URL or ms-settings:…" />
-                <Button Grid.Column="2" Content="Browse" Height="32" Click="OnBrowse" />
-                <Button Grid.Column="3" Style="{StaticResource AccentButton}" Content="Save" Height="32" Margin="6,0,0,0" Click="OnSave" />
+                <TextBox x:Name="NameInput" Tag="Name" KeyDown="OnEditorKeyDown" />
+                <TextBox x:Name="TargetInput" Grid.Column="1" Margin="6,0" Tag="App, file, folder, URL or ms-settings:…"
+                         ToolTip="App, file, folder, URL or ms-settings:… — quote paths with spaces to add arguments"
+                         KeyDown="OnEditorKeyDown" />
+                <Button Grid.Column="2" Content="Browse" Height="34" Click="OnBrowse" />
+                <Button Grid.Column="3" Style="{StaticResource AccentButton}" Content="Save" Height="34" Margin="6,0,0,0" Click="OnSave" />
                 <Button Grid.Column="4" Style="{StaticResource IconButton}" Width="26" Height="26" Margin="2,0,0,0"
                         Foreground="{DynamicResource SubTextBrush}" Click="OnCancel">
                     <hero:HeroIcon Kind="XMark" Width="13" Height="13" />

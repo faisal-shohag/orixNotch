@@ -19,6 +19,8 @@ public sealed class AppSettings
     public bool LaunchAtStartup { get; set; }
     public bool StartupDefaultApplied { get; set; }
     public bool HideInFullscreen { get; set; } = true;
+    /// <summary>The closed notch dodges a pointer coming from its sides (it can be caught from below).</summary>
+    public bool RepelCursor { get; set; } = true;
 
     public bool ClipboardEnabled { get; set; } = true;
     public bool ClipboardSkipSensitive { get; set; } = true;

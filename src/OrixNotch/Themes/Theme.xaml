@@ -222,8 +222,10 @@
     </Style>
 
     <!-- Text fields: one look everywhere. Filled field with a hairline border that brightens on
-         hover. Single-line fields are 38 tall with the text centered; multi-line fields
-         (AcceptsReturn) fill their box and scroll. -->
+         hover and turns accent with a soft outer glow while focused. Single-line fields are 34
+         tall with the text centered; multi-line fields (AcceptsReturn) fill their box and scroll.
+         Options via Shell/Field: Icon (leading glyph), Clearable (x button), HasError (red border
+         until the next edit), Chrome=False (inline: no glow). Tag is the hint. -->
     <Style TargetType="TextBox">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="Background" Value="{DynamicResource Surface2Brush}" />
@@ -235,7 +237,7 @@
         <Setter Property="SelectionOpacity" Value="0.35" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Padding" Value="10,0" />
-        <Setter Property="MinHeight" Value="38" />
+        <Setter Property="MinHeight" Value="34" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -243,20 +245,40 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
                     <Grid>
+                        <!-- Focus glow sits outside the field so focusing never shifts layout. -->
+                        <Border x:Name="Glow" Margin="-3" CornerRadius="12" BorderThickness="3"
+                                BorderBrush="{DynamicResource AccentSoftBrush}" Opacity="0" IsHitTestVisible="False" />
                         <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="9"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                            <!-- NOTE: Padding is NOT applied here: the text editor insets itself by
-                                 TextBox.Padding on its own, so an extra margin would pad the text twice
-                                 (but not the hint). Padding goes on the Hint only; text and hint then
-                                 share the exact same origin. -->
                             <Grid>
-                                <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Margin="{TemplateBinding Padding}"
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <shell:HeroIcon x:Name="FieldIcon" Width="15" Height="15" Margin="11,0,-2,0"
+                                                VerticalAlignment="Center" IsHitTestVisible="False"
+                                                Foreground="{DynamicResource SubTextBrush}"
+                                                Kind="{TemplateBinding shell:Field.Icon, Converter={x:Static shell:Field.IconKind}}" />
+                                <!-- NOTE: Padding is NOT applied to the content host: the text editor insets
+                                     itself by TextBox.Padding on its own, so an extra margin would pad the
+                                     text twice (but not the hint). Padding goes on the Hint only; text and
+                                     hint then share the exact same origin. The editor also keeps a fixed 2 px
+                                     line inset on each side, hence the hint's own Padding="2,0": without it the
+                                     placeholder sat 2 px left of the caret and of the first typed character. -->
+                                <TextBlock x:Name="Hint" Grid.Column="1" Text="{TemplateBinding Tag}" Margin="{TemplateBinding Padding}" Padding="2,0"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource SubTextBrush}" IsHitTestVisible="False"
                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Visibility="Collapsed" />
-                                <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                <ScrollViewer x:Name="PART_ContentHost" Grid.Column="1" Focusable="False"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                                <Canvas x:Name="CaretLayer" IsHitTestVisible="False" ClipToBounds="True">
+                                <Button x:Name="ClearButton" Grid.Column="2" Style="{StaticResource IconButton}"
+                                        Width="22" Height="22" Margin="0,0,6,0" VerticalAlignment="Center"
+                                        Foreground="{DynamicResource SubTextBrush}" ToolTip="Clear"
+                                        Command="{x:Static shell:Field.ClearCommand}" Visibility="Collapsed">
+                                    <shell:HeroIcon Kind="XMark" Width="12" Height="12" />
+                                </Button>
+                                <Canvas x:Name="CaretLayer" Grid.ColumnSpan="3" IsHitTestVisible="False" ClipToBounds="True">
                                     <Rectangle x:Name="Caret" Width="2" RadiusX="1" RadiusY="1" Opacity="0"
                                                Fill="{DynamicResource AccentBrush}" />
                                 </Canvas>
@@ -264,6 +286,9 @@
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="shell:Field.Icon" Value="{x:Null}">
+                            <Setter TargetName="FieldIcon" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
                         <Trigger Property="Text" Value="">
                             <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
                         </Trigger>
@@ -272,9 +297,53 @@
                             <Setter TargetName="PART_ContentHost" Property="VerticalAlignment" Value="Stretch" />
                             <Setter TargetName="Hint" Property="VerticalAlignment" Value="Top" />
                         </Trigger>
+                        <!-- The clear button shows only while there is something to clear (later triggers win). -->
+                        <Trigger Property="shell:Field.Clearable" Value="True">
+                            <Setter TargetName="ClearButton" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="ClearButton" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsReadOnly" Value="True">
+                            <Setter TargetName="ClearButton" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource TrackBrush}" />
                         </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="shell:Field.HasError" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BadBrush}" />
+                            <Setter TargetName="Glow" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="shell:Field.Chrome" Value="False">
+                            <Setter TargetName="Glow" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <!-- Inline fields have no border to turn red: the text does instead. -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="shell:Field.Chrome" Value="False" />
+                                <Condition Property="shell:Field.HasError" Value="True" />
+                            </MultiTrigger.Conditions>
+                            <Setter Property="Foreground" Value="{DynamicResource BadBrush}" />
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
                         </Trigger>
@@ -282,6 +351,17 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Field that lives inside its own row (calendar, to-dos): text only, the row is the chrome. -->
+    <Style x:Key="InlineField" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="shell:Field.Chrome" Value="False" />
     </Style>
 
     <!-- Chat bubbles / selectable read-only text: no field chrome at all. -->
@@ -321,31 +401,69 @@
         </Setter>
     </Style>
 
+    <!-- Same field as TextBox. PasswordBox has no bindable text, so Field.IsEmpty drives the Tag hint. -->
     <Style TargetType="PasswordBox">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="Background" Value="{DynamicResource Surface2Brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
-        <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}" />
         <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="SelectionOpacity" Value="0.35" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Padding" Value="10,0" />
-        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinHeight" Value="34" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="PasswordBox">
                     <Grid>
+                        <Border x:Name="Glow" Margin="-3" CornerRadius="12" BorderThickness="3"
+                                BorderBrush="{DynamicResource AccentSoftBrush}" Opacity="0" IsHitTestVisible="False" />
                         <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="9"
-                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
-                            <!-- NOTE: no Margin here: the password editor insets itself by
-                                 PasswordBox.Padding on its own (same as TextBox); an extra margin
-                                 would pad the dots twice and misalign them with the hint overlay. -->
-                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" VerticalAlignment="Center" />
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <Grid>
+                                <!-- NOTE: no Margin on the host: the password editor insets itself by
+                                     PasswordBox.Padding on its own (same as TextBox), plus the same 2 px inset. -->
+                                <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Margin="{TemplateBinding Padding}" Padding="2,0"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SubTextBrush}" IsHitTestVisible="False" Visibility="Collapsed" />
+                                <ScrollViewer x:Name="PART_ContentHost" Focusable="False" VerticalAlignment="Center" />
+                            </Grid>
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="shell:Field.IsEmpty" Value="True">
+                            <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource TrackBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="shell:Field.HasError" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BadBrush}" />
+                            <Setter TargetName="Glow" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

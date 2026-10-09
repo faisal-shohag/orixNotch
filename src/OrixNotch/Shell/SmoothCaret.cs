@@ -58,6 +58,7 @@ public static class SmoothCaret
             tb.SizeChanged += (_, _) => Queue();
             tb.IsVisibleChanged += (_, _) => Queue();
             tb.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler((_, _) => Queue()));
+            tb.Loaded += (_, _) => { Attach(); Queue(); };
             _idle.Tick += (_, _) =>
             {
                 _idle.Stop();
@@ -67,8 +68,11 @@ public static class SmoothCaret
 
         private void Attach()
         {
+            var caret = _tb.Template?.FindName("Caret", _tb) as Rectangle;
+            if (caret is not null && ReferenceEquals(caret, _caret)) return;
             _layer = _tb.Template?.FindName("CaretLayer", _tb) as Canvas;
-            _caret = _tb.Template?.FindName("Caret", _tb) as Rectangle;
+            _caret = caret;
+            _placed = false;
             if (_caret is null) return;
             _caret.RenderTransform = _shift;
             _caret.Opacity = 0;
@@ -88,7 +92,7 @@ public static class SmoothCaret
 
         private void Update()
         {
-            if (_caret is null || _layer is null) Attach();
+            Attach(); // cheap; picks up a swapped template
             if (_caret is null || _layer is null) return;
             if (!_tb.IsKeyboardFocused || !_tb.IsVisible || _tb.IsReadOnly || _tb.SelectionLength > 0)
             {
@@ -98,13 +102,13 @@ public static class SmoothCaret
 
             var rect = _tb.GetRectFromCharacterIndex(_tb.CaretIndex);
             if (rect.IsEmpty || double.IsInfinity(rect.X) || double.IsInfinity(rect.Y)) return;
+            // The character rect is already in visible (scrolled) TextBox coordinates, so no
+            // scroll-offset compensation here: subtracting it again made the caret drift away
+            // from its glyph in scrolled boxes (long notes, long single-line input).
             var origin = _tb.TranslatePoint(rect.TopLeft, _layer);
-            // The character rect is in unscrolled text coordinates but the overlay
-            // canvas does not scroll with the content: compensate the scroll offset
-            // so the caret stays glued to its glyph in scrolled boxes.
             var height = Math.Max(10, rect.Height);
-            var x = Math.Round(origin.X - _tb.HorizontalOffset);
-            var y = Math.Round(origin.Y - _tb.VerticalOffset);
+            var x = Math.Round(origin.X);
+            var y = Math.Round(origin.Y);
 
             _caret.Height = height;
             if (!_placed)

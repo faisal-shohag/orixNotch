@@ -10,6 +10,13 @@ public interface IToolView
     void OnHidden();
 }
 
+/// <summary>Optional for tool views: return true from <see cref="OnEscape"/> to consume Esc
+/// (close an inline editor, a picker…) before the notch goes back or collapses.</summary>
+public interface IEscapeHandler
+{
+    bool OnEscape();
+}
+
 /// <param name="Width">Content width; the notch springs to fit it.</param>
 /// <param name="Height">Content height between the header and the tab bar.</param>
 public sealed record ToolDef(string Id, string Name, AppIcon Icon, double Width, double Height, Func<FrameworkElement> Create);

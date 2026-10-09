@@ -16,11 +16,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Grid>
-                <TextBox x:Name="CityInput" Tag="City" Padding="30,0,10,0" KeyDown="OnCityKeyDown" ToolTip="Type a city and press Enter" />
-                <hero:HeroIcon Kind="MapPin" Width="15" Height="15" Margin="11,0,0,0" IsHitTestVisible="False"
-                                      HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
-            </Grid>
+            <TextBox x:Name="CityInput" Tag="City" hero:Field.Icon="MapPin" KeyDown="OnCityKeyDown"
+                     ToolTip="Type a city and press Enter" />
             <TextBlock x:Name="Status" Grid.Column="1" Style="{StaticResource SubText}" VerticalAlignment="Center" Margin="10,0" />
             <Button Grid.Column="2" Style="{StaticResource IconButton}" ToolTip="Refresh" Click="OnRefresh" Foreground="{DynamicResource SubTextBrush}">
                 <hero:HeroIcon Kind="Refresh" Width="14" Height="14" />
