@@ -26,7 +26,7 @@ v0.6.3: redesigned text fields with icons, clear buttons and inline errors; the 
 - Calendar with reminders that pop out of the notch, with sound
 - Windows notifications mirrored on the notch
 - Customizable idle notch: clock, weather, battery, network speed, AI usage
-- AI Usage for Claude Code, Codex, Cursor, Antigravity and more
+- AI Usage for Claude Code, Codex, OpenCode, Cursor, Antigravity and more
 - Ask AI with ChatGPT, Claude, Gemini or DeepSeek (your own API key)
 - To-Dos, Quick Note, Clipboard history and File Shelf
 - Pomodoro, countdown and stopwatch timers

@@ -20,7 +20,7 @@ public sealed class ProviderUsage
     public bool HasCost { get; init; }
     public DateTime? SessionStarted { get; set; }
     public long[] Daily { get; } = new long[14]; // index 13 = today
-    /// <summary>Session-window (5h) tokens per model label. Claude only — Codex logs carry no model.</summary>
+    /// <summary>Session-window (5h) tokens per model label. Claude and OpenCode — Codex logs carry no model.</summary>
     public Dictionary<string, long> SessionModels { get; } = new();
 
     // Plan usage limits as reported by the provider (null when unavailable).
@@ -46,7 +46,7 @@ public sealed class ProviderUsage
 /// <summary>
 /// Token usage of local AI coding tools, computed only from their own session logs on this PC:
 /// Claude Code (~/.claude/projects/**/*.jsonl) and Codex (~/.codex/sessions/**/*.jsonl).
-/// Cursor, Antigravity, DeepSeek and Perplexity live in AiUsageService.More.cs.
+/// OpenCode, Cursor, Antigravity, DeepSeek and Perplexity live in AiUsageService.More.cs.
 /// Costs are estimates at list prices. Plan limit percentages come from Codex's own logs and,
 /// for Claude, from Anthropic's usage endpoint using Claude Code's sign-in token
 /// (~/.claude/.credentials.json) — the same data Claude Code's /usage shows. The token is
@@ -66,12 +66,13 @@ public static partial class AiUsageService
             return claude;
         });
         var codexTask = Task.Run(LoadCodex);
+        var openCodeTask = Task.Run(LoadOpenCode);
         var cursorTask = Task.Run(LoadCursorAsync);
         var antigravityTask = Task.Run(LoadAntigravity);
         var deepSeekTask = Task.Run(LoadDeepSeekAsync);
         var perplexityTask = Task.Run(LoadPerplexity);
-        await Task.WhenAll(claudeTask, codexTask, cursorTask, antigravityTask, deepSeekTask, perplexityTask);
-        return new[] { claudeTask.Result, codexTask.Result, cursorTask.Result, antigravityTask.Result, deepSeekTask.Result, perplexityTask.Result }
+        await Task.WhenAll(claudeTask, codexTask, openCodeTask, cursorTask, antigravityTask, deepSeekTask, perplexityTask);
+        return new[] { claudeTask.Result, codexTask.Result, openCodeTask.Result, cursorTask.Result, antigravityTask.Result, deepSeekTask.Result, perplexityTask.Result }
             .OfType<ProviderUsage>()
             .ToList();
     }

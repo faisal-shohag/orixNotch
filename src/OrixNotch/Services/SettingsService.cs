@@ -50,6 +50,11 @@ public sealed class AppSettings
     public bool NotifyShowText { get; set; } = true;
     public List<string> NotifyMutedApps { get; set; } = new();  // app ids (AUMIDs)
     public List<string> NotifySeenApps { get; set; } = new();   // "aumid|display name", newest first
+    public bool NotifyKeepHistory { get; set; } = true;         // save them for the Notifications tool
+
+    // AI tools nearing their session / weekly limit peek out of the closed notch
+    public bool AiLimitAlerts { get; set; } = true;
+    public List<string> AiLimitAlerted { get; set; } = new();   // "tool|window|threshold|resetTicks" already shown
 
     // Idle closed notch: what to show when nothing is live
     public List<string> IdleItems { get; set; } = new() { "clock" };
@@ -93,6 +98,11 @@ public sealed class AppSettings
     public string AiProvider { get; set; } = "anthropic"; // "anthropic" or "gemini"
     public string AiModel { get; set; } = "claude-opus-5-5";
     public double AskAiHeight { get; set; } = 220;
+
+    // Quick Note
+    public double NoteHeight { get; set; } = 220;
+    public double NotificationsHeight { get; set; } = 220;
+    public string? LastNoteId { get; set; }
 
     // AI usage limits used to compute "% used" (tokens; 0 = no limit shown)
     public long ClaudeSessionTokenLimit { get; set; }

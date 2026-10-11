@@ -66,8 +66,8 @@ public sealed class IdleInfoService
     private (AppIcon Icon, string Temp)? _weather;
     private readonly Dictionary<string, (double Price, double ChangePct)> _quotes = new();
     private int _tickerIndex;
-    /// <summary>AI tools that report a usage percentage, in AI Usage order.</summary>
-    private List<(string Id, string Name, BrandLogo Logo, double Percent)> _ai = new();
+    /// <summary>AI tools that report a usage percentage or local token counts, in AI Usage order.</summary>
+    private List<(string Id, string Name, BrandLogo Logo, double? Percent, long TodayTokens)> _ai = new();
 
     /// <summary>AI tools that can appear on the idle notch (id, short name, logo) — for the Settings checklist.</summary>
     public IReadOnlyList<(string Id, string Name, BrandLogo Logo)> DetectedAiTools => _ai.Select(a => (a.Id, a.Name, a.Logo)).ToList();
@@ -196,15 +196,30 @@ public sealed class IdleInfoService
     /// </summary>
     private IEnumerable<IdleItem?> BuildAi()
     {
-        static IdleItem Item(string id, (string Id, string Name, BrandLogo Logo, double Percent) t) =>
-            new(id, AppIcon.Sparkles, $"{t.Name} {t.Percent:0}%", t.Percent >= 80 ? "AccentBrush" : "TextBrush", Logo: t.Logo);
+        // Tools without a plan limit (OpenCode) show today's tokens instead of "N%".
+        static IdleItem Item(string id, (string Id, string Name, BrandLogo Logo, double? Percent, long TodayTokens) t) =>
+            new(id, AppIcon.Sparkles, t.Percent is { } p ? $"{t.Name} {p:0}%" : $"{t.Name} {CompactTokens(t.TodayTokens)}",
+                t.Percent >= 80 ? "AccentBrush" : "TextBrush", Logo: t.Logo);
 
         if (_ai.Count == 0) return [];
         if (App.Settings.IdleAiMode != "Choose")
-            return [Item("aiUsage", _ai.MaxBy(t => t.Percent))];
+        {
+            // Auto ranks by limit, so only tools that have one take part.
+            var limited = _ai.Where(t => t.Percent is not null).ToList();
+            return limited.Count == 0 ? [] : [Item("aiUsage", limited.MaxBy(t => t.Percent!.Value))];
+        }
         var chosen = App.Settings.IdleAiTools.ToHashSet(StringComparer.OrdinalIgnoreCase);
         return _ai.Where(t => chosen.Contains(t.Id)).Select(t => Item("aiUsage:" + t.Id, t));
     }
+
+    /// <summary>"1.2M", "840K", "12" — short enough for a notch slot.</summary>
+    private static string CompactTokens(long n) => n switch
+    {
+        >= 1_000_000_000 => $"{n / 1e9:0.#}B",
+        >= 1_000_000 => $"{n / 1e6:0.#}M",
+        >= 1_000 => $"{n / 1e3:0}K",
+        _ => $"{n}",
+    };
 
     private static string Rate(double bytesPerSec) => bytesPerSec switch
     {
@@ -317,14 +332,19 @@ public sealed class IdleInfoService
     {
         try
         {
-            var usage = await AiUsageService.LoadAsync();
+            // Reuse the limit watcher's read when it's fresh, so logs aren't parsed twice.
+            var usage = AiLimitWatcher.Instance.Latest is { } latest && DateTime.Now - latest.At < TimeSpan.FromMinutes(4)
+                ? latest.Usage
+                : await AiUsageService.LoadAsync();
             // Each tool's live plan percentage: its session window, else its first metered bar (Cursor, Antigravity).
-            // Tools without a percentage (DeepSeek balance, Perplexity) can't be shown as "N%".
+            // OpenCode has no limit but logs tokens, so it shows today's count. Tools with neither
+            // (DeepSeek balance, Perplexity) have nothing to show.
             var before = string.Join(",", _ai.Select(a => a.Id));
             _ai = usage
-                .Select(u => (u.Id, Name: u.Name.Split(' ', '·')[0], u.Logo, Percent: u.SessionPercent ?? u.Meters.FirstOrDefault(m => m.Percent is not null)?.Percent))
-                .Where(x => x.Percent is not null && x.Id.Length > 0)
-                .Select(x => (x.Id, x.Name, x.Logo, x.Percent!.Value))
+                .Select(u => (u.Id, Name: u.Name.Split(' ', '·')[0], u.Logo, Percent: u.SessionPercent ?? u.Meters.FirstOrDefault(m => m.Percent is not null)?.Percent,
+                    u.TodayTokens, TokensOnly: u.Id == "opencode"))
+                .Where(x => (x.Percent is not null || x.TokensOnly) && x.Id.Length > 0)
+                .Select(x => (x.Id, x.Name, x.Logo, x.Percent, x.TodayTokens))
                 .ToList();
             if (string.Join(",", _ai.Select(a => a.Id)) != before) AiToolsChanged?.Invoke();
         }

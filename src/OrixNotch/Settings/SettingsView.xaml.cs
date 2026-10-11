@@ -184,9 +184,18 @@ public partial class SettingsView : UserControl, IToolView
                 b.Click += (_, _) => Process.Start(new ProcessStartInfo(watcher.ProblemSettingsUri) { UseShellExecute = true })));
         Row("Show message text", "Off shows only the app name, for privacy when sharing your screen.",
             Toggle(S.NotifyShowText, v => { S.NotifyShowText = v; Save(false); }));
+        Row("Keep history", "Save notifications on this PC to read later in the Notifications tool (last 30 days). Clear them there anytime.",
+            Toggle(S.NotifyKeepHistory, v => { S.NotifyKeepHistory = v; Save(false); }));
         Row("Windows banners", "Windows still shows its own pop-up too. Turn banners off per app in Windows Settings if you only want the notch.",
             new Button { Content = "Open settings" }.Also(b =>
                 b.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true })));
+        Row("AI usage alerts", "A gentle heads-up on the notch when Claude Code, Codex, Cursor or another AI tool reaches 80% and 95% of its session or weekly limit.",
+            Toggle(S.AiLimitAlerts, v =>
+            {
+                S.AiLimitAlerts = v;
+                Save(false);
+                AiLimitWatcher.Instance.Reconfigure();
+            }));
 
         if (S.NotifySeenApps.Count > 0)
         {
@@ -285,7 +294,7 @@ public partial class SettingsView : UserControl, IToolView
         var tools = IdleInfoService.Instance.DetectedAiTools;
         if (tools.Count == 0)
         {
-            Page.Children.Add(Hint("Looking for AI tools with usage limits…"));
+            Page.Children.Add(Hint("Looking for AI tools…"));
             // Detection runs in the background; show the list as soon as it lands.
             void Detected()
             {
@@ -301,7 +310,7 @@ public partial class SettingsView : UserControl, IToolView
             var title = new StackPanel { Orientation = Orientation.Horizontal };
             title.Children.Add(BrandLogos.Create(logo, 14));
             title.Children.Add(new TextBlock { Text = toolName, FontSize = 13.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-            Row(toolName, $"Show {toolName}'s usage on the closed notch.",
+            Row(toolName, logo == BrandLogo.OpenCode ? $"Show {toolName}'s tokens today on the closed notch." : $"Show {toolName}'s usage on the closed notch.",
                 Toggle(S.IdleAiTools.Contains(id, StringComparer.OrdinalIgnoreCase), on =>
                 {
                     S.IdleAiTools.RemoveAll(t => t.Equals(id, StringComparison.OrdinalIgnoreCase));
@@ -322,7 +331,7 @@ public partial class SettingsView : UserControl, IToolView
         ["cpu"] = "Processor and memory use.",
         ["network"] = "Download speed.",
         ["stock"] = "Your Stocks tickers, one after another, with today's change.",
-        ["aiUsage"] = "Claude session usage from the AI Usage tool.",
+        ["aiUsage"] = "Plan usage from the AI Usage tool, or today's tokens for OpenCode.",
         ["clipboard"] = "Number of items in clipboard history.",
         ["shelf"] = "Files waiting on the Shelf. Hidden when empty.",
         ["streak"] = "Pomodoro focus sessions finished today.",
@@ -343,7 +352,7 @@ public partial class SettingsView : UserControl, IToolView
         var list = new StackPanel();
         for (var i = 0; i < visible.Count; i++) list.Children.Add(ToolRow(visible[i], true, i, visible.Count));
         Page.Children.Add(Group(list));
-        Page.Children.Add(Hint("Use the arrows to reorder. Settings always stays at the end of the bar."));
+        Page.Children.Add(Hint("Use the arrows, or press and hold a tab in the notch and drag it. Settings always stays at the end of the bar."));
 
         var hidden = ToolRegistry.Ordered(includeHidden: true).Where(t => S.HiddenTools.Contains(t.Id)).ToList();
         if (hidden.Count > 0)
@@ -504,8 +513,13 @@ public partial class SettingsView : UserControl, IToolView
                 Render();
             }));
         var models = AiService.ModelsFor(info.Id);
-        var model = Combo(AiService.LabelsFor(info.Id), Math.Max(0, Array.IndexOf(models, S.AiModel)),
-            i => { S.AiModel = models[i]; Save(false); }, 200);
+        var labels = AiService.LabelsFor(info.Id);
+        var model = Combo([], Math.Max(0, Array.IndexOf(models, S.AiModel)),
+            i => { S.AiModel = models[i]; Save(false); }, 250);
+        // Free-tier models carry a "Free · 500/day" chip next to their name.
+        model.ItemTemplate = Tools.AskAiView.ModelChoiceTemplate;
+        for (var i = 0; i < models.Length; i++) model.Items.Add(new Tools.AskAiView.ModelChoice(labels[i], AiService.FreeTier(info.Id, models[i])));
+        model.SelectedIndex = Math.Max(0, Array.IndexOf(models, S.AiModel));
         Row("Model", info.ModelHint, model);
         if (AiService.HasKeyFor(info.Id) && models == info.DefaultModels)
         {
@@ -551,7 +565,7 @@ public partial class SettingsView : UserControl, IToolView
         {
             // Keep the chosen model if the key has it; otherwise pick the newest listed one.
             var models = AiService.ModelsFor(provider);
-            if (!models.Contains(S.AiModel)) { S.AiModel = models[0]; Save(false); }
+            if (!models.Contains(S.AiModel)) { S.AiModel = AiService.DefaultModelFor(provider); Save(false); }
             Render();
         }
     }
@@ -663,7 +677,7 @@ public partial class SettingsView : UserControl, IToolView
         privacy.Children.Add(ServiceRow(AppIcon.ChartLine, "Stocks", "Yahoo Finance — your watchlist symbols"));
         privacy.Children.Add(ServiceRow(AppIcon.MusicNote, "Lyrics", "LRCLIB — the title and artist playing"));
         privacy.Children.Add(ServiceRow(AppIcon.Sparkles, "Ask AI", "Anthropic, OpenAI, Google or DeepSeek — only the messages you send"));
-        privacy.Children.Add(ServiceRow(AppIcon.ChartBar, "AI Usage", "Anthropic — your plan usage, using Claude Code's sign-in"));
+        privacy.Children.Add(ServiceRow(AppIcon.ChartBar, "AI Usage", "Anthropic, Cursor or DeepSeek — your usage, using each tool's own sign-in. OpenCode, Codex and Antigravity are read from this PC"));
         privacy.Children.Add(new TextBlock
         {
             Text = "API keys are encrypted with Windows DPAPI and only ever sent to their own provider.",
