@@ -19,7 +19,7 @@
         </ControlTemplate>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid AllowDrop="True" PreviewDragOver="OnDragOver" PreviewDrop="OnDrop">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -27,7 +27,23 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header: shown once there's a conversation to clear -->
+        <!-- Header: current model (click to switch) on the left; New chat once there's a conversation to clear -->
+        <Button x:Name="ModelButton" Style="{StaticResource IconButton}" Width="Auto" Height="24" Margin="0,0,0,4"
+                HorizontalAlignment="Left" Foreground="{DynamicResource SubTextBrush}"
+                ToolTip="Switch model" Click="OnModelMenu" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Margin="7,0,6,0">
+                <ContentControl x:Name="ModelLogo" Focusable="False" VerticalAlignment="Center" />
+                <TextBlock x:Name="ModelName" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center" />
+                <Border x:Name="ModelFree" CornerRadius="6" Padding="5,0,5,1" Margin="6,0,0,0" VerticalAlignment="Center"
+                        Background="{DynamicResource AccentSoftBrush}" Visibility="Collapsed">
+                    <TextBlock Text="Free" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                </Border>
+                <hero:HeroIcon Kind="ChevronDown" Width="10" Height="10" Margin="5,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+            <Button.ContextMenu>
+                <ContextMenu x:Name="ModelMenu" Placement="Bottom" />
+            </Button.ContextMenu>
+        </Button>
         <Button x:Name="NewChatButton" Style="{StaticResource IconButton}" Width="Auto" Height="24" Margin="0,0,10,4"
                 HorizontalAlignment="Right" Foreground="{DynamicResource SubTextBrush}"
                 ToolTip="New chat (Ctrl+N)" Click="OnNewChat" Visibility="Collapsed">
@@ -60,14 +76,29 @@
 
         <!-- Composer -->
         <Grid Grid.Row="2" Margin="0,8,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="Input" Tag="Ask anything…  (Shift+Enter for a new line)" MinHeight="40" MaxHeight="116" Padding="14,10"
+            <!-- Attached images waiting to be sent (paste, drop or the photo button) -->
+            <StackPanel x:Name="AttachRow" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="42,0,0,6" Visibility="Collapsed">
+                <StackPanel x:Name="Attachments" Orientation="Horizontal" />
+                <TextBlock x:Name="AttachHint" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0" />
+            </StackPanel>
+            <Button x:Name="AttachButton" Grid.Row="1" Width="34" Height="34" Margin="0,0,8,3" VerticalAlignment="Bottom" Padding="0" Cursor="Hand" Focusable="False"
+                    Template="{StaticResource RoundButton}" Background="{DynamicResource Surface2Brush}"
+                    ToolTip="Attach images (or paste / drop them)" Click="OnAttach">
+                <hero:HeroIcon Kind="Photo" Width="15" Height="15" Foreground="{DynamicResource SubTextBrush}" />
+            </Button>
+            <TextBox x:Name="Input" Grid.Row="1" Grid.Column="1" Tag="Ask anything…  (Shift+Enter for a new line)" MinHeight="40" MaxHeight="116" Padding="14,10"
                      AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"
                      PreviewKeyDown="OnInputKeyDown" TextChanged="OnInputChanged" />
-            <Button x:Name="SendButton" Grid.Column="1" Width="34" Height="34" Margin="8,0,0,3" VerticalAlignment="Bottom" Padding="0" Cursor="Hand" Focusable="False"
+            <Button x:Name="SendButton" Grid.Row="1" Grid.Column="2" Width="34" Height="34" Margin="8,0,0,3" VerticalAlignment="Bottom" Padding="0" Cursor="Hand" Focusable="False"
                     Template="{StaticResource RoundButton}" Background="{DynamicResource AccentBrush}"
                     ToolTip="Send (Enter)" Click="OnSend" IsEnabled="False">
                 <hero:HeroIcon x:Name="SendIcon" Kind="ArrowUp" Width="15" Height="15" Foreground="{DynamicResource OnAccentBrush}" />

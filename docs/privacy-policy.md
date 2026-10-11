@@ -15,9 +15,9 @@ Everything the app saves lives locally under `%LOCALAPPDATA%\OrixNotch` (setting
 | Clipboard history | Your PC only | Clips flagged private by password managers are skipped |
 | Shelf files/text you park on the notch | Your PC only | Auto-expires per your retention setting |
 | Profile name, avatar | Your PC only | Optional, used for the greeting |
-| AI usage stats (Claude Code and Codex logs, Antigravity's cached quota) | Read from your user profile folder, displayed locally | Never transmitted |
+| AI usage stats (Claude Code and Codex logs, OpenCode's local database, Antigravity's cached quota) | Read from your user profile folder, displayed locally | Never transmitted |
 | API keys (Anthropic / OpenAI / Google / DeepSeek) | Your PC only, encrypted with Windows DPAPI | Only sent to the provider you choose (see §2) |
-| Windows notifications (title, text, app name) | Read on your PC, shown on the notch for a few seconds | Never stored or transmitted |
+| Windows notifications (title, text, app name) | Read on your PC, shown on the notch for a few seconds; kept in a local history file for up to 30 days unless you turn history off | Never transmitted |
 
 ## 2. Network requests (only when you use the feature)
 
@@ -46,7 +46,7 @@ These providers process requests under their own privacy policies. The app's dev
 ## 4. System integrations (all local, under your control)
 
 - **Open at login:** on by default. The Microsoft Store version uses Windows' startup task; other versions add an entry to the `HKCU\...\Run` registry key. Turn it off in Settings → General → Open at login (or Task Manager → Startup apps).
-- **Notifications:** with your permission (Windows notification access), the app reads incoming Windows notifications to show them briefly on the notch. You can turn this off or mute individual apps in Settings → General → Notifications. Notification content is never stored or sent anywhere.
+- **Notifications:** with your permission (Windows notification access), the app reads incoming Windows notifications to show them briefly on the notch. You can turn this off or mute individual apps in Settings → General → Notifications. Notifications shown on the notch are saved in a history file on your PC (`notifications.json`) for up to 30 days so you can reread them in the Notifications tool; you can delete them one by one, clear all, or turn history off in Settings → General → Notifications. Notification content is never sent anywhere.
 - **Global hotkey** (`Ctrl+Alt+N`): handled locally to open the panel.
 - **Clipboard monitoring:** runs only while the app is running; history never leaves the device. Clear it anytime from the Clipboard tool.
 - **Fonts:** a bundled Bengali font is installed per-user on first run so mixed-language text renders correctly.

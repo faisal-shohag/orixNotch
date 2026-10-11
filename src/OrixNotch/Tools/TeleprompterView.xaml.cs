@@ -321,7 +321,7 @@ public partial class TeleprompterView : UserControl, IToolView
     {
         _dragging = true;
         _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = App.Settings.PrompterHeight;
+        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
         Grip.CaptureMouse();
         e.Handled = true;
     }
@@ -331,8 +331,8 @@ public partial class TeleprompterView : UserControl, IToolView
         if (!_dragging) return;
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
         var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        App.Settings.PrompterHeight = Math.Clamp(_dragStartHeight + dy, MinPrompterHeight, MaxPrompterHeight);
-        NotchWindow.Instance?.SetToolSize(690, App.Settings.PrompterHeight);
+        var want = Math.Clamp(_dragStartHeight + dy, MinPrompterHeight, MaxPrompterHeight);
+        App.Settings.PrompterHeight = NotchWindow.Instance?.SetToolSize(690, want) ?? want;
     }
 
     private void OnGripUp(object sender, MouseButtonEventArgs e)

@@ -29,12 +29,15 @@ public partial class AskAiView : UserControl, IToolView
     private static readonly Regex Bullet = new(@"^\s*[-*•]\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex Numbered = new(@"^\s*\d+[.)]\s+(.*)$", RegexOptions.Compiled);
 
-    /// <summary>One turn of the saved chat. <see cref="Display"/> is what the bubble showed when it differs from the prompt.</summary>
-    public sealed record ChatEntry(bool FromUser, string Text, string? Display, DateTime At);
+    /// <summary>
+    /// One turn of the saved chat. <see cref="Display"/> is what the bubble showed when it differs from the prompt;
+    /// <see cref="Images"/> are file names under <c>askai-images</c>.
+    /// </summary>
+    public sealed record ChatEntry(bool FromUser, string Text, string? Display, DateTime At, string[]? Images = null);
 
     private const string HistoryFile = "askai-chat.json";
 
-    private readonly List<(bool FromUser, string Text)> _conversation = new();
+    private readonly List<AiTurn> _conversation = new();
     private List<ChatEntry> _history = new();
     private CancellationTokenSource? _cts;
     private string? _keySetupFor;
@@ -46,6 +49,7 @@ public partial class AskAiView : UserControl, IToolView
         InitializeComponent();
         PreviewKeyDown += OnPreviewKeyDown;
         foreach (var (text, icon) in SuggestionItems) Suggestions.Children.Add(SuggestionChip(text, icon));
+        InitImages();
         RestoreHistory();
     }
 
@@ -56,12 +60,14 @@ public partial class AskAiView : UserControl, IToolView
         if (_history.Count == 0) return;
         foreach (var entry in _history)
         {
-            _conversation.Add((entry.FromUser, entry.Text));
             if (entry.FromUser)
             {
-                Messages.Children.Add(UserMessage(entry.Display ?? entry.Text));
+                var images = LoadImages(entry.Images);
+                _conversation.Add(new AiTurn(true, entry.Text, images.Select(i => i.Image).ToList()));
+                Messages.Children.Add(UserMessage(entry.Display ?? entry.Text, images.Select(i => i.Preview).ToList()));
                 continue;
             }
+            _conversation.Add(new AiTurn(false, entry.Text));
             var (row, card, body, actions) = AssistantMessage();
             RevealCard(card, animate: false);
             RenderReply(body, entry.Text);
@@ -78,6 +84,110 @@ public partial class AskAiView : UserControl, IToolView
     {
         ApplyHeight();
         UpdateKeyState();
+        _ = RefreshModelListAsync();
+    }
+
+    // ---------------------------------------------------------------- model picker
+
+    /// <summary>A model in a picker: its name, plus the free-tier quota ("500/day") when it's free.</summary>
+    public sealed record ModelChoice(string Label, string? Free)
+    {
+        public string FreeText => $"Free · {Free}";
+        public Visibility FreeVisibility => Free is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>Name + accent "Free · 500/day" chip, for combos listing <see cref="ModelChoice"/>.</summary>
+    public static DataTemplate ModelChoiceTemplate { get; } = BuildModelChoiceTemplate();
+
+    private static DataTemplate BuildModelChoiceTemplate()
+    {
+        var row = new FrameworkElementFactory(typeof(StackPanel));
+        row.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+
+        var name = new FrameworkElementFactory(typeof(TextBlock));
+        name.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(ModelChoice.Label)));
+        name.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        row.AppendChild(name);
+
+        var chip = new FrameworkElementFactory(typeof(Border));
+        chip.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+        chip.SetValue(Border.PaddingProperty, new Thickness(6, 0, 6, 1));
+        chip.SetValue(MarginProperty, new Thickness(7, 0, 0, 0));
+        chip.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        chip.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
+        chip.SetBinding(VisibilityProperty, new System.Windows.Data.Binding(nameof(ModelChoice.FreeVisibility)));
+        var chipText = new FrameworkElementFactory(typeof(TextBlock));
+        chipText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(ModelChoice.FreeText)));
+        chipText.SetValue(TextBlock.FontSizeProperty, 10.5);
+        chipText.SetValue(TextBlock.FontWeightProperty, FontWeights.SemiBold);
+        chipText.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        chip.AppendChild(chipText);
+        row.AppendChild(chip);
+
+        var template = new DataTemplate(typeof(ModelChoice)) { VisualTree = row };
+        template.Seal();
+        return template;
+    }
+
+    /// <summary>Header pill: logo, model name and a "Free" chip for free-tier models.</summary>
+    private void UpdateModelButton()
+    {
+        var provider = AiService.ActiveProvider;
+        if (!AiService.HasKeyFor(provider))
+        {
+            ModelButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        // A model of another provider, or one the key's live list no longer has, falls back to the default.
+        var model = App.Settings.AiModel;
+        var models = AiService.ModelsFor(provider);
+        var live = models != AiService.Info(provider).DefaultModels;
+        var foreign = AiService.Providers.Any(p => p.Id != provider && p.DefaultModels.Contains(model));
+        if (foreign || (live && !models.Contains(model)) || (provider == AiService.ProviderGemini && model.StartsWith("gemini-2.0")))
+        {
+            App.Settings.AiModel = AiService.DefaultModelFor(provider);
+            SettingsService.Save(notify: false);
+        }
+        ModelLogo.Content = BrandLogos.Create(ProviderLogo, 11);
+        ModelName.Text = AiService.LabelFor(provider, App.Settings.AiModel);
+        ModelFree.Visibility = AiService.FreeTier(provider, App.Settings.AiModel) is null ? Visibility.Collapsed : Visibility.Visible;
+        ModelButton.Visibility = Visibility.Visible;
+    }
+
+    private async Task RefreshModelListAsync()
+    {
+        var provider = AiService.ActiveProvider;
+        if (AiService.ModelsFor(provider) != AiService.Info(provider).DefaultModels) return; // already live
+        if (await AiService.RefreshModelsAsync(provider) && provider == AiService.ActiveProvider) UpdateModelButton();
+    }
+
+    private void OnModelMenu(object sender, RoutedEventArgs e)
+    {
+        var provider = AiService.ActiveProvider;
+        var models = AiService.ModelsFor(provider);
+        var labels = AiService.LabelsFor(provider);
+        ModelMenu.Items.Clear();
+        for (var i = 0; i < models.Length; i++)
+        {
+            var id = models[i];
+            var item = new MenuItem
+            {
+                Header = new ContentPresenter { Content = new ModelChoice(labels[i], AiService.FreeTier(provider, id)), ContentTemplate = ModelChoiceTemplate },
+                IsCheckable = true,
+                IsChecked = id == App.Settings.AiModel,
+            };
+            item.Click += (_, _) =>
+            {
+                App.Settings.AiModel = id;
+                SettingsService.Save(notify: false);
+                UpdateModelButton();
+                UpdateAttachState();
+                UpdateSendState();
+            };
+            ModelMenu.Items.Add(item);
+        }
+        ModelMenu.PlacementTarget = ModelButton;
+        ModelMenu.IsOpen = true;
     }
 
     // ---------------------------------------------------------------- resize (same handle as the teleprompter)
@@ -104,7 +214,7 @@ public partial class AskAiView : UserControl, IToolView
         }
         _dragging = true;
         _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = Math.Clamp(App.Settings.AskAiHeight, MinChatHeight, MaxChatHeight);
+        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
         Grip.CaptureMouse();
         e.Handled = true;
     }
@@ -114,8 +224,8 @@ public partial class AskAiView : UserControl, IToolView
         if (!_dragging) return;
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
         var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        App.Settings.AskAiHeight = Math.Clamp(_dragStartHeight + dy, MinChatHeight, MaxChatHeight);
-        ApplyHeight();
+        var want = Math.Clamp(_dragStartHeight + dy, MinChatHeight, MaxChatHeight);
+        App.Settings.AskAiHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
     }
 
     private void OnGripUp(object sender, MouseButtonEventArgs e)
@@ -165,6 +275,8 @@ public partial class AskAiView : UserControl, IToolView
                 info.KeyLabel);
         if (!hasKey) _keySetupFor = provider;
         if (hasKey && _conversation.Count == 0) Input.Focus();
+        UpdateModelButton();
+        UpdateAttachState();
         UpdateSendState();
     }
 
@@ -213,7 +325,8 @@ public partial class AskAiView : UserControl, IToolView
     private void UpdateSendState()
     {
         var streaming = _cts is not null;
-        SendButton.IsEnabled = streaming || (Input.IsEnabled && Input.Text.Trim().Length > 0);
+        var hasContent = Input.Text.Trim().Length > 0 || _pending.Count > 0;
+        SendButton.IsEnabled = streaming || (Input.IsEnabled && hasContent && (_pending.Count == 0 || ModelReadsImages));
         SendIcon.Kind = streaming ? AppIcon.Stop : AppIcon.ArrowUp;
         SendButton.ToolTip = streaming ? "Stop" : "Send (Enter)";
     }
@@ -226,9 +339,14 @@ public partial class AskAiView : UserControl, IToolView
             return;
         }
         var text = Input.Text.Trim();
-        if (text.Length == 0) return;
+        if (text.Length == 0 && _pending.Count == 0) return;
+        if (_pending.Count > 0 && !ModelReadsImages) return;
+        var images = _pending.ToList();
+        _pending.Clear();
+        RenderAttachments();
         Input.Clear();
-        _ = SendAsync(text);
+        // An image with no words still needs a question for the model; the bubble shows just the image.
+        _ = SendAsync(text.Length > 0 ? text : "What's in this image?", display: text.Length > 0 ? null : "", images: images);
     }
 
     private void OnNewChat(object sender, RoutedEventArgs e)
@@ -239,6 +357,9 @@ public partial class AskAiView : UserControl, IToolView
         _conversation.Clear();
         _history.Clear();
         Storage.Save(HistoryFile, _history);
+        DeleteSavedImages();
+        _pending.Clear();
+        RenderAttachments();
         Messages.Children.Clear();
         ChatScroll.Visibility = Visibility.Collapsed;
         NewChatButton.Visibility = Visibility.Collapsed;
@@ -247,14 +368,15 @@ public partial class AskAiView : UserControl, IToolView
         Input.Focus();
     }
 
-    private async Task SendAsync(string prompt, string? display = null)
+    private async Task SendAsync(string prompt, string? display = null, List<PendingImage>? images = null)
     {
         var chatId = _chatId;
         EmptyState.Visibility = Visibility.Collapsed;
         ChatScroll.Visibility = Visibility.Visible;
         NewChatButton.Visibility = Visibility.Visible;
-        _conversation.Add((true, prompt));
-        Messages.Children.Add(UserMessage(display ?? prompt));
+        var sent = images?.Select(i => i.Image).ToList() ?? [];
+        _conversation.Add(new AiTurn(true, prompt, sent));
+        Messages.Children.Add(UserMessage(display ?? prompt, images?.Select(i => i.Preview).ToList()));
 
         var (row, card, body, actions) = AssistantMessage();
         body.Children.Add(StatusShimmer());
@@ -267,7 +389,9 @@ public partial class AskAiView : UserControl, IToolView
         var failed = false;
         try
         {
-            await foreach (var chunk in AiService.StreamReplyAsync(_conversation, cts.Token))
+            // Earlier images go along only while the model can read them (the user may have switched models).
+            var turns = ModelReadsImages ? _conversation.ToList() : _conversation.Select(t => t with { Images = null }).ToList();
+            await foreach (var chunk in AiService.StreamReplyAsync(turns, cts.Token))
             {
                 text += chunk;
                 if (text.Length > 0) RevealCard(card);
@@ -300,16 +424,22 @@ public partial class AskAiView : UserControl, IToolView
         if (chatId != _chatId) return;
         if (text.Length > 0 && !failed)
         {
-            _conversation.Add((false, text));
+            _conversation.Add(new AiTurn(false, text));
             var at = DateTime.Now;
             ShowActions(actions, text, at);
-            _history.Add(new ChatEntry(true, prompt, display, at));
+            _history.Add(new ChatEntry(true, prompt, display, at, sent.Count > 0 ? SaveImages(sent) : null));
             _history.Add(new ChatEntry(false, text, null, at));
             Storage.Save(HistoryFile, _history);
         }
         else
         {
             _conversation.RemoveAt(_conversation.Count - 1);
+            // Give failed images back to the composer so they can be resent.
+            if (images is { Count: > 0 } && _pending.Count == 0)
+            {
+                _pending.AddRange(images);
+                RenderAttachments();
+            }
         }
         ChatScroll.ScrollToEnd();
     }
@@ -325,6 +455,10 @@ public partial class AskAiView : UserControl, IToolView
         if (msg.Contains("insufficient_quota") || msg.Contains("(402)") || msg.Contains("Insufficient Balance", StringComparison.OrdinalIgnoreCase)
             || msg.Contains("credit balance", StringComparison.OrdinalIgnoreCase))
             return $"Your {company} account is out of credit. Add funds in the {company} console.";
+        if (msg.Contains("429") && AiService.FreeTier(AiService.ActiveProvider, App.Settings.AiModel) is { } quota)
+            return AiService.ActiveProvider == AiService.ProviderGemini && App.Settings.AiModel != AiService.GeminiFreeDefault
+                ? $"Free quota for this model ({quota}) is used up or you're sending too fast. Switch to Gemini 3.5 Flash-Lite (500/day) above, or wait a bit."
+                : $"Free quota ({quota}) is used up or you're sending too fast. Wait a minute, or try again tomorrow.";
         if (msg.Contains("429")) return "Rate limited — wait a moment and try again.";
         if (msg.Contains("model_not_found") || msg.Contains("does not exist") || (msg.Contains("(404)") && msg.Contains("model")))
             return "That model isn't available for your key. Pick another in Settings → Ask AI.";
@@ -338,8 +472,20 @@ public partial class AskAiView : UserControl, IToolView
 
     // ---------------------------------------------------------------- message layout
 
-    private FrameworkElement UserMessage(string text)
+    private FrameworkElement UserMessage(string text, IReadOnlyList<System.Windows.Media.Imaging.BitmapSource>? images = null)
     {
+        if (images is { Count: > 0 })
+        {
+            var stack = new StackPanel { Margin = new Thickness(60, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
+            stack.Children.Add(MessageImages(images));
+            if (text.Length > 0)
+            {
+                var textRow = UserMessage(text);
+                textRow.Margin = new Thickness(0, 0, 0, 6);
+                stack.Children.Add(textRow);
+            }
+            return stack;
+        }
         var row = new Grid { Margin = new Thickness(60, 6, 0, 6), HorizontalAlignment = HorizontalAlignment.Right, Background = Brushes.Transparent };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

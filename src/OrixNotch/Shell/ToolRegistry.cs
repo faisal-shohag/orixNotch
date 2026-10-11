@@ -42,6 +42,7 @@ public static class ToolRegistry
         new("todos", "To-Dos", AppIcon.ListBullet, W, H, () => new TodosView()),
         new("timer", "Timers", AppIcon.Clock, W, H, () => new TimerView()),
         new("calendar", "Calendar", AppIcon.CalendarDays, W, 245, () => new CalendarView()),
+        new("notifications", "Notifications", AppIcon.Bell, W, H, () => new NotificationsView()),
         new("weather", "Weather", AppIcon.Cloud, W, 245, () => new WeatherView()),
         new("system", "System", AppIcon.Signal, W, H, () => new SystemMonitorView()),
         new("stocks", "Stocks", AppIcon.ChartLine, W, H, () => new StocksView()),

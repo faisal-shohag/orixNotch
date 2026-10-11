@@ -7,16 +7,92 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBox x:Name="Editor" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap" 
-                 VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Padding="12,10" FontSize="14"
-                 Background="{DynamicResource SurfaceBrush}" Tag="Jot something down — it saves automatically."
-                 TextChanged="OnTextChanged" />
-        <Grid Grid.Row="1" Margin="2,6,0,0">
-            <TextBlock x:Name="Status" Style="{StaticResource SubText}" VerticalAlignment="Center" />
-            <Button Style="{StaticResource IconButton}" Width="24" Height="24" ToolTip="Copy note" HorizontalAlignment="Right"
-                    Foreground="{DynamicResource SubTextBrush}" Click="OnCopy">
-                <hero:HeroIcon Kind="Copy" Width="14" Height="14" />
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="180" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Note list -->
+        <Grid Margin="0,0,10,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Button Style="{StaticResource RowButton}" Height="30" ToolTip="New note (Ctrl+N)" Click="OnNewNote">
+                <StackPanel Orientation="Horizontal">
+                    <hero:HeroIcon Kind="Plus" Width="13" Height="13" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="New note" FontSize="12.5" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
             </Button>
+            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource StrokeBrush}" Margin="0,0,0,-3" />
+
+            <ScrollViewer Grid.Row="1" Margin="0,6,0,0" VerticalScrollBarVisibility="Auto" hero:SmoothScroll.IsEnabled="True">
+                <ItemsControl x:Name="List">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid x:Name="Row" Height="38" Background="Transparent" Cursor="Hand" MouseLeftButtonDown="OnRowDown">
+                                <Border x:Name="Bd" CornerRadius="7" Margin="0,1" />
+                                <Grid Margin="8,0,2,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock x:Name="Title" Text="{Binding Title}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding When}" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="10.5" Margin="0,1,0,0" />
+                                    </StackPanel>
+                                    <Button x:Name="Del" Grid.Column="1" Style="{StaticResource IconButton}" Width="22" Height="22"
+                                            Foreground="{DynamicResource SubTextBrush}" ToolTip="Delete note" Click="OnDeleteRow" Visibility="Hidden">
+                                        <hero:HeroIcon Kind="XMark" Width="11" Height="11" />
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                                    <Setter TargetName="Del" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface2Brush}" />
+                                    <Setter TargetName="Title" Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
         </Grid>
+
+        <!-- Editor -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBox x:Name="Editor" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap"
+                     VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Padding="12,10" FontSize="14"
+                     Background="{DynamicResource SurfaceBrush}" Tag="Jot something down — it saves automatically."
+                     TextChanged="OnTextChanged" />
+            <Grid Grid.Row="1" Margin="2,6,0,0">
+                <TextBlock x:Name="Status" Style="{StaticResource SubText}" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Style="{StaticResource IconButton}" Width="24" Height="24" ToolTip="Copy note"
+                            Foreground="{DynamicResource SubTextBrush}" Click="OnCopy">
+                        <hero:HeroIcon Kind="Copy" Width="14" Height="14" />
+                    </Button>
+                    <Button Style="{StaticResource IconButton}" Width="24" Height="24" ToolTip="Delete note" Margin="2,0,0,0"
+                            Foreground="{DynamicResource SubTextBrush}" Click="OnDeleteCurrent">
+                        <hero:HeroIcon Kind="Trash" Width="14" Height="14" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- Grab handle: drag to make the notch taller or shorter; double-click resets -->
+        <Border x:Name="Grip" Grid.Row="1" Grid.ColumnSpan="2" Width="120" Height="12" Margin="0,4,0,-6" Background="Transparent"
+                Cursor="SizeNS" ToolTip="Drag to resize · double-click to reset"
+                MouseLeftButtonDown="OnGripDown" MouseMove="OnGripMove" MouseLeftButtonUp="OnGripUp">
+            <Border Width="44" Height="4" CornerRadius="2" Background="{DynamicResource TrackBrush}" VerticalAlignment="Center" />
+        </Border>
     </Grid>
 </UserControl>

@@ -16,6 +16,7 @@ public sealed record UsageMeter(string Label, double? Percent, string Value, str
 /// Usage for AI tools beyond Claude Code and Codex. Each loader returns null when the tool isn't on
 /// this PC and never throws. Nothing here sends data anywhere except each tool's own service, using
 /// the sign-in the tool itself already saved (Cursor → cursor.com, DeepSeek → api.deepseek.com).
+/// OpenCode, Antigravity and Perplexity are read from this PC only.
 /// </summary>
 public static partial class AiUsageService
 {
@@ -257,6 +258,69 @@ public static partial class AiUsageService
 
         public static float? Fixed32(byte[] b, int field) => Fields(b).Where(f => f.Field == field && f.Wire == 5)
             .Select(f => (float?)BitConverter.Int32BitsToSingle((int)f.Value)).FirstOrDefault();
+    }
+
+    // ---------------------------------------------------------------- OpenCode
+
+    /// <summary>
+    /// OpenCode logs every assistant reply, with its tokens and cost, in its local SQLite DB
+    /// (<c>~/.local/share/opencode/opencode.db</c>, table <c>message</c>). Read-only; no plan limits.
+    /// </summary>
+    private static ProviderUsage? LoadOpenCode()
+    {
+        try
+        {
+            var dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { Length: > 0 } xdg
+                ? xdg
+                : Path.Combine(Home, ".local", "share");
+            var dbPath = Path.Combine(dataHome, "opencode", "opencode.db");
+            if (!File.Exists(dbPath)) return null;
+
+            var usage = new ProviderUsage { Id = "opencode", Name = "OpenCode", HasCost = true, Logo = BrandLogo.OpenCode };
+            var now = DateTime.Now;
+            var sessionStart = DateTime.MaxValue;
+
+            using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath, Mode = SqliteOpenMode.ReadOnly }.ToString());
+            db.Open();
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = """
+                SELECT time_created,
+                       json_extract(data, '$.modelID'),
+                       json_extract(data, '$.cost'),
+                       json_extract(data, '$.tokens.input'),
+                       json_extract(data, '$.tokens.output'),
+                       json_extract(data, '$.tokens.reasoning'),
+                       json_extract(data, '$.tokens.cache.write')
+                FROM message
+                WHERE time_created >= $cutoff AND json_extract(data, '$.role') = 'assistant'
+                """;
+            cmd.Parameters.AddWithValue("$cutoff", DateTimeOffset.UtcNow.AddDays(-31).ToUnixTimeMilliseconds());
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                long Int(int i) => reader.IsDBNull(i) ? 0 : reader.GetInt64(i);
+                var time = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime;
+                var model = reader.IsDBNull(1) ? "" : reader.GetString(1);
+                var cost = reader.IsDBNull(2) ? 0m : (decimal)reader.GetDouble(2);
+                // Same as Claude: cache reads aren't counted as tokens used.
+                var tokens = Int(3) + Int(4) + Int(5) + Int(6);
+
+                Add(usage, time, now, tokens, cost);
+                if (now - time <= TimeSpan.FromHours(5))
+                {
+                    if (time < sessionStart) sessionStart = time;
+                    var label = ModelLabel(model);
+                    usage.SessionModels[label] = usage.SessionModels.TryGetValue(label, out var prior) ? prior + tokens : tokens;
+                }
+            }
+            usage.SessionStarted = sessionStart == DateTime.MaxValue ? null : sessionStart;
+            return usage;
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            return null;
+        }
     }
 
     // ---------------------------------------------------------------- DeepSeek API balance

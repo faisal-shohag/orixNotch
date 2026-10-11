@@ -10,6 +10,15 @@ using Anthropic.Models.Beta.Messages;
 
 namespace OrixNotch.Services;
 
+/// <summary>An image attached to a chat turn: <c>image/jpeg</c> or <c>image/png</c>, base64-encoded.</summary>
+public sealed record AiImage(string MediaType, string Base64);
+
+/// <summary>One turn of a conversation sent to the model; only user turns carry images.</summary>
+public sealed record AiTurn(bool FromUser, string Text, IReadOnlyList<AiImage>? Images = null)
+{
+    public bool HasImages => Images is { Count: > 0 };
+}
+
 /// <summary>Everything the UI needs to know about one AI provider.</summary>
 public sealed record AiProviderInfo(
     string Id, string Name, string Company, string KeyFile, string KeyPlaceholder, string KeyLabel, string KeySource,
@@ -29,8 +38,39 @@ public static class AiService
 
     public static readonly string[] ClaudeModels = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"];
     public static readonly string[] ClaudeLabels = ["Claude Opus 5.5", "Claude Sonnet 5.5", "Claude Haiku 4.5"];
-    public static readonly string[] GeminiModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
-    public static readonly string[] GeminiLabels = ["Gemini 2.5 Flash", "Gemini 2.5 Pro", "Gemini 2.0 Flash"];
+    /// <summary>Built-in Gemini list until the key's own list loads; the reliable free default comes first.</summary>
+    public static readonly string[] GeminiModels =
+    [
+        "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-3-flash-preview",
+        "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemma-4-31b-it", "gemini-3.1-pro-preview", "gemini-2.5-pro",
+    ];
+    public static readonly string[] GeminiLabels =
+    [
+        "Gemini 3.5 Flash-Lite", "Gemini 3.8 Flash", "Gemini 3.6 Flash", "Gemini 3.1 Flash-Lite", "Gemini 3 Flash",
+        "Gemini 2.5 Flash", "Gemini 2.5 Flash-Lite", "Gemma 4 31B", "Gemini 3.1 Pro", "Gemini 2.5 Pro",
+    ];
+
+    /// <summary>High daily quota on the free tier, so it rarely runs out mid-chat.</summary>
+    public const string GeminiFreeDefault = "gemini-3.5-flash-lite";
+
+    /// <summary>
+    /// Gemini API free tier (requests per day), from AI Studio's rate-limit page, October 2026.
+    /// First prefix match wins, so the Flash-Lite entries sit before their Flash siblings.
+    /// Models not listed (Pro, image, audio) need billing.
+    /// </summary>
+    private static readonly (string Prefix, string PerDay)[] GeminiFreeTier =
+    [
+        ("gemini-3.5-flash-lite", "500/day"),
+        ("gemini-3.1-flash-lite", "500/day"),
+        ("gemini-2.5-flash-lite", "20/day"),
+        ("gemini-3.8-flash", "20/day"),
+        ("gemini-3.7-flash", "20/day"),
+        ("gemini-3.6-flash", "20/day"),
+        ("gemini-3.5-flash", "20/day"),
+        ("gemini-3-flash", "20/day"),
+        ("gemini-2.5-flash", "20/day"),
+        ("gemma-4-", "14.4K/day"),
+    ];
 
     private const string KeyFile = "ai-key.bin";
     private const string GeminiKeyFile = "ai-gemini-key.bin";
@@ -43,7 +83,7 @@ public static class AiService
             ["gpt-5.5", "gpt-5.4-mini", "gpt-4.1"], ["GPT-5.5", "GPT-5.4 mini", "GPT-4.1"],
             "Models your key can use are listed from OpenAI. Mini models are faster and cheaper."),
         new(ProviderGemini, "Gemini", "Google", GeminiKeyFile, "AIza…", "Google AI Studio API key (AIza…)", "aistudio.google.com → Get API key",
-            GeminiModels, GeminiLabels, "Flash is fast and cheap; Pro is the most capable."),
+            GeminiModels, GeminiLabels, "Free models work with a free AI Studio key; Pro needs billing."),
         new(ProviderDeepSeek, "DeepSeek", "DeepSeek", "ai-deepseek-key.bin", "sk-…", "DeepSeek API key (sk-…)", "platform.deepseek.com → API keys",
             ["deepseek-v4-pro", "deepseek-flash"], ["DeepSeek V4 Pro", "DeepSeek Flash"],
             "Models your key can use are listed from DeepSeek. Flash is faster and cheaper."),
@@ -69,8 +109,8 @@ public static class AiService
     public static AiProviderInfo Info(string provider) => Providers.FirstOrDefault(p => p.Id == provider) ?? Providers[0];
     public static AiProviderInfo Active => Info(ActiveProvider);
 
-    // Live model lists fetched from the provider (OpenAI / DeepSeek), so new models show up without an app update.
-    private static readonly Dictionary<string, string[]> LiveModels = new();
+    // Live model lists fetched from the provider (OpenAI / DeepSeek / Gemini), so new models show up without an app update.
+    private static readonly Dictionary<string, (string[] Ids, string[] Labels)> LiveModels = new();
     private const string BasePrompt =
         "You are a quick assistant living in a small panel at the top of the user's Windows screen. " +
         "Answer concisely: a few sentences or a short list unless the user asks for more. " +
@@ -99,17 +139,34 @@ public static class AiService
     public static bool IsGemini => ActiveProvider == ProviderGemini;
 
     public static string[] ModelsFor(string provider) =>
-        LiveModels.TryGetValue(provider, out var live) && live.Length > 0 ? live : Info(provider).DefaultModels;
+        LiveModels.TryGetValue(provider, out var live) && live.Ids.Length > 0 ? live.Ids : Info(provider).DefaultModels;
 
     public static string[] LabelsFor(string provider) =>
-        LiveModels.TryGetValue(provider, out var live) && live.Length > 0 ? live : Info(provider).DefaultLabels;
+        LiveModels.TryGetValue(provider, out var live) && live.Ids.Length > 0 ? live.Labels : Info(provider).DefaultLabels;
+
+    /// <summary>Display name for a model id of a provider (falls back to the id).</summary>
+    public static string LabelFor(string provider, string model)
+    {
+        var index = Array.IndexOf(ModelsFor(provider), model);
+        if (index >= 0) return LabelsFor(provider)[index];
+        index = Array.IndexOf(Info(provider).DefaultModels, model);
+        return index >= 0 ? Info(provider).DefaultLabels[index] : model;
+    }
+
+    /// <summary>Free-tier daily quota ("500/day") when the model is free with a Gemini key; null otherwise.</summary>
+    public static string? FreeTier(string provider, string model) =>
+        provider == ProviderGemini
+            ? GeminiFreeTier.FirstOrDefault(f => model.StartsWith(f.Prefix, StringComparison.Ordinal)).PerDay
+            : null;
 
     /// <summary>
-    /// Fetches the chat models this key can use (OpenAI / DeepSeek <c>GET /models</c>). Returns false
-    /// (keeping the built-in list) when there is no key, no network, or the provider has no such endpoint.
+    /// Fetches the chat models this key can use (OpenAI / DeepSeek <c>GET /models</c>, Gemini
+    /// <c>GET /v1beta/models</c>). Returns false (keeping the built-in list) when there is no key,
+    /// no network, or the provider has no such endpoint.
     /// </summary>
     public static async Task<bool> RefreshModelsAsync(string provider)
     {
+        if (provider == ProviderGemini) return await RefreshGeminiModelsAsync();
         if (CompatibleBase(provider) is not { } baseUrl || LoadKey(Info(provider).KeyFile) is not { } key) return false;
         try
         {
@@ -124,7 +181,7 @@ public static class AiService
                 .OrderByDescending(id => id, StringComparer.Ordinal)
                 .ToArray();
             if (ids.Length == 0) return false;
-            LiveModels[provider] = ids;
+            LiveModels[provider] = (ids, ids);
             return true;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
@@ -133,16 +190,81 @@ public static class AiService
         }
     }
 
-    /// <summary>OpenAI lists every model it has (images, audio, embeddings…); keep the ones that chat.</summary>
+    /// <summary>
+    /// Gemini's model list, free models first (the reliable default on top), then the rest newest first.
+    /// Labels are Google's display names.
+    /// </summary>
+    private static async Task<bool> RefreshGeminiModelsAsync()
+    {
+        if (LoadKey(GeminiKeyFile) is not { } key) return false;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000");
+            request.Headers.Add("x-goog-api-key", key);
+            using var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return false;
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var models = new List<(string Id, string Label)>();
+            foreach (var m in doc.RootElement.GetProperty("models").EnumerateArray())
+            {
+                var id = (m.GetProperty("name").GetString() ?? "").Replace("models/", "");
+                var chats = m.TryGetProperty("supportedGenerationMethods", out var methods) &&
+                            methods.EnumerateArray().Any(x => x.GetString() == "generateContent");
+                if (!chats || !IsChatModel(ProviderGemini, id)) continue;
+                var label = m.TryGetProperty("displayName", out var d) && d.GetString() is { Length: > 0 } name ? name : id;
+                models.Add((id, label));
+            }
+            if (models.Count == 0) return false;
+            var ordered = models
+                .OrderByDescending(m => m.Id == GeminiFreeDefault)
+                .ThenByDescending(m => FreeTier(ProviderGemini, m.Id) is not null)
+                .ThenByDescending(m => m.Id, StringComparer.Ordinal)
+                .ToArray();
+            LiveModels[ProviderGemini] = (ordered.Select(m => m.Id).ToArray(), ordered.Select(m => m.Label).ToArray());
+            return true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>OpenAI and Gemini list every model they have (images, audio, embeddings…); keep the ones that chat.</summary>
     internal static bool IsChatModel(string provider, string id)
     {
+        if (provider == ProviderGemini)
+        {
+            if (!id.StartsWith("gemini-", StringComparison.Ordinal) && !id.StartsWith("gemma-", StringComparison.Ordinal)) return false;
+            string[] skip = ["tts", "image", "embedding", "live", "audio", "transcribe", "translate", "robotics", "computer-use", "aqa", "nano-banana", "omni"];
+            return !skip.Any(x => id.Contains(x, StringComparison.Ordinal));
+        }
         if (provider != ProviderOpenAi) return id.Length > 0;
         if (!(id.StartsWith("gpt-", StringComparison.Ordinal) || (id.Length > 1 && id[0] == 'o' && char.IsDigit(id[1])))) return false;
         string[] excluded = ["audio", "realtime", "transcribe", "tts", "image", "search", "instruct", "embedding", "codex", "moderation"];
         return !excluded.Any(x => id.Contains(x, StringComparison.Ordinal));
     }
 
-    public static string DefaultModelFor(string provider) => ModelsFor(provider)[0];
+    /// <summary>
+    /// Whether the model reads images. Claude and Gemini (including Gemma 4) all do; OpenAI's GPT-4o,
+    /// GPT-4.1, GPT-5 and o-series reasoning models do (not o1-mini / o3-mini); DeepSeek's API is text only.
+    /// </summary>
+    public static bool SupportsImages(string provider, string model) => provider switch
+    {
+        ProviderAnthropic => true,
+        ProviderGemini => !model.StartsWith("gemma-2", StringComparison.Ordinal),
+        ProviderOpenAi => (model.StartsWith("gpt-4o", StringComparison.Ordinal) || model.StartsWith("gpt-4.1", StringComparison.Ordinal) ||
+                           model.StartsWith("gpt-5", StringComparison.Ordinal) || model.StartsWith("chatgpt-", StringComparison.Ordinal) ||
+                           (model.Length > 1 && model[0] == 'o' && char.IsDigit(model[1])))
+                          && model is not ("o1-mini" or "o3-mini") && !model.StartsWith("o1-mini", StringComparison.Ordinal) && !model.StartsWith("o3-mini", StringComparison.Ordinal),
+        _ => false,
+    };
+
+    public static string DefaultModelFor(string provider)
+    {
+        var models = ModelsFor(provider);
+        if (provider == ProviderGemini && models.Contains(GeminiFreeDefault)) return GeminiFreeDefault;
+        return models[0];
+    }
 
     public static bool HasKey => HasKeyFor(ProviderAnthropic);
     public static bool HasGeminiKey => HasKeyFor(ProviderGemini);
@@ -192,7 +314,7 @@ public static class AiService
 
     /// <summary>Streams the assistant's reply text for the conversation so far, via the active provider.</summary>
     public static async IAsyncEnumerable<string> StreamReplyAsync(
-        IReadOnlyList<(bool FromUser, string Text)> conversation,
+        IReadOnlyList<AiTurn> conversation,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (IsGemini)
@@ -212,7 +334,7 @@ public static class AiService
         var client = new AnthropicClient { ApiKey = key };
 
         var messages = conversation
-            .Select(m => new BetaMessageParam { Role = m.FromUser ? Role.User : Role.Assistant, Content = m.Text })
+            .Select(m => new BetaMessageParam { Role = m.FromUser ? Role.User : Role.Assistant, Content = ClaudeContent(m) })
             .ToList();
 
         var parameters = new MessageCreateParams
@@ -236,9 +358,43 @@ public static class AiService
         }
     }
 
+    /// <summary>Plain text, or image blocks followed by the text when the turn has images.</summary>
+    private static BetaMessageParamContent ClaudeContent(AiTurn turn)
+    {
+        if (!turn.HasImages) return turn.Text;
+        var blocks = turn.Images!
+            .Select(i => (BetaContentBlockParam)new BetaImageBlockParam(new BetaBase64ImageSource
+            {
+                Data = i.Base64,
+                MediaType = i.MediaType == "image/png" ? MediaType.ImagePng : MediaType.ImageJpeg,
+            }))
+            .ToList();
+        if (turn.Text.Length > 0) blocks.Add(new BetaTextBlockParam(turn.Text));
+        return blocks;
+    }
+
+    /// <summary>Gemini parts: inline images, then the text.</summary>
+    private static object[] GeminiParts(AiTurn turn)
+    {
+        var parts = new List<object>();
+        if (turn.HasImages)
+            parts.AddRange(turn.Images!.Select(i => (object)new { inline_data = new { mime_type = i.MediaType, data = i.Base64 } }));
+        if (turn.Text.Length > 0 || parts.Count == 0) parts.Add(new { text = turn.Text });
+        return parts.ToArray();
+    }
+
+    /// <summary>Chat Completions content: a plain string, or text + data-URL image parts when there are images.</summary>
+    private static object CompatibleContent(AiTurn turn)
+    {
+        if (!turn.HasImages) return turn.Text;
+        var parts = new List<object> { new { type = "text", text = turn.Text } };
+        parts.AddRange(turn.Images!.Select(i => (object)new { type = "image_url", image_url = new { url = $"data:{i.MediaType};base64,{i.Base64}" } }));
+        return parts.ToArray();
+    }
+
     /// <summary>Streams a Gemini reply via the generateContent SSE endpoint (no SDK needed).</summary>
     private static async IAsyncEnumerable<string> StreamGeminiAsync(
-        IReadOnlyList<(bool FromUser, string Text)> conversation,
+        IReadOnlyList<AiTurn> conversation,
         string model,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -249,7 +405,7 @@ public static class AiService
             contents = conversation.Select(m => new
             {
                 role = m.FromUser ? "user" : "model",
-                parts = new[] { new { text = m.Text } },
+                parts = GeminiParts(m),
             }).ToArray(),
             generationConfig = new { maxOutputTokens = 4096 },
         };
@@ -318,13 +474,13 @@ public static class AiService
     private static async IAsyncEnumerable<string> StreamCompatibleAsync(
         AiProviderInfo provider,
         string baseUrl,
-        IReadOnlyList<(bool FromUser, string Text)> conversation,
+        IReadOnlyList<AiTurn> conversation,
         string model,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var key = LoadKey(provider.KeyFile) ?? throw new InvalidOperationException($"Add your {provider.Company} API key in Settings → Ask AI.");
         var messages = new List<object> { new { role = "system", content = SystemPrompt } };
-        messages.AddRange(conversation.Select(m => (object)new { role = m.FromUser ? "user" : "assistant", content = m.Text }));
+        messages.AddRange(conversation.Select(m => (object)new { role = m.FromUser ? "user" : "assistant", content = CompatibleContent(m) }));
         var body = new { model, messages, stream = true };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/chat/completions");

@@ -85,4 +85,5 @@ public enum AppIcon
     Backward,
     Forward,
     BatteryFull,
+    Bell,
 }

@@ -25,6 +25,10 @@ public partial class NotchWindow : Window
     private const double HeaderH = 56;
     private const double TabBarH = 64;
     private const double SidePad = 18;
+    /// <summary>Gap kept below the tallest notch so it never touches the screen's bottom edge.</summary>
+    private const double ScreenMargin = 48;
+    /// <summary>Spare transparent room under the notch inside the window (stroke, rounding).</summary>
+    private const double WindowSlack = 16;
 
     // Silhouette: concave "ears" where the notch meets the top edge, rounded bottom corners
     private const double EarCollapsed = 5;
@@ -136,6 +140,9 @@ public partial class NotchWindow : Window
         NotchActivityService.Instance.PropertyChanged += (_, _) => UpdateActivity();
         EventReminderService.Instance.Alert += _ => ShowReminderPeek();
         NotificationWatcher.Instance.Arrived += ShowNotificationPeek;
+        AiLimitWatcher.Instance.Alert += ShowAiLimitPeek;
+        AiLimitWatcher.Instance.Reconfigure();
+        NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
         ProfileService.Changed += () => _idleAvatarLoaded = false;
@@ -216,14 +223,18 @@ public partial class NotchWindow : Window
         }
     }
 
+    private static Forms.Screen CurrentScreen()
+    {
+        var screens = Forms.Screen.AllScreens;
+        var index = App.Settings.MonitorIndex;
+        return index >= 0 && index < screens.Length ? screens[index] : Forms.Screen.PrimaryScreen ?? screens[0];
+    }
+
     /// <summary>Pins the window to the top-center of the chosen monitor (physical pixels).</summary>
     private void Place()
     {
         if (_hwnd == IntPtr.Zero) return;
-        var screens = Forms.Screen.AllScreens;
-        var index = App.Settings.MonitorIndex;
-        var screen = index >= 0 && index < screens.Length ? screens[index] : Forms.Screen.PrimaryScreen ?? screens[0];
-
+        var screen = CurrentScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
         var w = (int)Math.Round(Width * dpi.DpiScaleX);
         var h = (int)Math.Round(Height * dpi.DpiScaleY);
@@ -524,6 +535,11 @@ public partial class NotchWindow : Window
         if (!_expanded) return;
         if (e.Key is not (Key.Escape or Key.Tab or Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl))
             _typedInFocus |= IsEditing(); // Backspace, Delete, arrows… count as typing too
+        if (e.Key == Key.Escape && CancelTabDragOnEscape())
+        {
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Escape)
         {
             // Esc unwinds one step at a time: the tool's own state (e.g. an open editor),
@@ -638,7 +654,7 @@ public partial class NotchWindow : Window
 
         // 0 = collapsed, 1 = fully open (to whatever size the current tool wants).
         // While an alert is showing the notch only grows to PeekH: track that separately.
-        var peek = _peeking && !_expanded ? Math.Clamp((h - _collapsedH) / (PeekH - _collapsedH), 0, 1) : 0;
+        var peek = _peeking && !_expanded ? Math.Clamp((h - _collapsedH) / (_peekH - _collapsedH), 0, 1) : 0;
         var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((h - _collapsedH) / Math.Max(1, _expandedH - _collapsedH), 0, 1);
         var ear = EarCollapsed + (EarExpanded - EarCollapsed) * p;
         var radius = RadiusCollapsed + (RadiusExpanded - RadiusCollapsed) * p + (RadiusPeek - RadiusCollapsed) * peek;
@@ -1085,6 +1101,9 @@ public partial class NotchWindow : Window
     // ---------------------------------------------------------------- alert (peek)
 
     private const double PeekH = 76;
+    /// <summary>Taller alert for a body that wraps to two lines.</summary>
+    private const double PeekH2 = 92;
+    private double _peekH = PeekH;
     private const double RadiusPeek = 24;
     private const string ReminderPeekKey = "reminder";
     private bool _peeking;
@@ -1122,22 +1141,49 @@ public partial class NotchWindow : Window
 
         _currentPeek = next;
         PeekIconHost.Content = next.Icon();
-        PeekTitle.Text = next.Title;
-        PeekSub.Text = next.Sub;
+        PeekTitle.Text = OneLine(next.Title);
+        PeekSub.Text = OneLine(next.Sub);
         PeekSub.Visibility = string.IsNullOrWhiteSpace(next.Sub) ? Visibility.Collapsed : Visibility.Visible;
+        _peekH = SubWraps(PeekSub.Text) ? PeekH2 : PeekH;
         if (_peeking)
         {
             // Already open: swap the content with a quick fade instead of shrinking and growing again.
             PeekLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
         }
         _peeking = true;
-        PeekLayer.Height = PeekH;
+        PeekLayer.Height = _peekH;
         _peekTimer.Stop();
         _peekTimer.Interval = next.Duration;
         _peekTimer.Start();
         _width.Target = PeekW;
-        _height.Target = PeekH;
+        _height.Target = _peekH;
         StartAnimation();
+    }
+
+    /// <summary>Multi-line text (chat messages, emails) as one line, so the alert's layout holds.</summary>
+    private static string OneLine(string text) =>
+        string.Join(' ', text.Split((char[])['\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));
+
+    /// <summary>Whether the alert body needs a second line at the alert's text width.</summary>
+    private bool SubWraps(string text)
+    {
+        if (text.Length == 0) return false;
+        // Text column = alert width − side margins (30) − icon (40) − gaps (23) − dismiss (28).
+        var width = PeekW - 121;
+        var measured = new FormattedText(text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            new Typeface(PeekSub.FontFamily, PeekSub.FontStyle, PeekSub.FontWeight, PeekSub.FontStretch),
+            PeekSub.FontSize, Brushes.Black, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        return measured.WidthIncludingTrailingWhitespace > width;
+    }
+
+    /// <summary>Resting the pointer on an alert keeps it up; leaving gives a couple more seconds.</summary>
+    private void OnPeekHover(object sender, MouseEventArgs e)
+    {
+        if (!_peeking) return;
+        _peekTimer.Stop();
+        if (PeekLayer.IsMouseOver) return;
+        _peekTimer.Interval = TimeSpan.FromSeconds(2);
+        _peekTimer.Start();
     }
 
     /// <summary>Ends the current alert; the next queued one (if any) takes its place.</summary>
@@ -1190,7 +1236,41 @@ public partial class NotchWindow : Window
     private void ShowNotificationPeek(NotchNotification n)
     {
         var sub = string.IsNullOrWhiteSpace(n.Body) ? n.AppName : $"{n.AppName} · {n.Body}";
-        EnqueuePeek(new PeekRequest("app:" + n.AppId, () => AppTile(n), n.Title, sub, TimeSpan.FromSeconds(4)));
+        // Long messages stay up a little longer (4 s + 1 s per 60 characters, at most 8 s).
+        var seconds = Math.Min(8, 4 + OneLine(n.Body).Length / 60);
+        EnqueuePeek(new PeekRequest("app:" + n.AppId, () => AppTile(n), n.Title, sub, TimeSpan.FromSeconds(seconds),
+            OnClick: () => OpenTool("notifications")));
+    }
+
+    /// <summary>
+    /// AI tool nearing its limit: the tool's logo, how full the window is and when it resets.
+    /// 80% is a heads-up; 95% says it's almost out. Clicking opens AI Usage.
+    /// </summary>
+    private void ShowAiLimitPeek(AiLimitAlert a)
+    {
+        var window = a.Window switch { "session" => "session", "weekly" => "weekly", _ => "plan" };
+        var title = a.Threshold >= AiLimitWatcher.Thresholds[^1] || a.Percent >= 95
+            ? $"{a.ToolName} · {window} almost full"
+            : $"{a.ToolName} · {window} {a.Percent:0}% used";
+        var resets = a.Resets is not { } r ? null
+            : r.Date == DateTime.Today ? $"Resets {r:t}"
+            : r.Date == DateTime.Today.AddDays(1) ? $"Resets tomorrow {r:t}"
+            : $"Resets {r:ddd h:mm tt}";
+        var pace = a.Percent >= 95 ? $"{Math.Max(0, 100 - a.Percent):0}% left" : "Pace yourself";
+        var sub = resets is null ? pace : $"{pace} · {resets}";
+        EnqueuePeek(new PeekRequest($"ailimit:{a.ToolId}:{a.Window}", () => LogoTile(a.Logo), title, sub,
+            TimeSpan.FromSeconds(6), OnClick: () => OpenTool("aiusage")));
+    }
+
+    /// <summary>Brand logo on a soft tile (AI usage alerts).</summary>
+    private static FrameworkElement LogoTile(BrandLogo logo)
+    {
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
+        var mark = BrandLogos.Create(logo, 20);
+        mark.HorizontalAlignment = HorizontalAlignment.Center;
+        tile.Child = mark;
+        return tile;
     }
 
     /// <summary>Accent-soft rounded tile with a glyph (reminders).</summary>
@@ -1346,6 +1426,7 @@ public partial class NotchWindow : Window
             if (id == SettingsId) ShowSettings();
             else ShowTool(id);
         };
+        if (id != SettingsId) WireTabDrag(tab); // press and hold to reorder
         return tab;
     }
 
@@ -1416,19 +1497,32 @@ public partial class NotchWindow : Window
         MoveTabIndicator(id);
     }
 
-    /// <summary>Tools call this to grow/shrink the notch live (e.g. teleprompter resize handle).</summary>
-    public void SetToolSize(double w, double h, bool? showTabs = null)
+    /// <summary>Tools call this to grow/shrink the notch live (e.g. teleprompter resize handle).
+    /// The height is capped so the notch fits the screen; returns the height actually applied.</summary>
+    public double SetToolSize(double w, double h, bool? showTabs = null)
     {
+        var tabs = showTabs ?? TabBar.Visibility == Visibility.Visible;
+        var chrome = HeaderH + (tabs ? TabBarH : SidePad);
+        var screenH = CurrentScreen().Bounds.Height / VisualTreeHelper.GetDpi(this).DpiScaleY;
+        h = Math.Max(0, Math.Min(h, screenH - chrome - ScreenMargin));
+        // The window is a fixed transparent canvas the notch draws into: grow it so a tall tool isn't cropped.
+        var needed = Math.Ceiling(chrome + h + WindowSlack);
+        if (needed > Height)
+        {
+            Height = needed;
+            Place();
+        }
+
         _toolW = w;
         _toolH = h;
-        var tabs = showTabs ?? TabBar.Visibility == Visibility.Visible;
         ToolHost.Width = w;
         ToolHost.Height = h;
-        _expandedH = HeaderH + h + (tabs ? TabBarH : SidePad);
-        if (!_expanded) return;
+        _expandedH = chrome + h;
+        if (!_expanded) return h;
         _width.Target = w + 2 * SidePad;
         _height.Target = _expandedH;
         StartAnimation();
+        return h;
     }
 
     /// <summary>Background opacity for the notch silhouette (teleprompter "see-through" mode).</summary>

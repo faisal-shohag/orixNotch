@@ -26,7 +26,7 @@
 
         <TextBlock x:Name="Empty" Grid.Row="1" Style="{StaticResource SubText}" TextWrapping="Wrap" TextAlignment="Center"
                    HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380" Visibility="Collapsed"
-                   Text="No AI tools found. Usage appears here for Claude Code, Codex / ChatGPT, Cursor, Antigravity, DeepSeek (API key in Ask AI) and Perplexity." />
+                   Text="No AI tools found. Usage appears here for Claude Code, Codex / ChatGPT, OpenCode, Cursor, Antigravity, DeepSeek (API key in Ask AI) and Perplexity." />
 
         <!-- Card strip, like Clipboard: the wheel glides, resting the pointer near either edge scrolls that way (EdgeScroll). -->
         <ScrollViewer x:Name="Strip" Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
