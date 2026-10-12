@@ -221,13 +221,29 @@ public partial class SettingsView : UserControl, IToolView
         Title("Appearance", "Color scheme and accent. Changes apply instantly.");
         Section("COLOR SCHEME");
         var schemes = new WrapPanel();
-        foreach (var scheme in ThemeService.Schemes) schemes.Children.Add(SchemeCard(scheme));
+        foreach (var scheme in ThemeService.Schemes.Where(s => !s.IsGradient)) schemes.Children.Add(SchemeCard(scheme));
         Page.Children.Add(schemes);
 
+        Section("GRADIENT SCHEMES");
+        var gradientSchemes = new WrapPanel();
+        foreach (var scheme in ThemeService.Schemes.Where(s => s.IsGradient)) gradientSchemes.Children.Add(SchemeCard(scheme));
+        Page.Children.Add(gradientSchemes);
+
         Section("ACCENT");
+        Page.Children.Add(new TextBlock
+        {
+            Text = "Every scheme comes with its own accent (Auto). Pick another to override it.",
+            Style = (Style)FindResource("SubText"), FontWeight = FontWeights.Normal, FontSize = 11.5, Margin = new Thickness(4, -4, 0, 8),
+        });
         var accents = new WrapPanel();
-        foreach (var accent in ThemeService.Accents) accents.Children.Add(AccentSwatch(accent));
+        accents.Children.Add(AutoAccentSwatch());
+        foreach (var accent in ThemeService.Accents.Where(a => !a.IsGradient)) accents.Children.Add(AccentSwatch(accent));
         Page.Children.Add(accents);
+
+        Section("GRADIENT ACCENTS");
+        var gradientAccents = new WrapPanel();
+        foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) gradientAccents.Children.Add(AccentSwatch(accent));
+        Page.Children.Add(gradientAccents);
 
         Section("UNITS");
         Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; Save(false); }));
@@ -593,16 +609,8 @@ public partial class SettingsView : UserControl, IToolView
 
         Section("PHONE TRANSFER");
         var phone = PhoneTransferService.Instance;
-        Row("Phone transfer", "Send files with phones on the same Wi-Fi (LocalSend app or a browser).",
+        Row("Phone transfer", "Send files with phones on the same Wi-Fi: scan a QR code, no app needed.",
             Toggle(S.PhoneEnabled, v => { S.PhoneEnabled = v; Save(false); _ = phone.SyncAsync(); }));
-        Row("Name on the network", "How phones list this PC. Empty uses the PC name.",
-            TextInput(S.PhoneAlias, Environment.MachineName, v =>
-            {
-                if (v == S.PhoneAlias) return;
-                S.PhoneAlias = v;
-                Save(false);
-                if (phone.IsRunning) _ = phone.RestartAsync();
-            }));
         var browse = new Button { Content = "Change…" };
         browse.Click += (_, _) =>
         {
@@ -616,14 +624,6 @@ public partial class SettingsView : UserControl, IToolView
             Render();
         };
         Row("Save received files in", phone.ReceiveFolder, browse);
-        Row("Browser page", "A QR code opens a page for phones without LocalSend.",
-            Toggle(S.PhoneBrowserPage, v => { S.PhoneBrowserPage = v; Save(false); if (phone.IsRunning) _ = phone.RestartAsync(); }));
-        if (S.PhoneTrusted.Count > 0)
-        {
-            var forget = new Button { Content = "Forget" };
-            forget.Click += (_, _) => { S.PhoneTrusted.Clear(); Save(false); Render(); };
-            Row("Trusted devices", $"{S.PhoneTrusted.Count} device{(S.PhoneTrusted.Count == 1 ? "" : "s")} can send without asking.", forget);
-        }
 
         Section("TIMERS");
         var breaks = new[] { 3, 5, 10, 15 };
@@ -672,8 +672,9 @@ public partial class SettingsView : UserControl, IToolView
         chips.Children.Add(Chip(Environment.Is64BitProcess ? "Windows · x64" : "Windows · x86"));
         chips.Children.Add(Chip($".NET {Environment.Version.ToString(2)}"));
         info.Children.Add(chips);
-        var links = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        links.Children.Add(LinkButton("Check for updates", AppIcon.ArrowDown, RepoUrl + "/releases", primary: true));
+        // One row: update check, GitHub, feedback.
+        var links = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+        links.Children.Add(UpdateButton());
         links.Children.Add(LinkButton("GitHub", AppIcon.Link, RepoUrl));
         links.Children.Add(LinkButton("Feedback", AppIcon.Flag, RepoUrl + "/issues"));
         info.Children.Add(links);
@@ -690,6 +691,9 @@ public partial class SettingsView : UserControl, IToolView
         details.Children.Add(InfoRow("Runtime", $".NET {Environment.Version}"));
         details.Children.Add(Divider());
         details.Children.Add(InfoRow("System", WindowsName()));
+        details.Children.Add(Divider());
+        details.Children.Add(InfoRow("Updates", StartupService.IsPackaged ? "From the Microsoft Store" : "From GitHub releases",
+            Toggle(S.CheckForUpdates, v => { S.CheckForUpdates = v; Save(false); UpdateService.Instance.Start(); })));
         details.Children.Add(Divider());
         details.Children.Add(InfoRow("Data folder", "Settings, notes, history and keys", OpenButton(Storage.Root)));
         var log = Storage.PathOf("error.log");
@@ -776,6 +780,47 @@ public partial class SettingsView : UserControl, IToolView
         var button = new Button { Content = content, Margin = new Thickness(0, 4, 8, 0), ToolTip = url };
         if (primary) button.SetResourceReference(StyleProperty, "AccentButton");
         button.Click += (_, _) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        return button;
+    }
+
+    /// <summary>"Check for updates" that really checks, then offers to install; follows <see cref="UpdateService"/>.</summary>
+    private Button UpdateButton()
+    {
+        var updates = UpdateService.Instance;
+        var icon = new HeroIcon { Width = 13, Height = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+        var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(icon);
+        content.Children.Add(label);
+        var button = new Button { Content = content, Margin = new Thickness(0, 4, 6, 0) };
+
+        void Show()
+        {
+            var (text, kind, accent) = updates.Status switch
+            {
+                UpdateStatus.Checking => ("Checking…", AppIcon.Refresh, false),
+                UpdateStatus.UpToDate => ("Up to date", AppIcon.Check, false),
+                UpdateStatus.Available => (updates.LatestVersion.Length > 0 ? $"Install {updates.LatestVersion}" : "Install update", AppIcon.ArrowDown, true),
+                UpdateStatus.Failed => ("Couldn't check", AppIcon.Refresh, false),
+                _ => ("Check for updates", AppIcon.ArrowDown, true),
+            };
+            label.Text = text;
+            icon.Kind = kind;
+            button.IsEnabled = updates.Status != UpdateStatus.Checking;
+            if (accent) button.SetResourceReference(StyleProperty, "AccentButton");
+            else button.ClearValue(StyleProperty);
+            button.ToolTip = updates.CheckedAt is { } at ? $"Version {UpdateService.CurrentVersion} · checked {at:t}" : $"Version {UpdateService.CurrentVersion}";
+        }
+
+        void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(Show);
+        updates.PropertyChanged += OnChanged;
+        button.Unloaded += (_, _) => updates.PropertyChanged -= OnChanged;
+        button.Click += (_, _) =>
+        {
+            if (updates.Status == UpdateStatus.Available) _ = updates.InstallAsync();
+            else _ = updates.CheckAsync(userAsked: true);
+        };
+        Show();
         return button;
     }
 
@@ -1101,11 +1146,11 @@ public partial class SettingsView : UserControl, IToolView
     {
         var selected = scheme.Id == ThemeService.CurrentScheme.Id;
         var preview = new Grid { Height = 58, Width = 104 };
-        preview.Children.Add(new Border { Background = new SolidColorBrush(scheme.Surface), CornerRadius = new CornerRadius(6) });
+        preview.Children.Add(new Border { Background = scheme.PreviewBrush(), CornerRadius = new CornerRadius(6) });
         preview.Children.Add(new System.Windows.Shapes.Path
         {
             Data = Geometry.Parse("M0,0 A3,3 0 0 1 3,3 L3,8 A6,6 0 0 0 9,14 L35,14 A6,6 0 0 0 41,8 L41,3 A3,3 0 0 1 44,0 Z"),
-            Fill = new SolidColorBrush(scheme.Pill),
+            Fill = scheme.PillBrush(),
             Stroke = new SolidColorBrush(Color.FromArgb(0x30, scheme.Text.R, scheme.Text.G, scheme.Text.B)),
             StrokeThickness = 1,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -1113,7 +1158,7 @@ public partial class SettingsView : UserControl, IToolView
         });
         var lines = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(8, 0, 8, 7) };
         lines.Children.Add(new Border { Height = 4, Width = 38, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(scheme.Text), HorizontalAlignment = HorizontalAlignment.Left });
-        lines.Children.Add(new Border { Height = 4, Width = 24, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(ThemeService.CurrentAccent.Color), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 3, 0, 0) });
+        lines.Children.Add(new Border { Height = 4, Width = 24, CornerRadius = new CornerRadius(2), Background = ThemeService.AccentFor(scheme).Brush(), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 3, 0, 0) });
         preview.Children.Add(lines);
 
         var frame = new Border { Child = preview, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2), Padding = new Thickness(1) };
@@ -1129,11 +1174,34 @@ public partial class SettingsView : UserControl, IToolView
 
     private FrameworkElement AccentSwatch(AccentColor accent)
     {
-        var selected = accent.Id == ThemeService.CurrentAccent.Id;
-        var swatch = new Grid { Width = 28, Height = 28, Margin = new Thickness(0, 0, 4, 4), Cursor = Cursors.Hand, Background = Brushes.Transparent, ToolTip = accent.Name };
-        swatch.Children.Add(new System.Windows.Shapes.Ellipse { Stroke = selected ? new SolidColorBrush(accent.Color) : Brushes.Transparent, StrokeThickness = 2 });
-        swatch.Children.Add(new System.Windows.Shapes.Ellipse { Width = 20, Height = 20, Fill = new SolidColorBrush(accent.Color) });
+        var selected = !ThemeService.IsAutoAccent && accent.Id == ThemeService.CurrentAccent.Id;
+        var swatch = new Grid { Width = 28, Height = 28, Margin = new Thickness(0, 0, 2, 4), Cursor = Cursors.Hand, Background = Brushes.Transparent, ToolTip = accent.Name };
+        swatch.Children.Add(new System.Windows.Shapes.Ellipse { Stroke = selected ? accent.Brush() : Brushes.Transparent, StrokeThickness = 2 });
+        swatch.Children.Add(new System.Windows.Shapes.Ellipse { Width = 20, Height = 20, Fill = accent.Brush() });
         swatch.MouseLeftButtonUp += (_, _) => ThemeService.SetAccent(accent.Id);
+        return swatch;
+    }
+
+    /// <summary>"Auto": the current scheme's own accent, marked with sparkles.</summary>
+    private FrameworkElement AutoAccentSwatch()
+    {
+        var scheme = ThemeService.CurrentScheme;
+        var own = ThemeService.Accents.FirstOrDefault(a => a.Id == scheme.Accent) ?? ThemeService.Accents[0];
+        var selected = ThemeService.IsAutoAccent;
+        var swatch = new Grid
+        {
+            Width = 28, Height = 28, Margin = new Thickness(0, 0, 2, 4), Cursor = Cursors.Hand, Background = Brushes.Transparent,
+            ToolTip = $"Auto · {own.Name} for {scheme.Name}",
+        };
+        swatch.Children.Add(new System.Windows.Shapes.Ellipse { Stroke = selected ? own.Brush() : Brushes.Transparent, StrokeThickness = 2 });
+        swatch.Children.Add(new System.Windows.Shapes.Ellipse { Width = 20, Height = 20, Fill = own.Brush() });
+        var light = (0.299 * own.Mean.R + 0.587 * own.Mean.G + 0.114 * own.Mean.B) / 255 > 0.55;
+        swatch.Children.Add(new HeroIcon
+        {
+            Kind = AppIcon.Sparkles, Width = 11, Height = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Foreground = light ? new SolidColorBrush(Color.FromRgb(0x11, 0x11, 0x13)) : Brushes.White,
+        });
+        swatch.MouseLeftButtonUp += (_, _) => ThemeService.SetAccent(ThemeService.AutoAccent);
         return swatch;
     }
 

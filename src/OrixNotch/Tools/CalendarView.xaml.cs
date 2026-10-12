@@ -103,7 +103,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
         var sub = ThemeService.Get("SubTextBrush");
         var text = ThemeService.Get("TextBrush");
         var hover = ThemeService.Get("HoverBrush");
-        var accentColor = ((SolidColorBrush)accent).Color;
+        var accentColor = ThemeService.CurrentAccent.Mean;
 
         for (var i = 0; i < 42; i++)
         {

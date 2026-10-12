@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Kestrel for Phone transfer (LocalSend protocol + browser page on the LAN). -->
+    <!-- Kestrel for Phone transfer (browser page on the LAN). -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

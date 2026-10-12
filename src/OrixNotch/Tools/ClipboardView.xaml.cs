@@ -109,7 +109,7 @@ public partial class ClipboardView : UserControl, IToolView
     /// <summary>Edge fades go from the notch color to transparent, so cards dissolve into the edge.</summary>
     private void UpdateEdgeFades()
     {
-        var pill = ((SolidColorBrush)ThemeService.Get("PillBrush")).Color;
+        var pill = ThemeService.CurrentScheme.PillMid; // a gradient scheme's notch isn't one colour
         var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);
         var left = new LinearGradientBrush(pill, clear, 0);
         var right = new LinearGradientBrush(clear, pill, 0);

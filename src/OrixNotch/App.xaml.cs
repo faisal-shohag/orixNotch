@@ -53,6 +53,7 @@ public partial class App : Application
         _tray = new TrayService(window);
         _ = StartupService.SyncAsync(); // open-at-login: on by default, kept in step with Windows
         _ = PhoneTransferService.Instance.SyncAsync(); // LAN server, only when the user turned it on
+        UpdateService.Instance.Start(); // first look a couple of minutes in, then daily
 
         // `OrixNotch.exe --open weather` starts with the panel open on a tool.
         var openAt = Array.IndexOf(e.Args, "--open");

@@ -259,7 +259,7 @@ public partial class TeleprompterView : UserControl, IToolView
     /// <summary>Gradients from the notch color (at its current opacity) to transparent over the text edges.</summary>
     private void UpdateFades()
     {
-        var pill = ((SolidColorBrush)ThemeService.Get("PillBrush")).Color;
+        var pill = ThemeService.CurrentScheme.PillMid; // a gradient scheme's notch isn't one colour
         var alpha = (byte)Math.Round(255 * Math.Clamp(App.Settings.PrompterOpacity, 0.15, 1));
         var solid = Color.FromArgb(alpha, pill.R, pill.G, pill.B);
         var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);

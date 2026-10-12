@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using OrixNotch.Services;
 using OrixNotch.Shell;
@@ -10,7 +12,7 @@ using QRCoder;
 
 namespace OrixNotch.Tools;
 
-/// <summary>Phone transfer: nearby LocalSend devices, a QR code for the browser page, and transfers.</summary>
+/// <summary>Phone transfer: a QR code for the browser page, what the PC offers the phone, and transfer activity.</summary>
 public partial class PhoneView : UserControl, IToolView
 {
     private static PhoneTransferService Phone => PhoneTransferService.Instance;
@@ -19,26 +21,26 @@ public partial class PhoneView : UserControl, IToolView
     public PhoneView()
     {
         InitializeComponent();
-        DeviceList.ItemsSource = Phone.Devices;
         TransferList.ItemsSource = Phone.Transfers;
+        OutboxList.ItemsSource = Phone.Outbox;
         Loaded += (_, _) =>
         {
             Phone.PropertyChanged += OnServiceChanged;
-            Phone.Devices.CollectionChanged += OnListChanged;
             Phone.Transfers.CollectionChanged += OnListChanged;
+            Phone.Outbox.CollectionChanged += OnListChanged;
             Update();
         };
         Unloaded += (_, _) =>
         {
             Phone.PropertyChanged -= OnServiceChanged;
-            Phone.Devices.CollectionChanged -= OnListChanged;
             Phone.Transfers.CollectionChanged -= OnListChanged;
+            Phone.Outbox.CollectionChanged -= OnListChanged;
         };
     }
 
     public void OnShown()
     {
-        Phone.Refresh();
+        ApplyHeight();
         Update();
     }
 
@@ -59,11 +61,16 @@ public partial class PhoneView : UserControl, IToolView
         TurnOnButton.Content = Phone.IsStarting ? "Starting…" : "Turn on";
         OffStatus.Text = Phone.Status;
         StatusText.Text = Phone.Status;
+        var waiting = Phone.Outbox.Count;
+        OffWaiting.Visibility = !on && waiting > 0 ? Visibility.Visible : Visibility.Collapsed;
+        OffWaiting.Text = waiting == 1 ? "1 item waiting · turn on to send it" : $"{waiting} items waiting · turn on to send them";
         if (!on) return;
 
-        VisibleAs.Text = Phone.LocalIp.Length > 0 ? $"Visible as {Phone.Alias} · {Phone.LocalIp}" : $"Visible as {Phone.Alias}";
-        NoDevices.Visibility = Phone.Devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        NoTransfers.Visibility = Phone.Transfers.Count == 0 && Phone.Pending is null ? Visibility.Visible : Visibility.Collapsed;
+        LinkText.Text = Phone.PhoneConnected ? "Phone connected" : "Waiting for phone · scan the code with its camera";
+        LinkDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, Phone.PhoneConnected ? "GoodBrush" : "SubTextBrush");
+        NoTransfers.Visibility = Phone.Transfers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DropHint.Visibility = waiting == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ClearOutboxButton.Visibility = waiting > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         QrPanel.Visibility = Phone.WebUrl is null ? Visibility.Collapsed : Visibility.Visible;
         QrOff.Visibility = Phone.WebUrl is null ? Visibility.Visible : Visibility.Collapsed;
@@ -74,29 +81,11 @@ public partial class PhoneView : UserControl, IToolView
             Qr.ToolTip = url; // to type in by hand when a camera won't scan
             IpText.Text = new Uri(url).Authority;
         }
-
-        if (Phone.Pending is { } request)
-        {
-            RequestCard.Visibility = Visibility.Visible;
-            RequestTitle.Text = $"{request.Sender} wants to send";
-            RequestSub.Text = request.Summary;
-        }
-        else
-        {
-            RequestCard.Visibility = Visibility.Collapsed;
-            TrustBox.IsChecked = false;
-        }
-
-        if (Phone.Queued is { Count: > 0 } queued)
-        {
-            QueuedBanner.Visibility = Visibility.Visible;
-            QueuedText.Text = queued.Count == 1 ? $"Pick a device for {Path.GetFileName(queued[0])}" : $"Pick a device for {queued.Count} items";
-        }
-        else
-        {
-            QueuedBanner.Visibility = Visibility.Collapsed;
-        }
     }
+
+    /// <summary>A tall tab has room under the code for the three steps; a short one keeps just the code.</summary>
+    private void OnQrCardSizeChanged(object sender, SizeChangedEventArgs e) =>
+        Steps.Visibility = e.NewSize.Height >= 330 ? Visibility.Visible : Visibility.Collapsed;
 
     private static BitmapImage QrImage(string text)
     {
@@ -131,8 +120,6 @@ public partial class PhoneView : UserControl, IToolView
         await Phone.SyncAsync();
     }
 
-    private void OnRefresh(object sender, RoutedEventArgs e) => Phone.Refresh();
-
     private void OnOpenFolder(object sender, RoutedEventArgs e)
     {
         try
@@ -146,52 +133,105 @@ public partial class PhoneView : UserControl, IToolView
         }
     }
 
-    private void OnClearQueued(object sender, RoutedEventArgs e) => Phone.Queued = null;
-
-    private void OnAccept(object sender, RoutedEventArgs e) => Phone.Answer(true, TrustBox.IsChecked == true);
-
-    private void OnDecline(object sender, RoutedEventArgs e) => Phone.Answer(false);
-
-    private void OnCancelTransfer(object sender, RoutedEventArgs e)
+    /// <summary>Opens the receive folder in Explorer with the file selected.</summary>
+    private void OnTransferClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is PhoneTransfer transfer) Phone.CancelTransfer(transfer);
+        if ((sender as FrameworkElement)?.DataContext is not PhoneTransfer { SavedPath: { } path }) return;
+        try
+        {
+            if (File.Exists(path)) Process.Start("explorer.exe", $"/select,\"{path}\"");
+            else if (Path.GetDirectoryName(path) is { } dir && Directory.Exists(dir)) Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
     }
 
-    private void OnSendClick(object sender, RoutedEventArgs e)
+    private void OnAddFiles(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not PhoneDevice device) return;
-        if (Phone.Queued is { Count: > 0 } queued)
-        {
-            _ = Phone.SendAsync(device, queued);
-            return;
-        }
-        var dialog = new Microsoft.Win32.OpenFileDialog { Title = $"Send to {device.Alias}", Filter = "All files|*.*", Multiselect = true };
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Send to phone", Filter = "All files|*.*", Multiselect = true };
         using (NotchWindow.Instance?.HoldOpen())
         {
             if (dialog.ShowDialog(NotchWindow.Instance) != true) return;
         }
-        _ = Phone.SendAsync(device, dialog.FileNames);
+        Phone.Send(dialog.FileNames);
     }
 
-    private void OnDeviceDragEnter(object sender, DragEventArgs e)
+    private void OnSendClipboard(object sender, RoutedEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-        if (sender is Border row) row.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
-        e.Effects = DragDropEffects.Copy;
+        if (!Phone.SendClipboard()) StatusText.Text = "Nothing on the clipboard to send.";
+    }
+
+    private void OnClearOutbox(object sender, RoutedEventArgs e) => Phone.ClearOutbox();
+
+    private void OnRemoveOutbox(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is PhoneOutboxItem item) Phone.RemoveFromOutbox(item);
+    }
+
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = DropPayload.CanAccept(e.Data) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
-    private void OnDeviceDragLeave(object sender, DragEventArgs e)
+    /// <summary>Files, browser images or text dropped on the Phone tab go to the phone, not onto the Shelf.</summary>
+    private void OnDrop(object sender, DragEventArgs e)
     {
-        if (sender is Border row) row.ClearValue(Border.BackgroundProperty); // back to the template's hover look
+        if (DropPayload.Read(e.Data) is not { } payload) return;
+        e.Handled = true;
+        NotchWindow.Instance?.DeliverDrop(payload, toPhone: true);
     }
 
-    private void OnDeviceDrop(object sender, DragEventArgs e)
+    // ---------------------------------------------------------------- resize (same handle as Ask AI)
+
+    private const double DefaultHeight = 220;
+    private const double MinPhoneHeight = 200;
+    private const double MaxPhoneHeight = 520;
+    private bool _dragging;
+    private double _dragStartY;
+    private double _dragStartHeight;
+
+    private static void ApplyHeight() =>
+        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.PhoneHeight, MinPhoneHeight, MaxPhoneHeight));
+
+    private void OnGripDown(object sender, MouseButtonEventArgs e)
     {
-        OnDeviceDragLeave(sender, e);
-        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files ||
-            (sender as FrameworkElement)?.DataContext is not PhoneDevice device) return;
-        _ = Phone.SendAsync(device, files);
-        e.Handled = true; // not onto the Shelf as well
+        if (e.ClickCount == 2)
+        {
+            App.Settings.PhoneHeight = DefaultHeight;
+            ApplyHeight();
+            SettingsService.Save(notify: false);
+            e.Handled = true;
+            return;
+        }
+        _dragging = true;
+        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
+        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
+        Grip.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnGripMove(object sender, MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
+        var want = Math.Clamp(_dragStartHeight + dy, MinPhoneHeight, MaxPhoneHeight);
+        App.Settings.PhoneHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
+    }
+
+    private void OnGripUp(object sender, MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        Grip.ReleaseMouseCapture();
+        SettingsService.Save(notify: false);
+    }
+
+    private void OnCancelTransfer(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is PhoneTransfer transfer) Phone.CancelTransfer(transfer);
     }
 }

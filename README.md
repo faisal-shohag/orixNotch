@@ -13,7 +13,7 @@ A small black pill sits at the top-center of your screen. Hover it (or click it,
 | --- | --- |
 | Now Playing | Art, title, seek bar and controls for any app using Windows media controls (Spotify, browsers, Media Player…). The closed pill shows the art and an equalizer while music plays. |
 | File Shelf | Drop files or text on the notch to park them; drag them back out, open, reveal or copy. Items expire after a configurable number of days. |
-| Phone | Send files both ways with an Android phone (or any phone) on the same Wi-Fi. Speaks the [LocalSend](https://localsend.org) protocol, so the free LocalSend app finds the PC and can share to it; phones without the app scan a QR code for a browser page. Incoming transfers need your OK; received files go to `Downloads\OrixNotch` and the Shelf. Off until turned on. |
+| Phone | Send files, folders and text both ways with any phone on the same Wi-Fi: scan the QR code on the notch to open a page. Drop files on the Phone tab (or Shelf → Send to phone) and they show up on the page right away; folders download as .zip. Files from the phone go to `Downloads\OrixNotch` and the Shelf. No app needed. Off until turned on. |
 | Clipboard | Searchable history of text, links, images and files. Click to copy again. Skips clips that password managers mark as private. |
 | Quick Note | Auto-saving scratchpad. |
 | To-Dos | Quick list with stars and completion. |
@@ -27,10 +27,12 @@ A small black pill sits at the top-center of your screen. Hover it (or click it,
 
 Tool visibility and order, open mode (hover/click), hover delay, display, autostart and more live in **Settings** (gear icon or tray menu).
 
+When a new version is out, the notch says so once (Microsoft Store builds install it through the Store; GitHub builds open the release). Settings → About checks on demand and has the switch to turn this off.
+
 ## Look & feel
 
 - Notch silhouette with concave top corners that flow into the screen edge, springing open and resizing smoothly to fit each tool.
-- 6 color schemes (Midnight, Graphite, Nord, Mocha, Forest, Daylight) × 10 accents, applied live from Settings → Appearance.
+- 17 color schemes (5 with a gradient notch), each with its own matching accent; override it with any of 23 accents (8 gradients). Applied live from Settings → Appearance.
 - [Heroicons](https://heroicons.com/) (MIT, by the makers of Tailwind CSS) vendored as vector path data and rendered by `Shell/HeroIcon` — solid glyphs for small/chrome icons, outline glyphs for large/decorative ones; [Inter](https://rsms.me/inter/) typeface bundled in `Fonts/` (SIL OFL).
 
 ## Build & run

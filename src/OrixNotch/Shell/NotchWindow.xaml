@@ -149,15 +149,65 @@
                                     HorizontalAlignment="Center" VerticalAlignment="Top" />
 
                     <Grid x:Name="TabBar" Height="40" VerticalAlignment="Bottom" Margin="0,0,0,12">
-                        <!-- Indicator and tabs share one centered strip, so the indicator stays aligned while the notch resizes. -->
-                        <Grid x:Name="TabStrip" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Border x:Name="TabIndicator" Width="35" Height="28" CornerRadius="8" HorizontalAlignment="Left"
-                                    VerticalAlignment="Center" Background="{DynamicResource HoverBrush}" Opacity="0">
-                                <Border.RenderTransform>
-                                    <TranslateTransform x:Name="TabIndicatorShift" />
-                                </Border.RenderTransform>
-                            </Border>
-                            <StackPanel x:Name="Tabs" Orientation="Horizontal" />
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Too many tabs to fit scroll sideways (wheel, or hover an end), with the cut-off ends faded (NotchWindow.TabScroll.cs). -->
+                        <ScrollViewer x:Name="TabScroller" Margin="24,0,6,0" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                            <!-- Indicator and tabs share one centered strip, so the indicator stays aligned while the notch resizes. -->
+                            <Grid x:Name="TabStrip" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border x:Name="TabIndicator" Width="35" Height="28" CornerRadius="8" HorizontalAlignment="Left"
+                                        VerticalAlignment="Center" Background="{DynamicResource HoverBrush}" Opacity="0">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="TabIndicatorShift" />
+                                    </Border.RenderTransform>
+                                </Border>
+                                <StackPanel x:Name="Tabs" Orientation="Horizontal" />
+                            </Grid>
+                        </ScrollViewer>
+                        <!-- Settings stays put at the right end, outside the scrolling strip. -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,24,0" VerticalAlignment="Center">
+                            <Rectangle Width="1" Height="16" Fill="{DynamicResource HoverBrush}" Margin="0,0,5,0" VerticalAlignment="Center" />
+                            <Border x:Name="SettingsTabHost" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Dragging onto the notch from elsewhere: pick where it goes (NotchWindow.DropChooser.cs). -->
+                    <Grid x:Name="DropChooser" Margin="18,56,18,18" Visibility="Collapsed" Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid x:Name="DropShelf" Grid.Column="0" AllowDrop="True" Background="Transparent"
+                              DragEnter="OnChooserDragEnter" DragOver="OnChooserDragOver" DragLeave="OnChooserDragLeave" Drop="OnChooserDrop">
+                            <Rectangle x:Name="DropShelfFrame" IsHitTestVisible="False" RadiusX="14" RadiusY="14" StrokeThickness="1.5" StrokeDashArray="4 3"
+                                       Stroke="{DynamicResource SubTextBrush}" Opacity="0.5" />
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                                <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
+                                    <hero:HeroIcon Kind="ArchiveBox" Width="20" Height="20" Foreground="{DynamicResource AccentBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="Shelf" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0" />
+                                <TextBlock x:Name="DropShelfSub" Text="Keep it here for later" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11.5"
+                                           HorizontalAlignment="Center" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid x:Name="DropPhone" Grid.Column="2" AllowDrop="True" Background="Transparent"
+                              DragEnter="OnChooserDragEnter" DragOver="OnChooserDragOver" DragLeave="OnChooserDragLeave" Drop="OnChooserDrop">
+                            <Rectangle x:Name="DropPhoneFrame" IsHitTestVisible="False" RadiusX="14" RadiusY="14" StrokeThickness="1.5" StrokeDashArray="4 3"
+                                       Stroke="{DynamicResource SubTextBrush}" Opacity="0.5" />
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                                <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
+                                    <hero:HeroIcon Kind="DevicePhone" Width="20" Height="20" Foreground="{DynamicResource AccentBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="Phone" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0" />
+                                <TextBlock x:Name="DropPhoneSub" Text="Send to your phone" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11.5"
+                                           HorizontalAlignment="Center" Margin="0,2,0,0" />
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Grid>
