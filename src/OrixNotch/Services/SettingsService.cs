@@ -28,6 +28,14 @@ public sealed class AppSettings
 
     public int ShelfRetentionDays { get; set; } = 7; // 0 = keep forever
 
+    // Phone transfer over Wi-Fi (LocalSend protocol + browser page). Off until turned on: it opens a port on the LAN.
+    public bool PhoneEnabled { get; set; }
+    public string PhoneAlias { get; set; } = "";            // empty = PC name
+    public string PhoneReceiveFolder { get; set; } = "";    // empty = Downloads\OrixNotch
+    public bool PhoneBrowserPage { get; set; } = true;
+    public List<string> PhoneTrusted { get; set; } = new(); // fingerprints accepted without asking
+    public string? PhoneLastDevice { get; set; }            // fingerprint of the last phone sent to
+
     public string WeatherCity { get; set; } = "London";
     public bool UseFahrenheit { get; set; }
 

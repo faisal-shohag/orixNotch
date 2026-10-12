@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\emoji-test.txt" />
+    <EmbeddedResource Include="Resources\phone.html" />
     <Resource Include="Fonts\*.ttf" />
     <Resource Include="Fonts\*.CompositeFont" />
     <Resource Include="Assets\Brand\OrixNotch.ico" />
@@ -33,10 +34,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Kestrel for Phone transfer (LocalSend protocol + browser page on the LAN). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Anthropic" Version="12.53.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Emoji.Wpf" Version="0.3.4" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
   </ItemGroup>
 

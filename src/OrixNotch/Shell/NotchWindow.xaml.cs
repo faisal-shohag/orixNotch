@@ -142,6 +142,8 @@ public partial class NotchWindow : Window
         NotificationWatcher.Instance.Arrived += ShowNotificationPeek;
         AiLimitWatcher.Instance.Alert += ShowAiLimitPeek;
         AiLimitWatcher.Instance.Reconfigure();
+        PhoneTransferService.Instance.Incoming += ShowPhoneRequestPeek;
+        PhoneTransferService.Instance.Received += ShowPhoneReceivedPeek;
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
@@ -1260,6 +1262,30 @@ public partial class NotchWindow : Window
         var sub = resets is null ? pace : $"{pace} · {resets}";
         EnqueuePeek(new PeekRequest($"ailimit:{a.ToolId}:{a.Window}", () => LogoTile(a.Logo), title, sub,
             TimeSpan.FromSeconds(6), OnClick: () => OpenTool("aiusage")));
+    }
+
+    /// <summary>
+    /// A phone wants to send files: the answer lives in the Phone tool, so clicking opens it. When the
+    /// notch is already open (alerts wait for it to close) the Phone tool comes up right away.
+    /// </summary>
+    private void ShowPhoneRequestPeek(IncomingRequest request)
+    {
+        if (_expanded)
+        {
+            if (_activeTool != "phone") ShowTool("phone");
+            return;
+        }
+        EnqueuePeek(new PeekRequest("phone:request", () => GlyphTile(AppIcon.DevicePhone), $"{request.Sender} wants to send",
+            $"{request.Summary} · click to accept", TimeSpan.FromSeconds(12),
+            OnDismiss: () => PhoneTransferService.Instance.Answer(false),
+            OnClick: () => OpenTool("phone")));
+    }
+
+    private void ShowPhoneReceivedPeek(string peer, int count)
+    {
+        var what = count == 1 ? "1 item" : $"{count} items";
+        EnqueuePeek(new PeekRequest("phone:received", () => GlyphTile(AppIcon.DevicePhone), $"Received {what}",
+            $"From {peer} · on the Shelf", TimeSpan.FromSeconds(4), OnClick: () => OpenTool("shelf")));
     }
 
     /// <summary>Brand logo on a soft tile (AI usage alerts).</summary>

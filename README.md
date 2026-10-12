@@ -13,6 +13,7 @@ A small black pill sits at the top-center of your screen. Hover it (or click it,
 | --- | --- |
 | Now Playing | Art, title, seek bar and controls for any app using Windows media controls (Spotify, browsers, Media Player…). The closed pill shows the art and an equalizer while music plays. |
 | File Shelf | Drop files or text on the notch to park them; drag them back out, open, reveal or copy. Items expire after a configurable number of days. |
+| Phone | Send files both ways with an Android phone (or any phone) on the same Wi-Fi. Speaks the [LocalSend](https://localsend.org) protocol, so the free LocalSend app finds the PC and can share to it; phones without the app scan a QR code for a browser page. Incoming transfers need your OK; received files go to `Downloads\OrixNotch` and the Shelf. Off until turned on. |
 | Clipboard | Searchable history of text, links, images and files. Click to copy again. Skips clips that password managers mark as private. |
 | Quick Note | Auto-saving scratchpad. |
 | To-Dos | Quick list with stars and completion. |
@@ -48,7 +49,7 @@ for the release process, code signing and Microsoft Store setup.
 
 ## Data & privacy
 
-Everything is stored locally in `%LOCALAPPDATA%\OrixNotch` (settings, notes, to-dos, events, clipboard history, shelf). The only network calls are Open-Meteo (weather) and Yahoo Finance (stocks), made only while those tools are open.
+Everything is stored locally in `%LOCALAPPDATA%\OrixNotch` (settings, notes, to-dos, events, clipboard history, shelf). The only network calls are Open-Meteo (weather) and Yahoo Finance (stocks), made only while those tools are open. Phone transfer, when turned on, listens only on your local network (ports 53317–53318) and never goes through a server.
 
 ## Project layout
 

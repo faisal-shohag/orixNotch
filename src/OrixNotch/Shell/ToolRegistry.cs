@@ -34,6 +34,7 @@ public static class ToolRegistry
         new("ask", "Ask AI", AppIcon.Sparkles, W, H, () => new AskAiView()),
         new("aiusage", "AI Usage", AppIcon.ChartBar, W, H, () => new AiUsageView()),
         new("shelf", "Shelf", AppIcon.ArchiveBox, W, H, () => new ShelfView()),
+        new("phone", "Phone", AppIcon.DevicePhone, W, H, () => new PhoneView()),
         new("clipboard", "Clipboard", AppIcon.ClipboardList, W, H, () => new ClipboardView()),
         new("teleprompter", "Teleprompter", AppIcon.Teleprompter, W, H, () => new TeleprompterView()),
         new("shortcuts", "Shortcuts", AppIcon.Stack, W, H, () => new ShortcutsView()),

@@ -87,6 +87,17 @@ public partial class ShelfView : UserControl
         }
     }
 
+    /// <summary>Straight to the last phone when it's nearby, otherwise the Phone tool asks which device;
+    /// either way the Phone tool opens to show progress.</summary>
+    private void OnSendToPhone(object sender, RoutedEventArgs e)
+    {
+        if (ItemOf(sender) is not { } item) return;
+        var phone = PhoneTransferService.Instance;
+        if (phone.IsRunning) phone.TrySendToLast([item.Path]);
+        else phone.Queued = [item.Path];
+        Shell.NotchWindow.Instance?.ShowTool("phone");
+    }
+
     private void OnRemove(object sender, RoutedEventArgs e)
     {
         if (ItemOf(sender) is { } item) Shelf.Remove(item);
