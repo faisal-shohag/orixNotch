@@ -46,6 +46,7 @@
                                             <MenuItem Header="Open" Click="OnOpen" />
                                             <MenuItem Header="Show in folder" Click="OnReveal" />
                                             <MenuItem Header="Copy" Click="OnCopy" />
+                                            <MenuItem Header="Send to phone" Click="OnSendToPhone" />
                                             <MenuItem Header="Remove from shelf" Click="OnRemove" />
                                         </ContextMenu>
                                     </Border.ContextMenu>

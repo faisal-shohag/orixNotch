@@ -591,6 +591,40 @@ public partial class SettingsView : UserControl, IToolView
             Combo(["1 day", "3 days", "7 days", "30 days", "Never"], Math.Max(0, Array.IndexOf(days, S.ShelfRetentionDays)),
                 i => { S.ShelfRetentionDays = days[i]; Save(false); }));
 
+        Section("PHONE TRANSFER");
+        var phone = PhoneTransferService.Instance;
+        Row("Phone transfer", "Send files with phones on the same Wi-Fi (LocalSend app or a browser).",
+            Toggle(S.PhoneEnabled, v => { S.PhoneEnabled = v; Save(false); _ = phone.SyncAsync(); }));
+        Row("Name on the network", "How phones list this PC. Empty uses the PC name.",
+            TextInput(S.PhoneAlias, Environment.MachineName, v =>
+            {
+                if (v == S.PhoneAlias) return;
+                S.PhoneAlias = v;
+                Save(false);
+                if (phone.IsRunning) _ = phone.RestartAsync();
+            }));
+        var browse = new Button { Content = "Change…" };
+        browse.Click += (_, _) =>
+        {
+            var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Save received files in", InitialDirectory = phone.ReceiveFolder };
+            using (NotchWindow.Instance?.HoldOpen())
+            {
+                if (dialog.ShowDialog(NotchWindow.Instance) != true) return;
+            }
+            S.PhoneReceiveFolder = dialog.FolderName;
+            Save(false);
+            Render();
+        };
+        Row("Save received files in", phone.ReceiveFolder, browse);
+        Row("Browser page", "A QR code opens a page for phones without LocalSend.",
+            Toggle(S.PhoneBrowserPage, v => { S.PhoneBrowserPage = v; Save(false); if (phone.IsRunning) _ = phone.RestartAsync(); }));
+        if (S.PhoneTrusted.Count > 0)
+        {
+            var forget = new Button { Content = "Forget" };
+            forget.Click += (_, _) => { S.PhoneTrusted.Clear(); Save(false); Render(); };
+            Row("Trusted devices", $"{S.PhoneTrusted.Count} device{(S.PhoneTrusted.Count == 1 ? "" : "s")} can send without asking.", forget);
+        }
+
         Section("TIMERS");
         var breaks = new[] { 3, 5, 10, 15 };
         Row("Break length", "Pomodoro break after each focus session.",

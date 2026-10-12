@@ -86,4 +86,5 @@ public enum AppIcon
     Forward,
     BatteryFull,
     Bell,
+    DevicePhone,
 }

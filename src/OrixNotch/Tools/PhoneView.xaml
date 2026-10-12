@@ -1,0 +1,218 @@
+<UserControl x:Class="OrixNotch.Tools.PhoneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hero="clr-namespace:OrixNotch.Shell">
+    <Grid>
+        <!-- Off: what it does and a switch -->
+        <StackPanel x:Name="OffState" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440">
+            <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
+                <hero:HeroIcon Kind="DevicePhone" Width="20" Height="20" Foreground="{DynamicResource AccentBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Text="Phone transfer" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0" />
+            <TextBlock Style="{StaticResource SubText}" FontWeight="Normal" FontSize="12" TextAlignment="Center" TextWrapping="Wrap" Margin="0,3,0,0"
+                       Text="Send files both ways between your phone and this PC over Wi-Fi, using the free LocalSend app or any browser. Nothing leaves your network." />
+            <Button x:Name="TurnOnButton" Style="{StaticResource AccentButton}" Content="Turn on" HorizontalAlignment="Center" Margin="0,12,0,0" Click="OnTurnOn" />
+            <TextBlock x:Name="OffStatus" FontSize="11.5" Foreground="{DynamicResource BadBrush}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0" />
+        </StackPanel>
+
+        <Grid x:Name="OnState" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="142" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="236" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Header: who we are on the network; switch off -->
+            <Grid Grid.ColumnSpan="3" Margin="0,0,0,8">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="7" Height="7" Fill="{DynamicResource GoodBrush}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="VisibleAs" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="12" Margin="7,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock x:Name="StatusText" FontSize="11.5" Foreground="{DynamicResource BadBrush}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" MaxWidth="320" Margin="0,0,10,0" />
+                    <Button Style="{StaticResource IconButton}" Width="Auto" Height="24" Foreground="{DynamicResource SubTextBrush}"
+                            ToolTip="Open the folder received files are saved in" Click="OnOpenFolder">
+                        <StackPanel Orientation="Horizontal" Margin="7,0,8,0">
+                            <hero:HeroIcon Kind="Folder" Width="12" Height="12" VerticalAlignment="Center" />
+                            <TextBlock Text="Received" FontSize="11.5" Margin="5,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Content="Turn off" Height="24" FontSize="11.5" Margin="6,0,0,0" Click="OnTurnOff" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Browser page QR -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Padding="8">
+                <Grid>
+                    <StackPanel x:Name="QrPanel" VerticalAlignment="Center">
+                        <Border Background="White" CornerRadius="8" Padding="4" Width="112" Height="112" HorizontalAlignment="Center">
+                            <Image x:Name="Qr" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                        </Border>
+                        <TextBlock Text="Scan with your phone" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="10.5"
+                                   HorizontalAlignment="Center" Margin="0,7,0,0" />
+                        <TextBlock x:Name="IpText" FontSize="10.5" HorizontalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
+                    </StackPanel>
+                    <TextBlock x:Name="QrOff" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+                               VerticalAlignment="Center" Visibility="Collapsed" Text="Browser page is off (Settings → Clipboard &amp; Shelf)" />
+                </Grid>
+            </Border>
+
+            <!-- Nearby LocalSend devices -->
+            <Grid Grid.Row="1" Grid.Column="1" Margin="12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <TextBlock Text="NEARBY" Style="{StaticResource Caps}" FontSize="10.5" VerticalAlignment="Center" />
+                    <Button Style="{StaticResource IconButton}" Width="22" Height="22" HorizontalAlignment="Right"
+                            Foreground="{DynamicResource SubTextBrush}" ToolTip="Look for devices again" Click="OnRefresh">
+                        <hero:HeroIcon Kind="Refresh" Width="12" Height="12" />
+                    </Button>
+                </Grid>
+
+                <Border x:Name="QueuedBanner" Grid.Row="1" CornerRadius="8" Background="{DynamicResource AccentSoftBrush}" Padding="9,5" Margin="0,4,0,0"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <TextBlock x:Name="QueuedText" FontSize="11.5" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" />
+                        <Button Style="{StaticResource IconButton}" Width="18" Height="18" HorizontalAlignment="Right" ToolTip="Don't send"
+                                Foreground="{DynamicResource AccentBrush}" Click="OnClearQueued">
+                            <hero:HeroIcon Kind="XMark" Width="10" Height="10" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <StackPanel x:Name="NoDevices" Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="Open LocalSend on your phone" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" TextAlignment="Center" TextWrapping="Wrap" Margin="0,3,0,0"
+                               Text="Same Wi-Fi as this PC. Free on Google Play. Without it, scan the code." />
+                    <TextBlock Style="{StaticResource SubText}" FontWeight="Normal" FontSize="10" TextAlignment="Center" TextWrapping="Wrap" Margin="0,5,0,0"
+                               Opacity="0.8" Text="Not showing up? Allow OrixNotch through Windows Firewall." />
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0" hero:SmoothScroll.IsEnabled="True">
+                    <ItemsControl x:Name="DeviceList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="Row" CornerRadius="9" Padding="8,6" Margin="0,1" Background="Transparent" AllowDrop="True"
+                                        DragEnter="OnDeviceDragEnter" DragLeave="OnDeviceDragLeave" Drop="OnDeviceDrop"
+                                        ToolTip="Drop files here to send">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="30" Height="30" CornerRadius="8" Background="{DynamicResource Surface2Brush}">
+                                            <hero:HeroIcon x:Name="Glyph" Kind="DevicePhone" Width="15" Height="15"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="9,0,8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Alias}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="10.5"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="Send…" Height="24" FontSize="11.5" Click="OnSendClick" />
+                                    </Grid>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Surface2Brush}" />
+                                    </Trigger>
+                                    <DataTrigger Binding="{Binding IsMobile}" Value="False">
+                                        <Setter TargetName="Glyph" Property="Kind" Value="Monitor" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Incoming request + transfers -->
+            <Grid Grid.Row="1" Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border x:Name="RequestCard" CornerRadius="10" Background="{DynamicResource AccentSoftBrush}" Padding="10,8" Margin="0,0,0,6"
+                        Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock x:Name="RequestTitle" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="RequestSub" FontSize="11" Foreground="{DynamicResource SubTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                        <Grid Margin="0,7,0,0">
+                            <CheckBox x:Name="TrustBox" Content="Always" FontSize="11" VerticalAlignment="Center"
+                                      Foreground="{DynamicResource SubTextBrush}" ToolTip="Accept from this device without asking next time" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Decline" Height="24" FontSize="11.5" Click="OnDecline" />
+                                <Button Content="Accept" Style="{StaticResource AccentButton}" Height="24" FontSize="11.5" Margin="6,0,0,0" Click="OnAccept" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <TextBlock x:Name="NoTransfers" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+                               VerticalAlignment="Center" Text="Received files land on the Shelf and in Downloads\OrixNotch." />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" hero:SmoothScroll.IsEnabled="True">
+                        <ItemsControl x:Name="TransferList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="9" Background="{DynamicResource SurfaceBrush}" Padding="9,6" Margin="0,0,0,4">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <hero:HeroIcon x:Name="Dir" Kind="ArrowUp" Width="12" Height="12" VerticalAlignment="Top" Margin="0,2,7,0"
+                                                           Foreground="{DynamicResource SubTextBrush}" />
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Title}" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock FontSize="10.5" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SubTextBrush}">
+                                                    <Run Text="{Binding Direction, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding State, Mode=OneWay}" />
+                                                </TextBlock>
+                                                <Border x:Name="Track" Height="3" CornerRadius="1.5" Background="{DynamicResource TrackBrush}" Margin="0,4,0,1"
+                                                        ClipToBounds="True">
+                                                    <Border CornerRadius="1.5" Background="{DynamicResource AccentBrush}" RenderTransformOrigin="0,0.5">
+                                                        <Border.RenderTransform>
+                                                            <ScaleTransform ScaleX="{Binding Progress}" />
+                                                        </Border.RenderTransform>
+                                                    </Border>
+                                                </Border>
+                                            </StackPanel>
+                                            <Button x:Name="CancelBtn" Grid.Column="2" Style="{StaticResource IconButton}" Width="20" Height="20" Margin="4,0,0,0"
+                                                    VerticalAlignment="Top" ToolTip="Cancel" Foreground="{DynamicResource SubTextBrush}" Click="OnCancelTransfer">
+                                                <hero:HeroIcon Kind="XMark" Width="10" Height="10" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Incoming}" Value="True">
+                                            <Setter TargetName="Dir" Property="Kind" Value="ArrowDown" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                            <Setter TargetName="CancelBtn" Property="Visibility" Value="Collapsed" />
+                                            <Setter TargetName="Track" Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Failed}" Value="True">
+                                            <Setter TargetName="Dir" Property="Foreground" Value="{DynamicResource BadBrush}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

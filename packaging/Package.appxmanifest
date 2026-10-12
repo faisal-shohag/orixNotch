@@ -52,7 +52,10 @@
     </Application>
   </Applications>
   <Capabilities>
-    <!-- Mirror Windows notifications on the notch (user grants access once). General capabilities come before rescap. -->
+    <!-- General capabilities come before rescap. -->
+    <!-- Phone transfer: LocalSend server and browser page on the local network (off until turned on). -->
+    <Capability Name="privateNetworkClientServer" />
+    <!-- Mirror Windows notifications on the notch (user grants access once). -->
     <uap3:Capability Name="userNotificationListener" />
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
