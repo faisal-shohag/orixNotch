@@ -30,12 +30,26 @@
   .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
   .ok { color:var(--good); } .err { color:var(--bad); }
   .empty { color:var(--sub); font-size:13px; }
+  .head { display:flex; align-items:center; justify-content:space-between; margin:0 0 12px; }
+  .head h2 { margin:0; }
+  .all { margin:0; padding:6px 12px; font-size:13px; }
+  .text { flex:1; min-width:0; white-space:pre-wrap; word-break:break-word; font-size:14px; max-height:9em; overflow:auto; }
+  .copy { background:transparent; color:var(--accent); border:1px solid var(--line); margin:0; padding:6px 12px; font-size:13px; align-self:flex-start; }
+  .badge { font-size:11px; color:var(--sub); border:1px solid var(--line); border-radius:6px; padding:1px 5px; margin-left:6px; }
+  #toast { position:fixed; left:50%; top:12px; transform:translate(-50%,-80px); background:var(--accent); color:#111; font-weight:600;
+           padding:10px 16px; border-radius:12px; transition:transform .25s; z-index:9; max-width:90vw; }
+  #toast.show { transform:translate(-50%,0); }
 </style>
 </head>
 <body>
 <main>
   <h1>{{NAME}}</h1>
   <div class="sub">OrixNotch · same Wi-Fi only · this link stops working when Phone transfer is turned off</div>
+
+  <section>
+    <div class="head"><h2>From PC</h2><button id="all" class="all" hidden>Download all (.zip)</button></div>
+    <ul id="outbox"><li class="empty">Loading…</li></ul>
+  </section>
 
   <section>
     <h2>Send to PC</h2>
@@ -55,12 +69,78 @@
     <ul id="files"><li class="empty">Loading…</li></ul>
   </section>
 </main>
+<div id="toast"></div>
 <script>
   const key = new URLSearchParams(location.search).get('k') || '';
   const q = p => p + (p.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
   const fmt = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB'
     : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  let known = null;
+  function toast(text) {
+    const t = document.getElementById('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // Plain HTTP on the LAN isn't a secure context, so navigator.clipboard is missing: copy via a selection.
+  function copy(text, button) {
+    const area = document.createElement('textarea');
+    area.value = text; area.setAttribute('readonly', ''); area.style.position = 'fixed'; area.style.opacity = '0';
+    document.body.append(area); area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch {}
+    area.remove();
+    if (!ok && navigator.clipboard) navigator.clipboard.writeText(text).then(() => { button.textContent = 'Copied'; });
+    button.textContent = ok ? 'Copied' : 'Select & copy';
+    setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+  }
+
+  async function loadOutbox() {
+    const list = document.getElementById('outbox');
+    try {
+      const r = await fetch(q('/web/outbox'));
+      if (!r.ok) throw new Error(r.status === 403 ? 'Link expired — scan the QR code again.' : 'Error ' + r.status);
+      const items = await r.json();
+      if (known) {
+        const fresh = items.filter(i => !known.has(i.id));
+        if (fresh.length) {
+          toast(fresh.length === 1 ? 'New from PC: ' + fresh[0].name : fresh.length + ' new items from PC');
+          if (navigator.vibrate) navigator.vibrate(80);
+        }
+      }
+      known = new Set(items.map(i => i.id));
+      list.replaceChildren();
+      if (!items.length) list.append(el('li', 'empty', 'Nothing yet. Drop files on the Phone tab in OrixNotch to send them here.'));
+      for (const i of items) {
+        const li = el('li');
+        if (i.kind === 'text') {
+          li.append(el('div', 'text', i.text));
+          const b = el('button', 'copy', 'Copy');
+          b.addEventListener('click', () => copy(i.text, b));
+          li.append(b);
+        } else {
+          const name = el('span', 'name', i.name);
+          if (i.kind === 'folder') name.append(el('span', 'badge', 'folder'));
+          li.append(name);
+          if (i.kind === 'file') li.append(el('span', 'size', fmt(i.size)));
+          const a = el('a', 'get', i.kind === 'folder' ? 'Download .zip' : 'Download');
+          a.href = q('/web/send?id=' + i.id);
+          a.setAttribute('download', i.kind === 'folder' ? i.name + '.zip' : i.name);
+          li.append(a);
+        }
+        list.append(li);
+      }
+      document.getElementById('all').hidden = items.filter(i => i.kind !== 'text').length < 2;
+    } catch (e) {
+      list.replaceChildren(el('li', 'err', e.message));
+    }
+  }
+
+  document.getElementById('all').addEventListener('click', () => { location.href = q('/web/send-all'); });
 
   async function loadFiles() {
     const list = document.getElementById('files');
@@ -127,8 +207,16 @@
     } catch { state.textContent = 'Failed'; }
   });
 
+  loadOutbox();
   loadFiles();
-  setInterval(loadFiles, 10000);
+  // Live: the PC says when something changed; EventSource reconnects by itself. The poll is a fallback.
+  if (window.EventSource) {
+    const events = new EventSource(q('/web/events'));
+    events.addEventListener('outbox', loadOutbox);
+    events.addEventListener('shelf', loadFiles);
+    events.addEventListener('open', () => { loadOutbox(); loadFiles(); }); // catch up after a reconnect
+  }
+  setInterval(() => { loadOutbox(); loadFiles(); }, 30000);
 </script>
 </body>
 </html>

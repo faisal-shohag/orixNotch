@@ -94,12 +94,13 @@ public sealed class ShelfService
         Items = new ObservableCollection<ShelfItem>(items);
     }
 
-    public void AddFiles(IEnumerable<string> paths)
+    /// <param name="owned">The files are copies made for the Shelf (e.g. an image dragged from a browser): deleted with the item.</param>
+    public void AddFiles(IEnumerable<string> paths, bool owned = false)
     {
         foreach (var path in paths)
         {
             if (Items.Any(i => string.Equals(i.Path, path, StringComparison.OrdinalIgnoreCase))) continue;
-            Items.Insert(0, new ShelfItem { Path = path });
+            Items.Insert(0, new ShelfItem { Path = path, Owned = owned });
         }
         Save();
     }

@@ -53,7 +53,7 @@
   </Applications>
   <Capabilities>
     <!-- General capabilities come before rescap. -->
-    <!-- Phone transfer: LocalSend server and browser page on the local network (off until turned on). -->
+    <!-- Phone transfer: browser page on the local network (off until turned on). -->
     <Capability Name="privateNetworkClientServer" />
     <!-- Mirror Windows notifications on the notch (user grants access once). -->
     <uap3:Capability Name="userNotificationListener" />

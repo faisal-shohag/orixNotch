@@ -13,7 +13,7 @@ dotnet run --project src/OrixNotch -- --open phone # start open on a tool id (se
 ```
 
 - **The app is single-instance.** It holds a mutex (`OrixNotch.SingleInstance`), so stop any running copy before building or launching, including the installed one at `%LOCALAPPDATA%\Programs\OrixNotch`: `Stop-Process -Name OrixNotch -Force`. If you skip this, a running dev exe locks `bin/Debug` and the build fails. A second instance also just exits silently.
-- **Test with throwaway data.** Set `ORIXNOTCH_DATA_DIR` to a scratch folder to run against isolated data instead of `%LOCALAPPDATA%\OrixNotch`. Other test hooks are env vars named `ORIXNOTCH_*`: `ORIXNOTCH_AILIMIT_TEST`, `ORIXNOTCH_WPN_DB`, `ORIXNOTCH_CURSOR_DB`, and the `*_BASE` URL overrides in `AiService` and `AiUsageService`.
+- **Test with throwaway data.** Set `ORIXNOTCH_DATA_DIR` to a scratch folder to run against isolated data instead of `%LOCALAPPDATA%\OrixNotch`. Other test hooks are env vars named `ORIXNOTCH_*`: `ORIXNOTCH_AILIMIT_TEST`, `ORIXNOTCH_WPN_DB`, `ORIXNOTCH_CURSOR_DB`, the `*_BASE` URL overrides in `AiService` and `AiUsageService`, and `ORIXNOTCH_UPDATE_BASE` (fake GitHub releases API) with `ORIXNOTCH_UPDATE_DELAY` (seconds to the first update check) for `UpdateService`.
 - **Packaging.** Run `pwsh packaging/Build-Exe.ps1`, `Build-Msi.ps1` or `Build-Msix.ps1`. These are self-contained win-x64 publishes into `publish/`, and the MSI needs WiX 5.0.2. CI (`.github/workflows/ci.yml`) runs all three on every PR, so a broken manifest or WiX change fails the PR.
 - **Releases.** `pwsh tools/Bump-Version.ps1 X.Y.Z` sets `<Version>` in the csproj, commits and tags it. `git push origin main --follow-tags` then triggers `release.yml`. Details are in `docs/RELEASING.md`.
 
@@ -51,7 +51,8 @@ It also exposes `Instance`, `OpenTool(id)`, `ShowTool(id)` and `HoldOpen()`. Wra
 **Theming:** `Themes/Theme.xaml` defines brushes (`SurfaceBrush`, `AccentBrush`, `SubTextBrush`, …) and styles (`IconButton`, `AccentButton`, `Card`, `Caps`, `SubText`, `ToggleSwitch`). `ThemeService` swaps the colors live, so reference brushes with `DynamicResource` or `SetResourceReference`, never hard-coded colors.
 
 **Phone transfer (`Services/PhoneTransferService*.cs`, `Tools/PhoneView`, `Resources/phone.html`):**
-- A Kestrel server (`Microsoft.AspNetCore.App` framework reference) speaks the LocalSend v2 protocol over HTTPS on 53317, with multicast discovery on 224.0.0.167. A browser page with a QR-code key runs on HTTP 53318.
+- A Kestrel server (`Microsoft.AspNetCore.App` framework reference) serves a browser page over HTTP on 53318 (53328 if taken). The phone opens it by scanning a QR code whose URL carries a key that changes on every start; every request checks it.
+- PC → phone goes through the in-memory `Outbox` (`PhoneTransferService.Outbox.cs`). The page learns of changes from Server-Sent Events on `/web/events`. Folders and "Download all" stream as a zip built on the fly; `ZipArchive` only writes synchronously, so that request sets `IHttpBodyControlFeature.AllowSynchronousIO`.
 - Minimal-API handlers that return `Task<IResult>` must be passed as a `Delegate` via the `Handler(...)` wrapper. A bare method group binds as a `RequestDelegate` and silently drops the result.
 - It is off by default (`PhoneEnabled`).
 

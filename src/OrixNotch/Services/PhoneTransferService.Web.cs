@@ -4,51 +4,56 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace OrixNotch.Services;
 
 /// <summary>
-/// Browser page for phones without LocalSend: scan the QR code on the notch, then upload to the PC
+/// Browser page for the phone: scan the QR code on the notch, then upload to the PC
 /// and download what's on the Shelf. Plain HTTP on the LAN; every request needs the key from the QR
 /// code, which changes each time the server starts.
 /// </summary>
 public sealed partial class PhoneTransferService
 {
     private const long MaxWebText = 1 << 20;
+    private static readonly FileExtensionContentTypeProvider ContentTypes = new();
 
     private string _webKey = "";
     private string? _page;
 
-    private void NewWebKey()
+    private void NewWebKey() => _webKey = RandomId();
+
+    /// <summary>Unguessable, URL-safe and easy to read out (no 0/o, 1/l).</summary>
+    private static string RandomId()
     {
         const string Alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
-        _webKey = string.Create(12, 0, (span, _) =>
+        return string.Create(12, 0, (span, _) =>
         {
             for (var i = 0; i < span.Length; i++) span[i] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
         });
     }
 
-    private void MapWeb(WebApplication app, int port)
+    private void MapWeb(WebApplication app)
     {
-        var host = $"*:{port}";
         app.MapGet("/", (HttpContext ctx) => Allowed(ctx)
             ? Results.Content(Page(), "text/html; charset=utf-8")
-            : Results.Content(Denied, "text/html; charset=utf-8", statusCode: 403)).RequireHost(host);
+            : Results.Content(Denied, "text/html; charset=utf-8", statusCode: 403));
         app.MapGet("/web/files", (HttpContext ctx) => Allowed(ctx) ? Results.Json(ShelfFiles().Select((f, i) => new
         {
             id = i,
             name = Path.GetFileName(f),
             size = new FileInfo(f).Length,
-        }), Json) : Results.StatusCode(403)).RequireHost(host);
+        }), Json) : Results.StatusCode(403));
         app.MapGet("/web/file", (HttpContext ctx) =>
         {
             if (!Allowed(ctx)) return Results.StatusCode(403);
             var files = ShelfFiles();
             if (!int.TryParse(ctx.Request.Query["id"], out var id) || id < 0 || id >= files.Count) return Results.NotFound();
             return Results.File(files[id], ContentTypeOf(files[id]), Path.GetFileName(files[id]), enableRangeProcessing: true);
-        }).RequireHost(host);
-        app.MapPost("/web/upload", Handler(WebUploadAsync)).RequireHost(host);
-        app.MapPost("/web/text", Handler(WebTextAsync)).RequireHost(host);
+        });
+        app.MapPost("/web/upload", Handler(WebUploadAsync));
+        app.MapPost("/web/text", Handler(WebTextAsync));
+        MapOutbox(app);
     }
 
     private bool Allowed(HttpContext ctx) =>
@@ -67,16 +72,19 @@ public sealed partial class PhoneTransferService
         var name = ctx.Request.Query["name"].ToString();
         if (name.Length == 0) return Results.BadRequest();
         var peer = PeerName(ctx);
-        var transfer = new PhoneTransfer(Path.GetFileName(name.Replace('\\', '/')), peer, incoming: true,
-            ctx.Request.ContentLength ?? 0) { State = "Receiving" };
+        var transfer = new PhoneTransfer(Path.GetFileName(name.Replace('\\', '/')), peer, incoming: true, ctx.Request.ContentLength ?? 0)
+        {
+            State = "Receiving",
+        };
         OnUi(() => Track(transfer));
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted, transfer.Cts.Token);
         try
         {
-            var (path, _) = TargetPath(ReceiveFolder, Path.GetFileName(name.Replace('\\', '/')));
+            var path = TargetPath(ReceiveFolder, name);
             await SaveBodyAsync(ctx, path, transfer, cts.Token);
             OnUi(() =>
             {
+                transfer.SavedPath = path;
                 transfer.Finish($"Saved to {Path.GetFileName(ReceiveFolder.TrimEnd('\\'))}");
                 ShelfService.Instance.AddFiles([path]);
                 Received?.Invoke(peer, 1);
@@ -114,8 +122,11 @@ public sealed partial class PhoneTransferService
             using var reader = new StreamReader(stream);
             _page = reader.ReadToEnd();
         }
-        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(Alias));
+        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(Environment.MachineName));
     }
+
+    private static string ContentTypeOf(string path) =>
+        ContentTypes.TryGetContentType(path, out var type) ? type : "application/octet-stream";
 
     private const string Denied =
         "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>" +

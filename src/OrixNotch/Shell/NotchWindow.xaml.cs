@@ -142,8 +142,8 @@ public partial class NotchWindow : Window
         NotificationWatcher.Instance.Arrived += ShowNotificationPeek;
         AiLimitWatcher.Instance.Alert += ShowAiLimitPeek;
         AiLimitWatcher.Instance.Reconfigure();
-        PhoneTransferService.Instance.Incoming += ShowPhoneRequestPeek;
         PhoneTransferService.Instance.Received += ShowPhoneReceivedPeek;
+        UpdateService.Instance.Available += ShowUpdatePeek;
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
@@ -159,6 +159,7 @@ public partial class NotchWindow : Window
         {
             if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool != SettingsId) MoveTabIndicator(_activeTool, animate: false);
         };
+        WireTabScroll();
         BuildTabs();
         UpdateActivity();
         ApplyGeometry();
@@ -347,6 +348,7 @@ public partial class NotchWindow : Window
         _repelTimer.Start();
         _height.Target = _collapsedH;
         _width.Target = ActivityWidth();
+        HideDropChooser(restore: false);
         if (ToolHost.Content is IToolView view) view.OnHidden();
         if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
         StartAnimation();
@@ -817,7 +819,7 @@ public partial class NotchWindow : Window
     /// <summary>Waveform colour from the album art: the art's tint, lifted until it reads on black.</summary>
     private Color WaveColor(Color? tint)
     {
-        if (tint is not { } c) return ((SolidColorBrush)ThemeService.Get("AccentBrush")).Color;
+        if (tint is not { } c) return ThemeService.CurrentAccent.Mean;
         static double Lum(Color x) => (0.299 * x.R + 0.587 * x.G + 0.114 * x.B) / 255;
         for (var i = 0; i < 6 && Lum(c) < 0.55; i++)
             c = Color.FromRgb((byte)(c.R + (255 - c.R) * 0.25), (byte)(c.G + (255 - c.G) * 0.25), (byte)(c.B + (255 - c.B) * 0.25));
@@ -1264,21 +1266,11 @@ public partial class NotchWindow : Window
             TimeSpan.FromSeconds(6), OnClick: () => OpenTool("aiusage")));
     }
 
-    /// <summary>
-    /// A phone wants to send files: the answer lives in the Phone tool, so clicking opens it. When the
-    /// notch is already open (alerts wait for it to close) the Phone tool comes up right away.
-    /// </summary>
-    private void ShowPhoneRequestPeek(IncomingRequest request)
+    private void ShowUpdatePeek(string version)
     {
-        if (_expanded)
-        {
-            if (_activeTool != "phone") ShowTool("phone");
-            return;
-        }
-        EnqueuePeek(new PeekRequest("phone:request", () => GlyphTile(AppIcon.DevicePhone), $"{request.Sender} wants to send",
-            $"{request.Summary} · click to accept", TimeSpan.FromSeconds(12),
-            OnDismiss: () => PhoneTransferService.Instance.Answer(false),
-            OnClick: () => OpenTool("phone")));
+        var sub = version.Length > 0 ? $"OrixNotch {version} · click to install" : "A new version is ready · click to install";
+        EnqueuePeek(new PeekRequest("update", () => GlyphTile(AppIcon.ArrowDown), "Update available", sub,
+            TimeSpan.FromSeconds(8), OnClick: () => _ = UpdateService.Instance.InstallAsync()));
     }
 
     private void ShowPhoneReceivedPeek(string peer, int count)
@@ -1395,7 +1387,9 @@ public partial class NotchWindow : Window
         var previousActive = _activeTool;
         if (_activeTool != SettingsId && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
 
-        var wanted = tools.Select(t => t.Id).Append(SettingsId).ToList();
+        // Settings isn't in the scrolling strip: it's pinned at the right end (SettingsTabHost).
+        SettingsTabHost.Child ??= MakeTab(SettingsId, "Settings", AppIcon.Gear);
+        var wanted = tools.Select(t => t.Id).ToList();
         var byId = tools.ToDictionary(t => t.Id);
         var changed = false;
 
@@ -1416,9 +1410,7 @@ public partial class NotchWindow : Window
             var existing = Tabs.Children.OfType<RadioButton>().FirstOrDefault(r => (string)r.Tag == id);
             if (existing is null)
             {
-                Tabs.Children.Insert(i, MakeTab(id,
-                    byId.TryGetValue(id, out var def) ? def.Name : "Settings",
-                    byId.TryGetValue(id, out var iconDef) ? iconDef.Icon : AppIcon.Gear));
+                Tabs.Children.Insert(i, MakeTab(id, byId[id].Name, byId[id].Icon));
                 changed = true;
             }
             else if (Tabs.Children.IndexOf(existing) != i)
@@ -1556,6 +1548,7 @@ public partial class NotchWindow : Window
 
     private int TabIndex(string id)
     {
+        if (id == SettingsId) return Tabs.Children.Count; // pinned after the strip
         for (var i = 0; i < Tabs.Children.Count; i++)
             if ((string)((RadioButton)Tabs.Children[i]).Tag == id) return i;
         return -1;
@@ -1574,6 +1567,7 @@ public partial class NotchWindow : Window
         }
 
         var x = tab.TranslatePoint(new Point(0, 0), TabStrip).X;
+        ScrollTabIntoView(x, tab.ActualWidth, animate);
         if (!animate || TabIndicator.Opacity < 0.5)
         {
             TabIndicatorShift.BeginAnimation(TranslateTransform.XProperty, null);
@@ -1610,25 +1604,36 @@ public partial class NotchWindow : Window
 
     private void OnPillDragEnter(object sender, DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop) && !e.Data.GetDataPresent(DataFormats.UnicodeText)) return;
-        if (!_expanded || _activeTool != "shelf")
-        {
-            Expand(activate: false);
-            ShowTool("shelf");
-        }
+        if (!DropPayload.CanAccept(e.Data)) return;
+        // The Shelf and Phone tabs take drops themselves; Ask AI and the teleprompter take text.
+        if (_expanded && _activeTool is "shelf" or "phone") return;
+        if (_expanded && _activeTool is "teleprompter" or "ask" && !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        ShowDropChooser();
     }
 
     private void OnPillDrop(object sender, DragEventArgs e)
     {
-        if (_activeTool is "teleprompter" or "ask" && e.Data.GetDataPresent(DataFormats.UnicodeText)) return;
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
-            ShelfService.Instance.AddFiles(files);
-        else if (e.Data.GetData(DataFormats.UnicodeText) is string { Length: > 0 } text)
-            ShelfService.Instance.AddText(text);
-        else
-            return;
-
-        ShowTool("shelf");
+        if (_activeTool is "teleprompter" or "ask" && e.Data.GetDataPresent(DataFormats.UnicodeText) && !DropChooser.IsVisible) return;
+        if (DropPayload.Read(e.Data) is not { } payload) return;
         e.Handled = true;
+        DeliverDrop(payload, toPhone: false);
+    }
+
+    /// <summary>Puts a drop on the Shelf or offers it to the phone, then shows where it went.</summary>
+    public async void DeliverDrop(DropPayload payload, bool toPhone)
+    {
+        HideDropChooser(restore: false);
+        ShowTool(toPhone ? "phone" : "shelf");
+        var files = await payload.FilesAsync(Storage.Dir(toPhone ? "phone-out" : "shelf"));
+        if (files is not null)
+        {
+            if (toPhone) PhoneTransferService.Instance.Send(files);
+            else ShelfService.Instance.AddFiles(files, owned: payload.CreatesFiles);
+        }
+        else if (payload.Text is { } text)
+        {
+            if (toPhone) PhoneTransferService.Instance.SendText(text);
+            else ShelfService.Instance.AddText(text);
+        }
     }
 }
