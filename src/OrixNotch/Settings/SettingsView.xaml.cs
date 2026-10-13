@@ -71,7 +71,7 @@ public partial class SettingsView : UserControl, IToolView
 
         ThemeService.Changed += () =>
         {
-            if (_page == "appearance") Render();
+            if (_page == "appearance" && !_themeFromSlider) Render();
         };
         PreviewKeyDown += OnRecordKey;
         Render();
@@ -244,6 +244,34 @@ public partial class SettingsView : UserControl, IToolView
         var gradientAccents = new WrapPanel();
         foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) gradientAccents.Children.Add(AccentSwatch(accent));
         Page.Children.Add(gradientAccents);
+
+        Section("GLASS");
+        var strength = new Slider { Minimum = 0, Maximum = 1, Value = S.GlassStrength, Width = 170, VerticalAlignment = VerticalAlignment.Center, IsEnabled = S.Glass };
+        var saveLater = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        saveLater.Tick += (_, _) =>
+        {
+            saveLater.Stop();
+            Save(false);
+        };
+        strength.ValueChanged += (_, e) =>
+        {
+            S.GlassStrength = e.NewValue;
+            // Live preview without rebuilding this page (that would drop the slider mid-drag).
+            _themeFromSlider = true;
+            try
+            {
+                ThemeService.Apply();
+            }
+            finally
+            {
+                _themeFromSlider = false;
+            }
+            saveLater.Stop();
+            saveLater.Start();
+        };
+        Row("Glass", "See-through notch tinted by the color scheme.",
+            Toggle(S.Glass, v => { S.Glass = v; Save(false); ThemeService.Apply(); }));
+        Row("Tint", "Lower shows more of the background; higher keeps text easier to read.", strength);
 
         Section("UNITS");
         Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; Save(false); }));
@@ -1206,6 +1234,9 @@ public partial class SettingsView : UserControl, IToolView
     }
 
     private static void Save(bool notify = true) => SettingsService.Save(notify);
+
+    /// <summary>The glass slider is re-theming live; don't rebuild the page under it.</summary>
+    private bool _themeFromSlider;
 }
 
 internal static class SettingsViewExtensions

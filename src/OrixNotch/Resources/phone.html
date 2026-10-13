@@ -2,221 +2,740 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<title>OrixNotch · {{NAME}}</title>
+<meta name="theme-color" content="#0a0a0c">
+<title>{{NAME}} · OrixNotch</title>
 <style>
-  :root { --bg:#0b0b0d; --card:#161619; --line:#2a2a2f; --text:#f5f5f7; --sub:#8a8a90; --accent:#ff8a3d; --good:#32d74b; --bad:#ff453a; }
-  @media (prefers-color-scheme: light) { :root { --bg:#f4f4f6; --card:#fff; --line:#e3e3e8; --text:#141416; --sub:#6c6c72; } }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  main { max-width:560px; margin:0 auto; padding:20px 16px 48px; }
-  h1 { font-size:22px; margin:4px 0 2px; }
-  .sub { color:var(--sub); font-size:13px; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:16px; }
-  h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--sub); margin:0 0 12px; }
-  .drop { display:block; border:1.5px dashed var(--line); border-radius:12px; padding:22px 12px; text-align:center; cursor:pointer; }
-  .drop b { color:var(--accent); }
+  :root {
+    --accent:{{ACCENT}}; --on-accent:#111;
+    --bg:#0a0a0c; --bg2:#111114; --card:#151518; --card2:#1c1c20; --line:#26262b; --line2:#33333a;
+    --text:#f4f4f6; --sub:#8b8b93; --good:#30d158; --warn:#ffb340; --bad:#ff453a;
+    --radius:20px; --shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 8px 24px rgba(0,0,0,.25);
+    --soft:color-mix(in srgb, var(--accent) 16%, transparent);
+    --glow:color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f3f3f6; --bg2:#ebebef; --card:#fff; --card2:#f6f6f8; --line:#e4e4ea; --line2:#d6d6de;
+            --text:#141417; --sub:#6b6b73; --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06); }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif; -webkit-font-smoothing:antialiased;
+         min-height:100vh; padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
+  button, input, textarea { font:inherit; color:inherit; }
+  button { cursor:pointer; border:0; background:none; padding:0; }
+  svg { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .wrap { max-width:560px; margin:0 auto; padding:0 16px; }
+
+  /* header */
+  header { position:sticky; top:0; z-index:5; padding-top:env(safe-area-inset-top);
+           background:color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter:saturate(1.6) blur(18px); -webkit-backdrop-filter:saturate(1.6) blur(18px);
+           border-bottom:1px solid transparent; transition:border-color .2s; }
+  header.scrolled { border-bottom-color:var(--line); }
+  header .wrap { display:flex; align-items:center; gap:12px; height:64px; }
+  .logo { width:38px; height:38px; border-radius:12px; background:#000; display:grid; place-items:center; flex:none;
+          box-shadow:0 0 0 1px var(--line2); }
+  .logo i { width:20px; height:7px; border-radius:7px; background:var(--accent); box-shadow:0 0 12px var(--glow); }
+  .who { flex:1; min-width:0; }
+  .who b { display:block; font-size:16px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.01em; }
+  .who span { font-size:12px; color:var(--sub); }
+  .pill { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; padding:7px 11px; border-radius:99px;
+          background:var(--card); border:1px solid var(--line); white-space:nowrap; transition:color .3s, border-color .3s; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--sub); position:relative; }
+  .pill[data-s=live] { color:var(--good); } .pill[data-s=live] .dot { background:var(--good); }
+  .pill[data-s=live] .dot::after { content:""; position:absolute; inset:0; border-radius:50%; background:var(--good); animation:ping 1.8s ease-out infinite; }
+  .pill[data-s=wait] { color:var(--warn); } .pill[data-s=wait] .dot { background:var(--warn); animation:blink 1s ease-in-out infinite; }
+  .pill[data-s=off] { color:var(--bad); } .pill[data-s=off] .dot { background:var(--bad); }
+  @keyframes ping { from { transform:scale(1); opacity:.7; } to { transform:scale(3); opacity:0; } }
+  @keyframes blink { 50% { opacity:.3; } }
+
+  /* sections */
+  .view { display:none; animation:fade .25s ease; }
+  .view.on { display:block; }
+  @keyframes fade { from { opacity:0; transform:translateY(6px); } }
+  .sec { margin-top:22px; }
+  .sec-h { display:flex; align-items:center; gap:8px; margin:0 4px 10px; }
+  .sec-h h2 { margin:0; font-size:13px; font-weight:650; letter-spacing:.02em; color:var(--sub); text-transform:uppercase; flex:1; }
+  .count { font-size:12px; color:var(--sub); background:var(--card); border:1px solid var(--line); border-radius:99px; padding:1px 8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+
+  /* send card */
+  .send { padding:14px; }
+  .drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center;
+          border:1.5px dashed var(--line2); border-radius:16px; padding:26px 16px; cursor:pointer; transition:border-color .2s, background .2s, transform .2s; }
+  .drop:active, .drop.hot { border-color:var(--accent); background:var(--soft); }
+  .drop.hot { transform:scale(1.01); }
+  .drop .big { width:52px; height:52px; border-radius:16px; display:grid; place-items:center; background:var(--soft); color:var(--accent); }
+  .drop .big svg { width:26px; height:26px; }
+  .drop b { font-size:16px; font-weight:650; }
+  .drop span { font-size:13px; color:var(--sub); }
+  .chips { display:flex; gap:8px; margin-top:12px; }
+  .chip { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; min-height:44px; border-radius:13px;
+          background:var(--card2); border:1px solid var(--line); font-weight:600; font-size:14px; transition:background .15s, transform .1s; }
+  .chip:active { transform:scale(.97); background:var(--line); }
+  .chip svg { width:18px; height:18px; color:var(--accent); }
   input[type=file] { display:none; }
-  textarea { width:100%; min-height:72px; resize:vertical; background:transparent; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:10px; font:inherit; }
-  button { background:var(--accent); color:#111; border:0; border-radius:10px; padding:10px 16px; font:600 14px system-ui,sans-serif; margin-top:8px; }
-  ul { list-style:none; margin:0; padding:0; }
-  li { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
-  li:first-child { border-top:0; }
-  .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .size { color:var(--sub); font-size:12px; white-space:nowrap; }
-  a.get { color:var(--accent); text-decoration:none; font-weight:600; }
-  .bar { height:4px; background:var(--line); border-radius:2px; overflow:hidden; margin-top:6px; }
-  .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
-  .ok { color:var(--good); } .err { color:var(--bad); }
-  .empty { color:var(--sub); font-size:13px; }
-  .head { display:flex; align-items:center; justify-content:space-between; margin:0 0 12px; }
-  .head h2 { margin:0; }
-  .all { margin:0; padding:6px 12px; font-size:13px; }
-  .text { flex:1; min-width:0; white-space:pre-wrap; word-break:break-word; font-size:14px; max-height:9em; overflow:auto; }
-  .copy { background:transparent; color:var(--accent); border:1px solid var(--line); margin:0; padding:6px 12px; font-size:13px; align-self:flex-start; }
-  .badge { font-size:11px; color:var(--sub); border:1px solid var(--line); border-radius:6px; padding:1px 5px; margin-left:6px; }
-  #toast { position:fixed; left:50%; top:12px; transform:translate(-50%,-80px); background:var(--accent); color:#111; font-weight:600;
-           padding:10px 16px; border-radius:12px; transition:transform .25s; z-index:9; max-width:90vw; }
+  .compose { margin-top:12px; display:flex; align-items:flex-end; gap:8px; background:var(--card2); border:1px solid var(--line);
+             border-radius:16px; padding:6px 6px 6px 14px; transition:border-color .2s; }
+  .compose:focus-within { border-color:var(--accent); }
+  .compose textarea { flex:1; border:0; outline:0; background:transparent; resize:none; padding:9px 0; min-height:24px; max-height:160px; line-height:1.4; }
+  .compose textarea::placeholder { color:var(--sub); }
+  .ibtn { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; color:var(--sub); flex:none; transition:background .15s, color .15s, transform .1s; }
+  .ibtn:active { transform:scale(.92); background:var(--line); }
+  .ibtn.go { background:var(--accent); color:var(--on-accent); }
+  .ibtn.go:disabled { background:var(--line); color:var(--sub); cursor:default; }
+
+  /* rows */
+  .list { overflow:hidden; }
+  .row { display:flex; align-items:center; gap:12px; padding:12px 14px; border-top:1px solid var(--line); position:relative; }
+  .row:first-child { border-top:0; }
+  .row.enter { animation:enter .5s cubic-bezier(.2,.9,.3,1.2); }
+  .row.enter::before { content:""; position:absolute; inset:0; background:var(--soft); animation:flash 2.4s ease-out forwards; pointer-events:none; }
+  @keyframes enter { from { opacity:0; transform:translateY(-10px) scale(.98); } }
+  @keyframes flash { from { opacity:1; } to { opacity:0; } }
+  .thumb { width:44px; height:44px; border-radius:12px; flex:none; display:grid; place-items:center; overflow:hidden;
+           background:var(--card2); border:1px solid var(--line); color:var(--sub); font-size:10px; font-weight:700; letter-spacing:.02em; position:relative; }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .thumb svg { width:20px; height:20px; }
+  .thumb.c-img { color:#5ac8fa; } .thumb.c-vid { color:#bf5af2; } .thumb.c-aud { color:#ff375f; } .thumb.c-doc { color:#0a84ff; }
+  .thumb.c-zip { color:#ffd60a; } .thumb.c-txt { color:var(--accent); } .thumb.c-dir { color:#64d2ff; }
+  .thumb .ext { position:absolute; bottom:3px; font-size:8.5px; text-transform:uppercase; }
+  .body { flex:1; min-width:0; }
+  .name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta { font-size:12.5px; color:var(--sub); display:flex; gap:6px; align-items:center; white-space:nowrap; overflow:hidden; }
+  .meta .ok { color:var(--good); display:inline-flex; align-items:center; gap:3px; }
+  .meta .ok svg { width:13px; height:13px; stroke-width:2.4; }
+  .meta .bad { color:var(--bad); }
+  .snippet { font-size:14px; white-space:pre-wrap; word-break:break-word; max-height:7.2em; overflow:hidden; mask-image:linear-gradient(#000 70%, transparent); -webkit-mask-image:linear-gradient(#000 70%, transparent); }
+  .snippet.short { mask-image:none; -webkit-mask-image:none; }
+  .act { min-width:44px; height:38px; padding:0 12px; border-radius:11px; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+         font-weight:650; font-size:13.5px; background:var(--soft); color:var(--accent); flex:none; text-decoration:none; transition:transform .1s, background .15s; }
+  .act:active { transform:scale(.94); }
+  .act svg { width:17px; height:17px; stroke-width:2.1; }
+  .act.done { background:color-mix(in srgb, var(--good) 16%, transparent); color:var(--good); }
+  .act.plain { background:transparent; color:var(--sub); padding:0; width:38px; min-width:38px; }
+  .head-btn { font-size:13px; font-weight:650; color:var(--accent); display:inline-flex; gap:5px; align-items:center; padding:6px 4px; }
+  .head-btn svg { width:16px; height:16px; }
+
+  /* upload progress */
+  .bar { height:4px; border-radius:4px; background:var(--line); overflow:hidden; margin-top:7px; }
+  .bar i { display:block; height:100%; width:0; border-radius:4px; background:var(--accent); transition:width .2s linear; position:relative; overflow:hidden; }
+  .bar i::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); animation:shine 1.2s linear infinite; }
+  .row.finished .bar i { background:var(--good); } .row.finished .bar i::after, .row.failed .bar i::after { display:none; }
+  .row.failed .bar i { background:var(--bad); }
+  .row.leave { animation:leave .4s ease forwards; }
+  @keyframes shine { from { transform:translateX(-100%); } to { transform:translateX(100%); } }
+  @keyframes leave { to { opacity:0; transform:translateX(30px); } }
+
+  /* empty / skeleton */
+  .empty { padding:26px 20px; text-align:center; color:var(--sub); font-size:13.5px; }
+  .empty svg { width:30px; height:30px; display:block; margin:0 auto 10px; opacity:.6; }
+  .skel { height:68px; border-top:1px solid var(--line); background:linear-gradient(90deg, transparent, var(--card2), transparent) 0 0/200% 100%; animation:sk 1.3s linear infinite; }
+  .skel:first-child { border-top:0; }
+  @keyframes sk { from { background-position:200% 0; } to { background-position:-200% 0; } }
+
+  /* shelf grid */
+  .grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; display:flex; flex-direction:column; text-decoration:none; color:inherit;
+          box-shadow:var(--shadow); transition:transform .12s; }
+  .tile:active { transform:scale(.97); }
+  .tile.enter { animation:enter .5s cubic-bezier(.2,.9,.3,1.2); }
+  .tile .pv { aspect-ratio:4/3; background:var(--card2); display:grid; place-items:center; color:var(--sub); position:relative; }
+  .tile .pv img { width:100%; height:100%; object-fit:cover; display:block; }
+  .tile .pv svg { width:34px; height:34px; stroke-width:1.5; }
+  .tile .pv .ext { position:absolute; top:8px; left:8px; font-size:10px; font-weight:750; letter-spacing:.04em; text-transform:uppercase;
+                   background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:1px 6px; }
+  .tile .info { padding:10px 12px 12px; display:flex; align-items:center; gap:8px; }
+  .tile .info .body .name { font-size:13.5px; }
+  .tile .dl { width:32px; height:32px; border-radius:10px; background:var(--soft); color:var(--accent); display:grid; place-items:center; flex:none; }
+  .tile .dl svg { width:16px; height:16px; stroke-width:2.2; }
+  .hint { font-size:12.5px; color:var(--sub); margin:14px 4px 0; display:flex; gap:8px; align-items:flex-start; }
+  .hint svg { width:16px; height:16px; margin-top:1px; }
+
+  /* tab bar */
+  nav { position:fixed; left:0; right:0; bottom:0; z-index:6; padding:8px 16px calc(10px + env(safe-area-inset-bottom));
+        background:color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter:saturate(1.6) blur(18px); -webkit-backdrop-filter:saturate(1.6) blur(18px);
+        border-top:1px solid var(--line); }
+  nav .in { max-width:400px; margin:0 auto; display:flex; gap:6px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:5px; position:relative; }
+  nav .ind { position:absolute; top:5px; bottom:5px; left:5px; width:calc(50% - 5px); border-radius:13px; background:var(--soft);
+             transition:transform .35s cubic-bezier(.3,1.3,.5,1); }
+  nav[data-tab=shelf] .ind { transform:translateX(100%); }
+  nav button { flex:1; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:650; font-size:14.5px;
+               color:var(--sub); position:relative; z-index:1; transition:color .2s; }
+  nav button[aria-selected=true] { color:var(--accent); }
+  .badge { min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--accent); color:var(--on-accent); font-size:11px; font-weight:750;
+           display:none; align-items:center; justify-content:center; animation:pop .35s cubic-bezier(.3,1.6,.5,1); }
+  .badge.on { display:inline-flex; }
+  @keyframes pop { from { transform:scale(0); } }
+
+  /* drag overlay, toast, off screen */
+  #overlay { position:fixed; inset:0; z-index:20; display:none; place-items:center; background:color-mix(in srgb, var(--bg) 70%, transparent);
+             backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+  #overlay.on { display:grid; }
+  #overlay div { border:2px dashed var(--accent); border-radius:28px; padding:48px 40px; text-align:center; background:var(--card); font-weight:650; font-size:18px; }
+  #overlay svg { width:40px; height:40px; color:var(--accent); display:block; margin:0 auto 12px; }
+  #toast { position:fixed; left:50%; top:calc(12px + env(safe-area-inset-top)); z-index:30; transform:translate(-50%,-140%); max-width:min(92vw, 440px);
+           display:flex; align-items:center; gap:10px; padding:11px 16px 11px 12px; border-radius:16px; background:var(--card); border:1px solid var(--line2);
+           box-shadow:0 12px 32px rgba(0,0,0,.35); font-weight:600; font-size:14px; transition:transform .45s cubic-bezier(.3,1.4,.5,1); }
   #toast.show { transform:translate(-50%,0); }
+  #toast .ti { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; background:var(--soft); color:var(--accent); flex:none; }
+  #toast .ti svg { width:17px; height:17px; }
+  #toast span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #off { display:none; text-align:center; padding:80px 24px; }
+  #off .ring { width:64px; height:64px; border-radius:20px; display:grid; place-items:center; margin:0 auto 18px; background:color-mix(in srgb, var(--bad) 15%, transparent); color:var(--bad); }
+  #off .ring svg { width:30px; height:30px; }
+  #off h1 { font-size:21px; margin:0 0 8px; } #off p { margin:0 auto; color:var(--sub); max-width:320px; }
+  body.is-off main, body.is-off nav { display:none; } body.is-off #off { display:block; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
+  @media (min-width:600px) { .grid { grid-template-columns:repeat(3, minmax(0,1fr)); } }
 </style>
 </head>
 <body>
-<main>
-  <h1>{{NAME}}</h1>
-  <div class="sub">OrixNotch · same Wi-Fi only · this link stops working when Phone transfer is turned off</div>
+<header id="top">
+  <div class="wrap">
+    <div class="logo" aria-hidden="true"><i></i></div>
+    <div class="who"><b>{{NAME}}</b><span>OrixNotch · same Wi-Fi</span></div>
+    <div class="pill" id="pill" data-s="wait" role="status" aria-live="polite"><span class="dot"></span><span id="pillText">Connecting…</span></div>
+  </div>
+</header>
 
-  <section>
-    <div class="head"><h2>From PC</h2><button id="all" class="all" hidden>Download all (.zip)</button></div>
-    <ul id="outbox"><li class="empty">Loading…</li></ul>
+<main class="wrap">
+  <!-- Transfer: send to the PC, and what the PC sent here. -->
+  <section class="view on" id="v-transfer">
+    <div class="sec">
+      <div class="card send">
+        <label class="drop" id="drop" for="pickAny">
+          <div class="big"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></div>
+          <b>Send to PC</b>
+          <span>Tap to choose, or drop files here</span>
+        </label>
+        <input id="pickAny" type="file" multiple>
+        <input id="pickMedia" type="file" accept="image/*,video/*" multiple>
+        <div class="chips">
+          <button class="chip" id="chipMedia"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/></svg>Photos &amp; videos</button>
+          <button class="chip" id="chipFiles"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Files</button>
+        </div>
+        <div class="compose">
+          <textarea id="text" rows="1" placeholder="Type or paste text, links, codes…" aria-label="Text to send"></textarea>
+          <button class="ibtn" id="paste" title="Paste" hidden><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg></button>
+          <button class="ibtn go" id="sendText" title="Send text" disabled><svg viewBox="0 0 24 24"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec" id="upSec" hidden>
+      <div class="sec-h"><h2>Sending</h2></div>
+      <div class="card list" id="up"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h2>From PC</h2><span class="count" id="outCount" hidden></span>
+        <button class="head-btn" id="all" hidden><svg viewBox="0 0 24 24"><path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5"/><path d="M4 20h16"/></svg>All (.zip)</button></div>
+      <div class="card list" id="outbox"><div class="skel"></div><div class="skel"></div></div>
+    </div>
+
+    <div class="sec" id="histSec" hidden>
+      <div class="sec-h"><h2>Sent to PC</h2><span class="count" id="histCount"></span></div>
+      <div class="card list" id="hist"></div>
+    </div>
   </section>
 
-  <section>
-    <h2>Send to PC</h2>
-    <label class="drop" for="pick"><b>Choose files</b><br><span class="sub">Photos, videos, documents — they land on the Shelf</span></label>
-    <input id="pick" type="file" multiple>
-    <ul id="up"></ul>
-  </section>
-
-  <section>
-    <h2>Send text</h2>
-    <textarea id="text" placeholder="Links, notes, codes…"></textarea>
-    <button id="sendText">Send</button> <span id="textState" class="sub"></span>
-  </section>
-
-  <section>
-    <h2>On the Shelf</h2>
-    <ul id="files"><li class="empty">Loading…</li></ul>
+  <!-- Shelf: what's parked on the PC's Shelf. -->
+  <section class="view" id="v-shelf">
+    <div class="sec">
+      <div class="sec-h"><h2>On the Shelf</h2><span class="count" id="shelfCount" hidden></span></div>
+      <div class="grid" id="shelf"></div>
+      <div class="hint"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg>
+        <span>The Shelf is the PC's parking spot. Things you send from here go to the PC's download folder, not the Shelf.</span></div>
+    </div>
   </section>
 </main>
-<div id="toast"></div>
+
+<nav id="nav" data-tab="transfer">
+  <div class="in" role="tablist">
+    <span class="ind"></span>
+    <button role="tab" id="t-transfer" aria-selected="true" data-tab="transfer">
+      <svg viewBox="0 0 24 24"><path d="M7 4v14m0 0-3-3m3 3 3-3M17 20V6m0 0-3 3m3-3 3 3"/></svg>Transfer<span class="badge" id="b-transfer"></span></button>
+    <button role="tab" id="t-shelf" aria-selected="false" data-tab="shelf">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg>Shelf<span class="badge" id="b-shelf"></span></button>
+  </div>
+</nav>
+
+<div id="off">
+  <div class="ring"><svg viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></svg></div>
+  <h1>Link turned off</h1>
+  <p>Phone transfer was turned off on the PC. Turn on Phone in OrixNotch and scan the new code.</p>
+</div>
+<div id="overlay"><div><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Drop to send to {{NAME}}</div></div>
+<div id="toast" role="status" aria-live="polite"><span class="ti"></span><span id="toastText"></span></div>
+
 <script>
+(() => {
+  const $ = id => document.getElementById(id);
   const key = new URLSearchParams(location.search).get('k') || '';
   const q = p => p + (p.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
   const fmt = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB'
     : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
-  let known = null;
-  function toast(text) {
-    const t = document.getElementById('toast');
-    t.textContent = text;
-    t.classList.add('show');
-    clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => t.classList.remove('show'), 3000);
+  // Text on the accent: dark on light accents, white on dark ones.
+  (() => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+    if (!m) { document.documentElement.style.setProperty('--accent', '#ff8a3d'); return; }
+    const n = parseInt(m[1], 16), lum = (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;
+    document.documentElement.style.setProperty('--on-accent', lum > 0.6 ? '#111' : '#fff');
+  })();
+
+  // ------------------------------------------------------------ icons
+  const P = {
+    check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    down: '<path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5"/><path d="M4 20h16"/>',
+    x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    retry: '<path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/>',
+    file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+    img: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/>',
+    vid: '<rect x="3" y="5" width="13" height="14" rx="3"/><path d="m16 10 5-3v10l-5-3"/>',
+    aud: '<path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+    zip: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M11 5h1M11 8h1M11 11h1M10.5 14h2v3h-2z"/>',
+    txt: '<path d="M5 6h14M5 11h14M5 16h9"/>',
+    dir: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    pc: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    up: '<path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+    shelf: '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>',
+    wifi: '<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><path d="M12 19.5h.01"/>',
+  };
+  const svg = n => `<svg viewBox="0 0 24 24">${P[n]}</svg>`;
+  const kindOf = name => {
+    const e = (name.split('.').pop() || '').toLowerCase();
+    if (/^(png|jpe?g|gif|webp|bmp|heic|heif|avif|svg|tiff?)$/.test(e)) return 'img';
+    if (/^(mp4|mov|m4v|webm|mkv|avi|3gp)$/.test(e)) return 'vid';
+    if (/^(mp3|m4a|aac|wav|flac|ogg|opus)$/.test(e)) return 'aud';
+    if (/^(zip|rar|7z|tar|gz|xz)$/.test(e)) return 'zip';
+    if (/^(txt|md|log|csv|json)$/.test(e)) return 'txt';
+    if (/^(pdf|docx?|xlsx?|pptx?|odt|rtf|pages|key|numbers)$/.test(e)) return 'doc';
+    return 'file';
+  };
+  const extOf = name => { const i = name.lastIndexOf('.'); return i > 0 && name.length - i <= 6 ? name.slice(i + 1) : ''; };
+  function thumb(name, kind, src) {
+    const t = el('div', 'thumb');
+    if (src) {
+      const img = el('img'); img.loading = 'lazy'; img.decoding = 'async'; img.alt = ''; img.src = src;
+      img.onerror = () => { img.remove(); t.classList.add('c-img'); t.innerHTML = svg('img'); };
+      t.append(img);
+      return t;
+    }
+    const k = kind || kindOf(name);
+    t.classList.add('c-' + k);
+    t.innerHTML = svg(k === 'doc' ? 'file' : k);
+    const ext = k === 'file' || k === 'doc' ? extOf(name) : '';
+    if (ext) t.append(el('span', 'ext', ext));
+    return t;
   }
 
-  // Plain HTTP on the LAN isn't a secure context, so navigator.clipboard is missing: copy via a selection.
-  function copy(text, button) {
-    const area = document.createElement('textarea');
-    area.value = text; area.setAttribute('readonly', ''); area.style.position = 'fixed'; area.style.opacity = '0';
+  // ------------------------------------------------------------ relative time
+  const ago = iso => {
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (!isFinite(s) || s < 45) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' h ago';
+    return new Date(iso).toLocaleDateString();
+  };
+  const timeEl = iso => { const t = el('span', null, ago(iso)); t.dataset.at = iso; return t; };
+  setInterval(() => document.querySelectorAll('[data-at]').forEach(t => { t.textContent = ago(t.dataset.at); }), 30000);
+
+  // ------------------------------------------------------------ toast, badges, title
+  function toast(text, icon = 'pc') {
+    $('toast').querySelector('.ti').innerHTML = svg(icon);
+    $('toastText').textContent = text;
+    $('toast').classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => $('toast').classList.remove('show'), 3200);
+  }
+  const unseen = { transfer: 0, shelf: 0 };
+  function bump(tab, n) {
+    if (tab === current && !document.hidden) return;
+    unseen[tab] += n;
+    paintBadges();
+  }
+  function paintBadges() {
+    for (const tab of ['transfer', 'shelf']) {
+      const b = $('b-' + tab);
+      b.textContent = unseen[tab] > 9 ? '9+' : unseen[tab];
+      b.classList.toggle('on', unseen[tab] > 0);
+    }
+    const total = unseen.transfer + unseen.shelf;
+    document.title = (total ? `(${total}) ` : '') + '{{NAME}} · OrixNotch';
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { unseen[current] = 0; paintBadges(); } });
+
+  // ------------------------------------------------------------ tabs
+  let current = store.get('orix.tab') === 'shelf' ? 'shelf' : 'transfer';
+  function show(tab) {
+    current = tab;
+    store.set('orix.tab', tab);
+    $('nav').dataset.tab = tab;
+    for (const t of ['transfer', 'shelf']) {
+      $('v-' + t).classList.toggle('on', t === tab);
+      $('t-' + t).setAttribute('aria-selected', t === tab);
+    }
+    unseen[tab] = 0;
+    paintBadges();
+    window.scrollTo({ top: 0 });
+  }
+  document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
+  show(current);
+  addEventListener('scroll', () => $('top').classList.toggle('scrolled', scrollY > 4), { passive: true });
+
+  // ------------------------------------------------------------ connection
+  let state = '';
+  function setState(s, text) {
+    if (state === 'off') return; // final until the page is reloaded with a new link
+    state = s;
+    $('pill').dataset.s = s;
+    $('pillText').textContent = text;
+    document.body.classList.toggle('is-off', s === 'off');
+  }
+  async function api(path) {
+    const r = await fetch(q(path), { cache: 'no-store' });
+    if (r.status === 403) { setState('off', 'Turned off'); throw new Error('off'); }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  // ------------------------------------------------------------ keyed list rendering (no flicker, only new rows animate)
+  function render(container, items, keyOf, build, emptyNode) {
+    const old = new Map([...container.children].filter(n => n.dataset.key).map(n => [n.dataset.key, n]));
+    const first = !container.dataset.ready;
+    container.dataset.ready = '1';
+    const nodes = [];
+    let fresh = 0;
+    for (const item of items) {
+      const k = keyOf(item);
+      let node = old.get(k);
+      if (!node) {
+        node = build(item);
+        node.dataset.key = k;
+        if (!first) { node.classList.add('enter'); fresh++; }
+      } else if (node.update) node.update(item);
+      nodes.push(node);
+    }
+    container.replaceChildren(...(nodes.length ? nodes : [emptyNode()]));
+    return first ? 0 : fresh;
+  }
+  const empty = (icon, text) => () => { const e = el('div', 'empty'); e.innerHTML = svg(icon); e.append(text); return e; };
+
+  // ------------------------------------------------------------ copy (plain HTTP has no async clipboard)
+  function copy(text) {
+    const area = el('textarea');
+    area.value = text; area.setAttribute('readonly', ''); area.style.cssText = 'position:fixed;opacity:0';
     document.body.append(area); area.select();
     let ok = false;
     try { ok = document.execCommand('copy'); } catch {}
     area.remove();
-    if (!ok && navigator.clipboard) navigator.clipboard.writeText(text).then(() => { button.textContent = 'Copied'; });
-    button.textContent = ok ? 'Copied' : 'Select & copy';
-    setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+    if (!ok && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+    return ok;
+  }
+  function copyButton(text) {
+    const b = el('button', 'act');
+    b.innerHTML = svg('copy') + '<span>Copy</span>';
+    b.addEventListener('click', () => {
+      const ok = copy(text);
+      b.classList.add('done');
+      b.innerHTML = svg('check') + `<span>${ok ? 'Copied' : 'Select'}</span>`;
+      if (navigator.vibrate) navigator.vibrate(15);
+      setTimeout(() => { b.classList.remove('done'); b.innerHTML = svg('copy') + '<span>Copy</span>'; }, 1600);
+    });
+    return b;
   }
 
+  // ------------------------------------------------------------ From PC
+  function outboxRow(i) {
+    const row = el('div', 'row');
+    const body = el('div', 'body');
+    const meta = el('div', 'meta');
+    if (i.kind === 'text') {
+      row.append(thumb('', 'txt'));
+      const s = el('div', 'snippet', i.text);
+      if (i.text.length < 140 && i.text.split('\n').length < 4) s.classList.add('short');
+      body.append(s);
+      meta.append(el('span', null, 'Text ·'), timeEl(i.at));
+      body.append(meta);
+      row.append(body, copyButton(i.text));
+      return row;
+    }
+    row.append(thumb(i.name, i.kind === 'folder' ? 'dir' : null, i.image ? q('/web/send?preview=1&id=' + i.id) : null));
+    body.append(el('div', 'name', i.name), meta);
+    const a = el('a', 'act');
+    a.href = q('/web/send?id=' + i.id);
+    a.setAttribute('download', i.kind === 'folder' ? i.name + '.zip' : i.name);
+    a.setAttribute('aria-label', 'Download ' + i.name);
+    a.innerHTML = svg('down');
+    row.update = it => {
+      meta.replaceChildren(el('span', null, it.kind === 'folder' ? 'Folder · .zip' : fmt(it.size)), el('span', null, '·'), timeEl(it.at));
+      if (it.state === 'Downloaded') { const ok = el('span', 'ok'); ok.innerHTML = svg('check'); ok.append('Saved'); meta.append(el('span', null, '·'), ok); }
+    };
+    row.update(i);
+    row.append(body, a);
+    return row;
+  }
   async function loadOutbox() {
-    const list = document.getElementById('outbox');
     try {
-      const r = await fetch(q('/web/outbox'));
-      if (!r.ok) throw new Error(r.status === 403 ? 'Link expired — scan the QR code again.' : 'Error ' + r.status);
-      const items = await r.json();
-      if (known) {
-        const fresh = items.filter(i => !known.has(i.id));
-        if (fresh.length) {
-          toast(fresh.length === 1 ? 'New from PC: ' + fresh[0].name : fresh.length + ' new items from PC');
-          if (navigator.vibrate) navigator.vibrate(80);
-        }
+      const items = await api('/web/outbox');
+      const fresh = render($('outbox'), items, i => i.id, outboxRow,
+        empty('pc', 'Nothing yet. Drop files on the Phone tab in OrixNotch, and they show up here instantly.'));
+      const files = items.filter(i => i.kind !== 'text').length;
+      $('all').hidden = files < 2;
+      $('outCount').hidden = !items.length;
+      $('outCount').textContent = items.length;
+      if (fresh) {
+        const n = items.slice(0, fresh);
+        toast(fresh === 1 ? (n[0].kind === 'text' ? 'New text from PC' : 'New from PC: ' + n[0].name) : fresh + ' new items from PC', 'down');
+        if (navigator.vibrate) navigator.vibrate([30, 40, 30]);
+        bump('transfer', fresh);
       }
-      known = new Set(items.map(i => i.id));
-      list.replaceChildren();
-      if (!items.length) list.append(el('li', 'empty', 'Nothing yet. Drop files on the Phone tab in OrixNotch to send them here.'));
-      for (const i of items) {
-        const li = el('li');
-        if (i.kind === 'text') {
-          li.append(el('div', 'text', i.text));
-          const b = el('button', 'copy', 'Copy');
-          b.addEventListener('click', () => copy(i.text, b));
-          li.append(b);
-        } else {
-          const name = el('span', 'name', i.name);
-          if (i.kind === 'folder') name.append(el('span', 'badge', 'folder'));
-          li.append(name);
-          if (i.kind === 'file') li.append(el('span', 'size', fmt(i.size)));
-          const a = el('a', 'get', i.kind === 'folder' ? 'Download .zip' : 'Download');
-          a.href = q('/web/send?id=' + i.id);
-          a.setAttribute('download', i.kind === 'folder' ? i.name + '.zip' : i.name);
-          li.append(a);
-        }
-        list.append(li);
-      }
-      document.getElementById('all').hidden = items.filter(i => i.kind !== 'text').length < 2;
-    } catch (e) {
-      list.replaceChildren(el('li', 'err', e.message));
+    } catch (e) { if (e.message !== 'off') offline(); }
+  }
+  $('all').addEventListener('click', () => { location.href = q('/web/send-all'); });
+
+  // ------------------------------------------------------------ Sent to PC (history)
+  function histRow(h) {
+    const row = el('div', 'row');
+    const body = el('div', 'body');
+    if (h.kind === 'text') {
+      row.append(thumb('', 'txt'));
+      body.append(el('div', 'name', h.name));
+    } else {
+      row.append(thumb(h.name));
+      body.append(el('div', 'name', h.name));
     }
+    const meta = el('div', 'meta');
+    const ok = el('span', 'ok'); ok.innerHTML = svg('check'); ok.append('On PC');
+    meta.append(ok, el('span', null, '·'), el('span', null, h.kind === 'text' ? 'Text' : fmt(h.size)), el('span', null, '·'), timeEl(h.at));
+    body.append(meta);
+    row.append(body);
+    return row;
+  }
+  async function loadHistory() {
+    try {
+      const items = await api('/web/received');
+      $('histSec').hidden = !items.length;
+      $('histCount').textContent = items.length;
+      render($('hist'), items, h => h.at + '|' + h.name, histRow, () => el('div'));
+    } catch (e) { if (e.message !== 'off') offline(); }
   }
 
-  document.getElementById('all').addEventListener('click', () => { location.href = q('/web/send-all'); });
-
-  async function loadFiles() {
-    const list = document.getElementById('files');
-    try {
-      const r = await fetch(q('/web/files'));
-      if (!r.ok) throw new Error(r.status === 403 ? 'Link expired — scan the QR code again.' : 'Error ' + r.status);
-      const files = await r.json();
-      list.replaceChildren();
-      if (!files.length) list.append(el('li', 'empty', 'Nothing on the Shelf. Drop files on the notch to share them here.'));
-      for (const f of files) {
-        const li = el('li');
-        li.append(el('span', 'name', f.name), el('span', 'size', fmt(f.size)));
-        const a = el('a', 'get', 'Download');
-        a.href = q('/web/file?id=' + f.id);
-        a.setAttribute('download', f.name);
-        li.append(a);
-        list.append(li);
-      }
-    } catch (e) {
-      list.replaceChildren(el('li', 'err', e.message));
+  // ------------------------------------------------------------ Shelf
+  function shelfTile(f) {
+    const a = el('a', 'tile');
+    a.href = q('/web/file?id=' + f.id);
+    a.setAttribute('download', f.name);
+    const pv = el('div', 'pv');
+    if (f.image) {
+      const img = el('img'); img.loading = 'lazy'; img.decoding = 'async'; img.alt = ''; img.src = a.href;
+      img.onerror = () => { img.remove(); pv.innerHTML = svg('img'); };
+      pv.append(img);
+    } else {
+      const k = kindOf(f.name);
+      pv.innerHTML = svg(k === 'doc' ? 'file' : k);
+      pv.firstChild.style.color = getComputedStyle(document.documentElement).getPropertyValue('--sub');
+      const ext = extOf(f.name);
+      if (ext) pv.append(el('span', 'ext', ext));
     }
+    const info = el('div', 'info');
+    const body = el('div', 'body');
+    body.append(el('div', 'name', f.name), el('div', 'meta', fmt(f.size)));
+    const dl = el('span', 'dl'); dl.innerHTML = svg('down');
+    info.append(body, dl);
+    a.append(pv, info);
+    a.update = it => { a.href = q('/web/file?id=' + it.id); };
+    return a;
+  }
+  async function loadShelf() {
+    try {
+      const files = await api('/web/files');
+      const grid = $('shelf');
+      grid.style.display = files.length ? '' : 'block';
+      // Ids are positions, so key on what the file is.
+      const fresh = render(grid, files, f => f.name + '|' + f.size, shelfTile,
+        () => { const c = el('div', 'card'); c.append(empty('shelf', 'The Shelf is empty. Drop files on the notch on your PC to park them here.')()); return c; });
+      $('shelfCount').hidden = !files.length;
+      $('shelfCount').textContent = files.length;
+      if (fresh) bump('shelf', fresh);
+    } catch (e) { if (e.message !== 'off') offline(); }
   }
 
-  function upload(file) {
+  // ------------------------------------------------------------ uploads (one at a time keeps weak Wi-Fi steady)
+  const queue = [];
+  let busy = false;
+  function enqueue(files) {
+    if (!files.length || state === 'off') return;
+    $('upSec').hidden = false;
+    for (const f of files) {
+      const job = { file: f, row: uploadRow(f) };
+      queue.push(job);
+      $('up').append(job.row);
+    }
+    if (navigator.vibrate) navigator.vibrate(10);
+    pump();
+  }
+  function uploadRow(file) {
+    const row = el('div', 'row enter');
+    const isImg = /^image\//.test(file.type) && file.size < 30e6;
+    let url = null;
+    if (isImg) url = URL.createObjectURL(file);
+    const t = thumb(file.name, /^video\//.test(file.type) ? 'vid' : null, url);
+    const body = el('div', 'body');
+    const meta = el('div', 'meta', 'Waiting · ' + fmt(file.size));
+    const bar = el('div', 'bar'); const fill = el('i'); bar.append(fill);
+    body.append(el('div', 'name', file.name), meta, bar);
+    const btn = el('button', 'act plain'); btn.innerHTML = svg('x'); btn.setAttribute('aria-label', 'Cancel');
+    row.append(t, body, btn);
+    Object.assign(row, { meta, fill, btn, url });
+    return row;
+  }
+  async function pump() {
+    if (busy) return;
+    busy = true;
+    while (queue.length) await send(queue.shift());
+    busy = false;
+    loadHistory();
+  }
+  function send(job) {
     return new Promise(resolve => {
-      const li = el('li');
-      const body = el('div'); body.style.flex = '1'; body.style.minWidth = '0';
-      const name = el('div', 'name', file.name);
-      const bar = el('div', 'bar'); const fill = el('i'); bar.append(fill);
-      const state = el('span', 'size', fmt(file.size));
-      body.append(name, bar); li.append(body, state);
-      document.getElementById('up').prepend(li);
-
+      const { file, row } = job;
+      row.classList.remove('failed', 'finished');
       const xhr = new XMLHttpRequest();
+      const start = performance.now();
+      let canceled = false;
+      row.btn.innerHTML = svg('x');
+      row.btn.onclick = () => { canceled = true; xhr.abort(); };
       xhr.open('POST', q('/web/upload?name=' + encodeURIComponent(file.name)));
-      xhr.upload.onprogress = e => { if (e.lengthComputable) fill.style.width = (e.loaded / e.total * 100) + '%'; };
-      xhr.onload = () => {
-        const ok = xhr.status === 200;
-        state.textContent = ok ? 'Sent' : xhr.status === 403 ? 'Link expired' : 'Failed';
-        state.className = ok ? 'size ok' : 'size err';
-        if (ok) fill.style.width = '100%';
+      xhr.upload.onprogress = e => {
+        if (!e.lengthComputable) return;
+        const pct = e.loaded / e.total, secs = (performance.now() - start) / 1000, rate = e.loaded / Math.max(secs, 0.1);
+        row.fill.style.width = (pct * 100).toFixed(1) + '%';
+        const left = rate > 0 ? (e.total - e.loaded) / rate : 0;
+        row.meta.textContent = `${Math.round(pct * 100)}% · ${fmt(rate)}/s` + (secs > 1.5 && left > 1 ? ` · ${left < 60 ? Math.ceil(left) + ' s' : Math.ceil(left / 60) + ' min'} left` : '');
+      };
+      const fail = text => {
+        row.classList.add('failed');
+        row.meta.replaceChildren(el('span', 'bad', text), el('span', null, '· ' + fmt(file.size)));
+        row.btn.innerHTML = svg('retry'); row.btn.setAttribute('aria-label', 'Retry');
+        row.btn.onclick = () => { queue.push(job); row.meta.textContent = 'Waiting · ' + fmt(file.size); row.fill.style.width = '0'; pump(); };
         resolve();
       };
-      xhr.onerror = () => { state.textContent = 'Failed'; state.className = 'size err'; resolve(); };
+      xhr.onload = () => {
+        if (xhr.status === 403) { setState('off', 'Turned off'); return fail('Link turned off'); }
+        if (xhr.status !== 200) return fail('Failed');
+        row.classList.add('finished');
+        row.fill.style.width = '100%';
+        const ok = el('span', 'ok'); ok.innerHTML = svg('check'); ok.append('Sent');
+        row.meta.replaceChildren(ok, el('span', null, '· ' + fmt(file.size)));
+        row.btn.remove();
+        setTimeout(() => {
+          row.classList.add('leave');
+          setTimeout(() => { if (row.url) URL.revokeObjectURL(row.url); row.remove(); if (!$('up').children.length) $('upSec').hidden = true; }, 400);
+        }, 2200);
+        resolve();
+      };
+      xhr.onerror = () => fail('Connection lost');
+      xhr.onabort = () => fail(canceled ? 'Canceled' : 'Stopped');
       xhr.send(file);
     });
   }
 
-  document.getElementById('pick').addEventListener('change', async e => {
-    const files = [...e.target.files];
-    e.target.value = '';
-    for (const f of files) await upload(f); // one at a time keeps a weak Wi-Fi link steady
-    loadFiles();
+  const pickAny = $('pickAny'), pickMedia = $('pickMedia');
+  for (const input of [pickAny, pickMedia])
+    input.addEventListener('change', e => { const files = [...e.target.files]; e.target.value = ''; enqueue(files); });
+  $('chipMedia').addEventListener('click', () => pickMedia.click());
+  $('chipFiles').addEventListener('click', () => pickAny.click());
+
+  // Drag and drop (desktop browsers).
+  let depth = 0;
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+  addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; $('overlay').classList.add('on'); });
+  addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; $('overlay').classList.remove('on'); } });
+  addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); depth = 0; $('overlay').classList.remove('on');
+    if (current !== 'transfer') show('transfer');
+    enqueue([...e.dataTransfer.files]);
   });
 
-  document.getElementById('sendText').addEventListener('click', async () => {
-    const box = document.getElementById('text');
-    const state = document.getElementById('textState');
-    if (!box.value.trim()) return;
-    try {
-      const r = await fetch(q('/web/text'), { method: 'POST', body: box.value, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-      state.textContent = r.ok ? 'Sent ✓' : 'Failed (' + r.status + ')';
-      if (r.ok) box.value = '';
-    } catch { state.textContent = 'Failed'; }
-  });
-
-  loadOutbox();
-  loadFiles();
-  // Live: the PC says when something changed; EventSource reconnects by itself. The poll is a fallback.
-  if (window.EventSource) {
-    const events = new EventSource(q('/web/events'));
-    events.addEventListener('outbox', loadOutbox);
-    events.addEventListener('shelf', loadFiles);
-    events.addEventListener('open', () => { loadOutbox(); loadFiles(); }); // catch up after a reconnect
+  // ------------------------------------------------------------ text
+  const box = $('text');
+  const grow = () => { box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight, 160) + 'px'; $('sendText').disabled = !box.value.trim(); };
+  box.addEventListener('input', grow);
+  box.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendText(); } });
+  $('sendText').addEventListener('click', sendText);
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    $('paste').hidden = false;
+    $('paste').addEventListener('click', async () => { try { box.value += await navigator.clipboard.readText(); grow(); box.focus(); } catch {} });
   }
-  setInterval(() => { loadOutbox(); loadFiles(); }, 30000);
+  async function sendText() {
+    const text = box.value;
+    if (!text.trim()) return;
+    const btn = $('sendText');
+    btn.disabled = true;
+    try {
+      const r = await fetch(q('/web/text'), { method: 'POST', body: text, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      if (r.status === 403) { setState('off', 'Turned off'); return; }
+      if (!r.ok) throw new Error();
+      box.value = ''; grow();
+      toast('Text sent to {{NAME}}', 'check');
+      if (navigator.vibrate) navigator.vibrate(15);
+      loadHistory();
+    } catch {
+      toast('Couldn’t send — is the PC reachable?', 'wifi');
+      btn.disabled = false;
+    }
+  }
+
+  // ------------------------------------------------------------ live updates
+  let events = null, unreachable = null, retry = 1000;
+  function offline() {
+    if (state === 'off') return;
+    setState('wait', 'Reconnecting…');
+    if (!unreachable) unreachable = setTimeout(() => { if (state === 'wait') setState('wait', 'PC unreachable'); }, 10000);
+  }
+  function refreshAll() { loadOutbox(); loadShelf(); loadHistory(); }
+  function connect() {
+    if (!window.EventSource) { setState('live', 'Connected'); return; }
+    events = new EventSource(q('/web/events'));
+    events.addEventListener('hello', () => {
+      clearTimeout(unreachable); unreachable = null; retry = 1000;
+      const was = state;
+      setState('live', 'Live');
+      if (was === 'wait' && $('outbox').dataset.ready) toast('Connected to {{NAME}}', 'wifi');
+      refreshAll(); // catch up on anything missed while away
+    });
+    events.addEventListener('outbox', loadOutbox);
+    events.addEventListener('shelf', loadShelf);
+    events.addEventListener('received', loadHistory);
+    events.onerror = () => {
+      offline();
+      if (events.readyState === EventSource.CLOSED) {
+        // The browser gave up (e.g. the PC answered 403 or the app restarted): check the link, then try again.
+        events.close();
+        fetch(q('/web/outbox'), { cache: 'no-store' })
+          .then(r => { if (r.status === 403) setState('off', 'Turned off'); })
+          .catch(() => {})
+          .finally(() => { if (state !== 'off') setTimeout(connect, retry = Math.min(retry * 2, 15000)); });
+      }
+    };
+  }
+
+  refreshAll();
+  connect();
+  setInterval(() => { if (state !== 'off') refreshAll(); }, 30000); // fallback if live updates are blocked
+  addEventListener('online', () => { if (state !== 'off') refreshAll(); });
+})();
 </script>
 </body>
 </html>

@@ -40,6 +40,21 @@ public sealed partial class DropPayload
     public static bool CanAccept(IDataObject data) =>
         data.GetDataPresent(DataFormats.FileDrop) || data.GetDataPresent(Descriptor) || data.GetDataPresent(DataFormats.UnicodeText);
 
+    public static bool IsImagePath(string path) => ImageExtensions.Contains(Path.GetExtension(path));
+
+    /// <summary>
+    /// Whether the drag looks like it carries an image: an image file, a browser's virtual file, or an
+    /// &lt;img&gt; / image link. Cheap enough for DragEnter/DragOver (doesn't read the file contents).
+    /// </summary>
+    public static bool HasImage(IDataObject data)
+    {
+        if (data.GetDataPresent(DataFormats.FileDrop))
+            return Try(() => data.GetData(DataFormats.FileDrop)) is string[] files && files.Any(IsImagePath);
+        if (data.GetDataPresent(Descriptor)) return true;
+        var text = Try(() => data.GetData(DataFormats.UnicodeText)) is string { Length: > 0 } t ? t : null;
+        return Try(() => ImageSource(data, text)) is not null;
+    }
+
     /// <summary>Reads the drop now (the data object stops working once the drop returns). Null when there's nothing usable.</summary>
     public static DropPayload? Read(IDataObject data)
     {

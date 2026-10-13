@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.IO.Compression;
+using System.Text.Json;
 using System.Threading.Channels;
 using System.Windows;
 using System.Windows.Media.Imaging;
@@ -146,6 +147,9 @@ public sealed partial class PhoneTransferService
                     name = o.Name,
                     size = o.Size,
                     text = o.Text,
+                    image = o.Kind == PhoneOutboxKind.File && Shell.DropPayload.IsImagePath(o.Name),
+                    at = o.SentAt,
+                    state = o.State,
                 }).ToList();
             }), Json)
             : Results.StatusCode(403));
@@ -172,6 +176,9 @@ public sealed partial class PhoneTransferService
         }
 
         if (!File.Exists(item.Path)) return Results.NotFound();
+        // A thumbnail on the page: served inline and not counted as a download.
+        if (ctx.Request.Query["preview"] == "1")
+            return Results.File(item.Path, ContentTypeOf(item.Path), enableRangeProcessing: true);
         // A resumed download: let Kestrel serve the range (no progress for it).
         if (ctx.Request.Headers.Range.Count > 0)
             return Results.File(item.Path, ContentTypeOf(item.Path), item.Name, enableRangeProcessing: true);
@@ -294,6 +301,7 @@ public sealed partial class PhoneTransferService
             {
                 transfer.Finish("Downloaded");
                 foreach (var item in items) item.State = "Downloaded";
+                Push("outbox"); // the page marks them done
             });
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException)
@@ -334,7 +342,7 @@ public sealed partial class PhoneTransferService
         var aborted = ctx.RequestAborted;
         try
         {
-            await WriteAsync(": hello\n\n");
+            await WriteAsync($"event: hello\ndata: {JsonSerializer.Serialize(new { name = Environment.MachineName })}\n\n");
             var reader = channel.Reader;
             while (!aborted.IsCancellationRequested)
             {

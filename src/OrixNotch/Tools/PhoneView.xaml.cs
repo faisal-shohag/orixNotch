@@ -133,9 +133,22 @@ public partial class PhoneView : UserControl, IToolView
         }
     }
 
-    /// <summary>Opens the receive folder in Explorer with the file selected.</summary>
+    /// <summary>Copies text the phone sent; for a file, opens the receive folder in Explorer with it selected.</summary>
     private void OnTransferClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
+        if ((sender as FrameworkElement)?.DataContext is PhoneTransfer { Text: { } text } textTransfer)
+        {
+            try
+            {
+                Clipboard.SetText(text);
+                textTransfer.State = "Copied";
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                textTransfer.State = "Clipboard busy · click again";
+            }
+            return;
+        }
         if ((sender as FrameworkElement)?.DataContext is not PhoneTransfer { SavedPath: { } path }) return;
         try
         {
@@ -181,7 +194,7 @@ public partial class PhoneView : UserControl, IToolView
     {
         if (DropPayload.Read(e.Data) is not { } payload) return;
         e.Handled = true;
-        NotchWindow.Instance?.DeliverDrop(payload, toPhone: true);
+        NotchWindow.Instance?.DeliverDrop(payload, NotchWindow.DropTarget.Phone);
     }
 
     // ---------------------------------------------------------------- resize (same handle as Ask AI)

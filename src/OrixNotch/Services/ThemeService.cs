@@ -129,14 +129,30 @@ public static class ThemeService
         var a = CurrentAccent;
         var res = Application.Current.Resources;
 
-        res["PillBrush"] = s.PillBrush();
-        res["SurfaceBrush"] = Solid(s.Surface);
-        res["Surface2Brush"] = Solid(s.Surface2);
-        res["HoverBrush"] = Solid(s.Hover);
+        if (IsGlass)
+        {
+            // Glass: the notch is a see-through tint over the desktop (NotchWindow.Glass.cs),
+            // panels are lighter panes on it and the rim catches light at the top.
+            var pill = PillAlpha;
+            res["PillBrush"] = s.PillTo is { } to ? Gradient([WithAlpha(s.Pill, pill), WithAlpha(to, pill)], vertical: true) : Solid(WithAlpha(s.Pill, pill));
+            var pane = (byte)Math.Max(0x70, pill * 0.75);
+            res["SurfaceBrush"] = Solid(WithAlpha(s.Surface, pane));
+            res["Surface2Brush"] = Solid(WithAlpha(s.Surface2, pane));
+            res["HoverBrush"] = Solid(WithAlpha(s.Hover, (byte)Math.Min(0xFF, pane + 0x20)));
+        }
+        else
+        {
+            res["PillBrush"] = s.PillBrush();
+            res["SurfaceBrush"] = Solid(s.Surface);
+            res["Surface2Brush"] = Solid(s.Surface2);
+            res["HoverBrush"] = Solid(s.Hover);
+        }
         res["TextBrush"] = Solid(s.Text);
         res["SubTextBrush"] = Solid(s.SubText);
         res["TrackBrush"] = Solid(WithAlpha(s.Text, (byte)(s.IsLight ? 0x22 : 0x2A)));
-        res["StrokeBrush"] = Solid(WithAlpha(s.Text, (byte)(s.IsLight ? 0x1A : 0x16)));
+        res["StrokeBrush"] = IsGlass
+            ? Gradient([WithAlpha(s.IsLight ? Colors.White : s.Text, 0x48), WithAlpha(s.Text, 0x12)], vertical: true)
+            : Solid(WithAlpha(s.Text, (byte)(s.IsLight ? 0x1A : 0x16)));
         res["ThumbBrush"] = Solid(WithAlpha(s.Text, 0x40));
         res["AccentBrush"] = a.Brush();
         res["AccentSoftBrush"] = a.Brush(0x30);
@@ -159,6 +175,25 @@ public static class ThemeService
 
         Changed?.Invoke();
     }
+
+    /// <summary>The notch is frosted glass (Settings › Appearance › Glass).</summary>
+    public static bool IsGlass => App.Settings.Glass;
+
+    /// <summary>Alpha of the notch tint while glass is on: more see-through as the strength drops.
+    /// Light schemes keep more tint so dark text stays readable over dark wallpapers.</summary>
+    public static byte PillAlpha
+    {
+        get
+        {
+            if (!IsGlass) return 0xFF;
+            var t = Math.Clamp(App.Settings.GlassStrength, 0, 1);
+            var min = CurrentScheme.IsLight ? 0x90 : 0x50;
+            return (byte)(min + (0xE8 - min) * t);
+        }
+    }
+
+    /// <summary>The notch colour as edge fades should paint it (see-through while glass is on).</summary>
+    public static Color PillFadeColor => WithAlpha(CurrentScheme.PillMid, PillAlpha);
 
     public static void SetScheme(string id)
     {

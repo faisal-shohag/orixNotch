@@ -32,6 +32,7 @@ public sealed class AppSettings
     public bool PhoneEnabled { get; set; }
     public string PhoneReceiveFolder { get; set; } = "";    // empty = Downloads\OrixNotch
     public double PhoneHeight { get; set; } = 220;
+    public int PhonePort { get; set; }                      // last port that worked, reused so the link survives restarts
 
     public string WeatherCity { get; set; } = "London";
     public bool UseFahrenheit { get; set; }
@@ -77,6 +78,8 @@ public sealed class AppSettings
 
     public string ThemeScheme { get; set; } = "midnight";
     public string ThemeAccent { get; set; } = "auto"; // "auto" = the scheme's own accent
+    public bool Glass { get; set; }                    // see-through, tinted notch with a glass sheen
+    public double GlassStrength { get; set; } = 0.6;   // 0 = nearly clear, 1 = nearly opaque tint
 
     /// <summary>Small, Default, Large or ExtraLarge — size of the closed notch.</summary>
     public string NotchSize { get; set; } = "Default";
