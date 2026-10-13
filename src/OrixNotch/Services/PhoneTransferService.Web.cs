@@ -21,7 +21,51 @@ public sealed partial class PhoneTransferService
     private string _webKey = "";
     private string? _page;
 
-    private void NewWebKey() => _webKey = RandomId();
+    private const string KeyFile = "phone-key.bin";
+    private static readonly byte[] KeyEntropy = Encoding.UTF8.GetBytes("OrixNotch.PhoneKey");
+
+    /// <summary>The saved key, or a new one (saved) when there's none yet.</summary>
+    private void LoadOrCreateWebKey()
+    {
+        var path = Storage.PathOf(KeyFile);
+        try
+        {
+            if (File.Exists(path))
+            {
+                var key = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), KeyEntropy, DataProtectionScope.CurrentUser));
+                if (key.Length >= 12)
+                {
+                    _webKey = key;
+                    return;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is CryptographicException or IOException)
+        {
+            App.Log(ex);
+        }
+        _webKey = RandomId();
+        try
+        {
+            File.WriteAllBytes(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(_webKey), KeyEntropy, DataProtectionScope.CurrentUser));
+        }
+        catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
+        {
+            App.Log(ex); // the link still works until the app restarts
+        }
+    }
+
+    private static void ForgetWebKey()
+    {
+        try
+        {
+            File.Delete(Storage.PathOf(KeyFile));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            App.Log(ex);
+        }
+    }
 
     /// <summary>Unguessable, URL-safe and easy to read out (no 0/o, 1/l).</summary>
     private static string RandomId()
@@ -43,7 +87,19 @@ public sealed partial class PhoneTransferService
             id = i,
             name = Path.GetFileName(f),
             size = new FileInfo(f).Length,
+            image = Shell.DropPayload.IsImagePath(f),
         }), Json) : Results.StatusCode(403));
+        // What the phone sent this session, so the page's history survives a reload.
+        app.MapGet("/web/received", (HttpContext ctx) => Allowed(ctx) ? Results.Json(OnUi(() => Transfers
+            .Where(t => t.Incoming && !t.IsActive && !t.Failed)
+            .Select(t => new
+            {
+                kind = t.Text is null ? "file" : "text",
+                name = t.Title,
+                size = t.Total,
+                text = t.Text,
+                at = t.At,
+            }).ToList()), Json) : Results.StatusCode(403));
         app.MapGet("/web/file", (HttpContext ctx) =>
         {
             if (!Allowed(ctx)) return Results.StatusCode(403);
@@ -86,8 +142,8 @@ public sealed partial class PhoneTransferService
             {
                 transfer.SavedPath = path;
                 transfer.Finish($"Saved to {Path.GetFileName(ReceiveFolder.TrimEnd('\\'))}");
-                ShelfService.Instance.AddFiles([path]);
-                Received?.Invoke(peer, 1);
+                Received?.Invoke(peer, 1, false);
+                Push("received");
             });
             return Results.Ok();
         }
@@ -106,10 +162,17 @@ public sealed partial class PhoneTransferService
         var text = await reader.ReadToEndAsync(ctx.RequestAborted);
         if (string.IsNullOrWhiteSpace(text)) return Results.BadRequest();
         var peer = PeerName(ctx);
+        var firstLine = text.Trim().Split('\n')[0].Trim();
+        var transfer = new PhoneTransfer(firstLine.Length > 60 ? firstLine[..57] + "…" : firstLine, peer, incoming: true, Encoding.UTF8.GetByteCount(text))
+        {
+            Text = text,
+        };
+        transfer.Finish("Text · click to copy");
         OnUi(() =>
         {
-            ShelfService.Instance.AddText(text);
-            Received?.Invoke(peer, 1);
+            Track(transfer);
+            Received?.Invoke(peer, 1, true);
+            Push("received");
         });
         return Results.Ok();
     }
@@ -122,14 +185,36 @@ public sealed partial class PhoneTransferService
             using var reader = new StreamReader(stream);
             _page = reader.ReadToEnd();
         }
-        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(Environment.MachineName));
+        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(Environment.MachineName)).Replace("{{ACCENT}}", AccentHex());
+    }
+
+    /// <summary>The notch's accent, so the page matches the PC's theme.</summary>
+    private static string AccentHex()
+    {
+        try
+        {
+            var c = OnUi(() => ThemeService.CurrentAccent.Mean);
+            return $"#{c.R:x2}{c.G:x2}{c.B:x2}";
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            return "#ff8a3d";
+        }
     }
 
     private static string ContentTypeOf(string path) =>
         ContentTypes.TryGetContentType(path, out var type) ? type : "application/octet-stream";
 
     private const string Denied =
-        "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>" +
-        "<body style='font:16px system-ui;background:#0b0b0d;color:#f5f5f7;padding:32px'>" +
-        "<h2>Link expired</h2><p>Scan the QR code in OrixNotch's Phone tab again.</p>";
+        "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>" +
+        "<meta name=color-scheme content='dark light'><title>OrixNotch · Link turned off</title>" +
+        "<style>:root{--bg:#0a0a0c;--text:#f4f4f6;--sub:#8b8b93;--card:#151518;--line:#26262b}" +
+        "@media(prefers-color-scheme:light){:root{--bg:#f3f3f6;--text:#141417;--sub:#6b6b73;--card:#fff;--line:#e4e4ea}}" +
+        "body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);" +
+        "font:15px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;padding:24px;box-sizing:border-box}" +
+        "div{max-width:360px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:32px 24px}" +
+        "i{display:block;width:12px;height:12px;border-radius:50%;background:#ff453a;margin:0 auto 18px;box-shadow:0 0 0 6px #ff453a26}" +
+        "h1{font-size:20px;margin:0 0 8px}p{margin:0;color:var(--sub)}</style>" +
+        "<div><i></i><h1>Link turned off</h1><p>Phone transfer was turned off on the PC. Turn on Phone in OrixNotch and scan the new code.</p></div>";
 }

@@ -184,6 +184,8 @@ public partial class NotchWindow : Window
         SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(Place);
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(Place);
         Place();
+        ThemeService.Changed += ApplyGlass;
+        ApplyGlass();
         _guardTimer.Start();
         _repelTimer.Start();
     }
@@ -678,6 +680,7 @@ public partial class NotchWindow : Window
         Body.Height = h;
         Body.Clip = new RectangleGeometry(new Rect(0, 0, w, h), radius, radius);
         Shape.Data = NotchGeometry(w, h, ear, radius, EarExpanded - ear);
+        if (GlassSheen.Visibility == Visibility.Visible) GlassSheen.Data = GlassGlow.Data = Shape.Data;
 
         // Content materialises out of a blur as the notch opens (and dissolves back on close).
         var reveal = Math.Clamp((p - 0.35) / 0.65, 0, 1);
@@ -1273,11 +1276,14 @@ public partial class NotchWindow : Window
             TimeSpan.FromSeconds(8), OnClick: () => _ = UpdateService.Instance.InstallAsync()));
     }
 
-    private void ShowPhoneReceivedPeek(string peer, int count)
+    private void ShowPhoneReceivedPeek(string peer, int count, bool text)
     {
-        var what = count == 1 ? "1 item" : $"{count} items";
+        var what = text ? "text" : count == 1 ? "1 file" : $"{count} files";
+        var detail = text
+            ? "Open Phone to copy it"
+            : $"From {peer} · in {System.IO.Path.GetFileName(PhoneTransferService.Instance.ReceiveFolder.TrimEnd('\\'))}";
         EnqueuePeek(new PeekRequest("phone:received", () => GlyphTile(AppIcon.DevicePhone), $"Received {what}",
-            $"From {peer} · on the Shelf", TimeSpan.FromSeconds(4), OnClick: () => OpenTool("shelf")));
+            detail, TimeSpan.FromSeconds(4), OnClick: () => OpenTool("phone")));
     }
 
     /// <summary>Brand logo on a soft tile (AI usage alerts).</summary>
@@ -1605,25 +1611,44 @@ public partial class NotchWindow : Window
     private void OnPillDragEnter(object sender, DragEventArgs e)
     {
         if (!DropPayload.CanAccept(e.Data)) return;
-        // The Shelf and Phone tabs take drops themselves; Ask AI and the teleprompter take text.
+        // The Shelf and Phone tabs take drops themselves; Ask AI takes images and text, the teleprompter text.
         if (_expanded && _activeTool is "shelf" or "phone") return;
-        if (_expanded && _activeTool is "teleprompter" or "ask" && !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        if (_expanded && _activeTool == "ask" && (DropPayload.HasImage(e.Data) || !e.Data.GetDataPresent(DataFormats.FileDrop))) return;
+        if (_expanded && _activeTool == "teleprompter" && !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
         ShowDropChooser();
     }
 
     private void OnPillDrop(object sender, DragEventArgs e)
     {
-        if (_activeTool is "teleprompter" or "ask" && e.Data.GetDataPresent(DataFormats.UnicodeText) && !DropChooser.IsVisible) return;
+        if (!DropChooser.IsVisible)
+        {
+            // Ask AI declined it (e.g. the model can't read images): don't send it to the Shelf behind its back.
+            if (_activeTool == "ask" && (DropPayload.HasImage(e.Data) || e.Data.GetDataPresent(DataFormats.UnicodeText))) return;
+            if (_activeTool == "teleprompter" && e.Data.GetDataPresent(DataFormats.UnicodeText)) return;
+        }
         if (DropPayload.Read(e.Data) is not { } payload) return;
         e.Handled = true;
-        DeliverDrop(payload, toPhone: false);
+        DeliverDrop(payload, DropTarget.Shelf);
     }
 
-    /// <summary>Puts a drop on the Shelf or offers it to the phone, then shows where it went.</summary>
-    public async void DeliverDrop(DropPayload payload, bool toPhone)
+    public enum DropTarget
+    {
+        Shelf,
+        Phone,
+        Ask,
+    }
+
+    /// <summary>Puts a drop on the Shelf, offers it to the phone or hands it to Ask AI, then shows where it went.</summary>
+    public async void DeliverDrop(DropPayload payload, DropTarget target)
     {
         HideDropChooser(restore: false);
-        ShowTool(toPhone ? "phone" : "shelf");
+        ShowTool(target switch { DropTarget.Phone => "phone", DropTarget.Ask => "ask", _ => "shelf" });
+        if (target == DropTarget.Ask)
+        {
+            if (_views.GetValueOrDefault("ask") is Tools.AskAiView ask) await ask.AcceptDrop(payload);
+            return;
+        }
+        var toPhone = target == DropTarget.Phone;
         var files = await payload.FilesAsync(Storage.Dir(toPhone ? "phone-out" : "shelf"));
         if (files is not null)
         {

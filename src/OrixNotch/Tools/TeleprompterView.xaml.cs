@@ -260,7 +260,7 @@ public partial class TeleprompterView : UserControl, IToolView
     private void UpdateFades()
     {
         var pill = ThemeService.CurrentScheme.PillMid; // a gradient scheme's notch isn't one colour
-        var alpha = (byte)Math.Round(255 * Math.Clamp(App.Settings.PrompterOpacity, 0.15, 1));
+        var alpha = (byte)Math.Round(ThemeService.PillAlpha * Math.Clamp(App.Settings.PrompterOpacity, 0.15, 1));
         var solid = Color.FromArgb(alpha, pill.R, pill.G, pill.B);
         var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);
         var top = new LinearGradientBrush(solid, clear, 90);

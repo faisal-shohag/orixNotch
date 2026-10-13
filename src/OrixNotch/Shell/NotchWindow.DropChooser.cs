@@ -8,11 +8,12 @@ namespace OrixNotch.Shell;
 
 /// <summary>
 /// Dragging files, an image or text onto the notch (idle, or open on a tool that doesn't take drops)
-/// opens it on two drop targets, Shelf and Phone, instead of guessing.
+/// opens it on its drop targets, Shelf, Phone and Ask AI, instead of guessing.
 /// </summary>
 public partial class NotchWindow
 {
     private const double ChooserW = 520;
+    private const double ChooserWithAskW = 690;
     private const double ChooserH = 150;
 
     private void ShowDropChooser()
@@ -22,12 +23,17 @@ public partial class NotchWindow
         DropPhoneSub.Text = PhoneTransferService.Instance.IsRunning ? "Send to your phone" : "Waits until Phone is on";
         ResetChooserTile(DropShelfFrame);
         ResetChooserTile(DropPhoneFrame);
+        ResetChooserTile(DropAskFrame);
+        var ask = !App.Settings.HiddenTools.Contains("ask");
+        DropAsk.Visibility = ask ? Visibility.Visible : Visibility.Collapsed;
+        DropAskGap.Width = new GridLength(ask ? 12 : 0);
+        DropAskColumn.Width = ask ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         ToolHost.Visibility = Visibility.Hidden;
         TabBar.Visibility = Visibility.Collapsed;
         BackButton.Visibility = Visibility.Collapsed;
         TitleText.Text = "Drop to…";
         DropChooser.Visibility = Visibility.Visible;
-        SetToolSize(ChooserW, ChooserH, showTabs: false);
+        SetToolSize(ask ? ChooserWithAskW : ChooserW, ChooserH, showTabs: false);
         DropChooser.MouseMove += OnChooserMouseMove;
     }
 
@@ -70,10 +76,11 @@ public partial class NotchWindow
     {
         if (DropPayload.Read(e.Data) is not { } payload) return;
         e.Handled = true;
-        DeliverDrop(payload, toPhone: sender == DropPhone);
+        DeliverDrop(payload, sender == DropPhone ? DropTarget.Phone : sender == DropAsk ? DropTarget.Ask : DropTarget.Shelf);
     }
 
-    private Rectangle? FrameOf(object sender) => sender == DropShelf ? DropShelfFrame : sender == DropPhone ? DropPhoneFrame : null;
+    private Rectangle? FrameOf(object sender) =>
+        sender == DropShelf ? DropShelfFrame : sender == DropPhone ? DropPhoneFrame : sender == DropAsk ? DropAskFrame : null;
 
     private static void ResetChooserTile(Rectangle frame)
     {

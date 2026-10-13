@@ -103,20 +103,61 @@ public partial class AskAiView
         return Clipboard.ContainsImage() ? new FormatConvertedBitmap(Clipboard.GetImage(), PixelFormats.Bgr24, null, 0) : null;
     }
 
+    /// <summary>Images (files, or dragged out of a browser) attach; plain text falls through to the TextBox.</summary>
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-        var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-        e.Effects = ModelReadsImages && files.Any(IsImageFile) ? DragDropEffects.Copy : DragDropEffects.None;
+        if (!DropPayload.HasImage(e.Data)) return;
+        e.Effects = ModelReadsImages && Input.IsEnabled ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
-    private void OnDrop(object sender, DragEventArgs e)
+    private async void OnDrop(object sender, DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || !ModelReadsImages) return;
-        foreach (var file in ((string[])e.Data.GetData(DataFormats.FileDrop)).Where(IsImageFile)) AddImageFile(file);
+        if (!DropPayload.HasImage(e.Data)) return;
         e.Handled = true;
+        if (DropPayload.Read(e.Data) is { } payload) await AcceptDrop(payload);
+    }
+
+    /// <summary>Takes a drop: images are attached, text goes into the message box.</summary>
+    public async Task AcceptDrop(DropPayload payload)
+    {
+        var files = await payload.FilesAsync(Path.Combine(Path.GetTempPath(), "OrixNotch", "ask-drops"));
+        if (files is not null)
+        {
+            var images = files.Where(IsImageFile).ToList();
+            if (images.Count == 0) ShowAttachHint("Only PNG, JPG, GIF, WebP or BMP images can be attached.");
+            else if (!ModelReadsImages) ShowAttachHint($"{AiService.LabelFor(AiService.ActiveProvider, App.Settings.AiModel)} can't read images — pick another model.");
+            else foreach (var file in images) AddImageFile(file);
+            if (payload.CreatesFiles) DeleteFiles(files);
+        }
+        else if (payload.Text is { } text && Input.IsEnabled)
+        {
+            Input.SelectedText = text;
+            Input.CaretIndex = Input.SelectionStart + Input.SelectionLength;
+        }
         Input.Focus();
+    }
+
+    private void ShowAttachHint(string text)
+    {
+        AttachRow.Visibility = Visibility.Visible;
+        AttachHint.Text = text;
+        AttachHint.SetResourceReference(TextBlock.ForegroundProperty, "BadBrush");
+    }
+
+    private static void DeleteFiles(IEnumerable<string> files)
+    {
+        foreach (var file in files)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                App.Log(ex);
+            }
+        }
     }
 
     private static bool IsImageFile(string path) => ImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());

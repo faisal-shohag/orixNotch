@@ -35,10 +35,16 @@ public sealed partial class PhoneTransfer : ObservableObject
     [ObservableProperty] private double _progress;
     [ObservableProperty] private bool _isActive = true;
     [ObservableProperty] private bool _failed;
+    /// <summary>Text the phone sent (instead of a file); clicking the row copies it.</summary>
+    public string? Text { get; init; }
+
+    public DateTime At { get; } = DateTime.Now;
+
     /// <summary>Where the received file was saved, once it's done.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanOpen))] private string? _savedPath;
 
-    public bool CanOpen => SavedPath is not null;
+    /// <summary>Clickable: opens the saved file, or copies the text.</summary>
+    public bool CanOpen => SavedPath is not null || Text is not null;
 
     public string Direction => Incoming ? $"From {Peer}" : $"To {Peer}";
 
@@ -117,8 +123,8 @@ public sealed partial class PhoneTransferService : ObservableObject
 
     public ObservableCollection<PhoneTransfer> Transfers { get; } = new();
 
-    /// <summary>Files or text arrived (peer name, item count); they are already on the Shelf.</summary>
-    public event Action<string, int>? Received;
+    /// <summary>Files or text arrived (peer name, item count, whether it was text).</summary>
+    public event Action<string, int, bool>? Received;
 
     public string ReceiveFolder => S.PhoneReceiveFolder is { Length: > 0 } folder
         ? Path.GetFullPath(folder)
@@ -140,8 +146,15 @@ public sealed partial class PhoneTransferService : ObservableObject
 
     // ---------------------------------------------------------------- start / stop
 
-    /// <summary>Starts or stops the server to match the setting.</summary>
-    public Task SyncAsync() => S.PhoneEnabled ? StartAsync() : StopAsync();
+    /// <summary>Starts the server, or turns it off (retiring the link) to match the setting.</summary>
+    public Task SyncAsync() => S.PhoneEnabled ? StartAsync() : TurnOffAsync();
+
+    /// <summary>The user turned Phone off: stop, and forget the key so the old link stops working for good.</summary>
+    public async Task TurnOffAsync()
+    {
+        await StopAsync();
+        ForgetWebKey();
+    }
 
     private async Task StartAsync()
     {
@@ -150,10 +163,11 @@ public sealed partial class PhoneTransferService : ObservableObject
         Status = "";
         try
         {
-            NewWebKey();
+            LoadOrCreateWebKey();
             var port = 0;
             Exception? last = null;
-            foreach (var choice in PortChoices)
+            // The saved port first, so the phone's link keeps working across restarts.
+            foreach (var choice in PortChoices.Prepend(S.PhonePort).Where(p => p > 0).Distinct())
             {
                 var server = BuildServer(choice);
                 try
@@ -170,6 +184,11 @@ public sealed partial class PhoneTransferService : ObservableObject
                 }
             }
             if (_server is null) throw last ?? new IOException("No free port.");
+            if (S.PhonePort != port)
+            {
+                S.PhonePort = port;
+                SettingsService.Save(notify: false);
+            }
 
             IsRunning = true;
             WatchShelf();

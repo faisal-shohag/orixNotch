@@ -51,7 +51,8 @@ It also exposes `Instance`, `OpenTool(id)`, `ShowTool(id)` and `HoldOpen()`. Wra
 **Theming:** `Themes/Theme.xaml` defines brushes (`SurfaceBrush`, `AccentBrush`, `SubTextBrush`, …) and styles (`IconButton`, `AccentButton`, `Card`, `Caps`, `SubText`, `ToggleSwitch`). `ThemeService` swaps the colors live, so reference brushes with `DynamicResource` or `SetResourceReference`, never hard-coded colors.
 
 **Phone transfer (`Services/PhoneTransferService*.cs`, `Tools/PhoneView`, `Resources/phone.html`):**
-- A Kestrel server (`Microsoft.AspNetCore.App` framework reference) serves a browser page over HTTP on 53318 (53328 if taken). The phone opens it by scanning a QR code whose URL carries a key that changes on every start; every request checks it.
+- A Kestrel server (`Microsoft.AspNetCore.App` framework reference) serves a browser page over HTTP on 53318 (53328 if taken; the port that worked is saved in `PhonePort`). The phone opens it by scanning a QR code whose URL carries a key; every request checks it. The key is kept DPAPI-protected in `phone-key.bin` across restarts and only replaced when the user turns Phone off (`TurnOffAsync`); app exit uses `StopAsync`, which keeps it.
+- Phone → PC uploads go to the receive folder and the Phone tab's Transfers list (text too, click to copy), not the Shelf. The page has separate Transfer and Shelf tabs.
 - PC → phone goes through the in-memory `Outbox` (`PhoneTransferService.Outbox.cs`). The page learns of changes from Server-Sent Events on `/web/events`. Folders and "Download all" stream as a zip built on the fly; `ZipArchive` only writes synchronously, so that request sets `IHttpBodyControlFeature.AllowSynchronousIO`.
 - Minimal-API handlers that return `Task<IResult>` must be passed as a `Delegate` via the `Handler(...)` wrapper. A bare method group binds as a `RequestDelegate` and silently drops the result.
 - It is off by default (`PhoneEnabled`).

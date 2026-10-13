@@ -13,6 +13,17 @@
         <!-- Pill = notch silhouette (Shape) + clipped content (Body). Sizes are driven by springs in code. -->
         <Grid x:Name="Pill" VerticalAlignment="Top" HorizontalAlignment="Center" AllowDrop="True">
             <Path x:Name="Shape" Fill="{DynamicResource PillBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1" />
+            <!-- Glass highlights (NotchWindow.Glass.cs): a sheen across the top, a faint accent glow at the bottom. -->
+            <Path x:Name="GlassGlow" IsHitTestVisible="False" Visibility="Collapsed" Opacity="{Binding Opacity, ElementName=Shape}" />
+            <Path x:Name="GlassSheen" IsHitTestVisible="False" Visibility="Collapsed" Opacity="{Binding Opacity, ElementName=Shape}">
+                <Path.Fill>
+                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                        <GradientStop Color="#26FFFFFF" Offset="0" />
+                        <GradientStop Color="#0AFFFFFF" Offset="0.28" />
+                        <GradientStop Color="#00FFFFFF" Offset="0.5" />
+                    </LinearGradientBrush>
+                </Path.Fill>
+            </Path>
 
             <Grid x:Name="Body">
                 <!-- Collapsed: one live activity at a time, Dynamic Island style: a leading glyph in the
@@ -180,6 +191,8 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="12" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="DropAskGap" Width="12" />
+                            <ColumnDefinition x:Name="DropAskColumn" Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid x:Name="DropShelf" Grid.Column="0" AllowDrop="True" Background="Transparent"
                               DragEnter="OnChooserDragEnter" DragOver="OnChooserDragOver" DragLeave="OnChooserDragLeave" Drop="OnChooserDrop">
@@ -206,6 +219,20 @@
                                 </Border>
                                 <TextBlock Text="Phone" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0" />
                                 <TextBlock x:Name="DropPhoneSub" Text="Send to your phone" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11.5"
+                                           HorizontalAlignment="Center" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid x:Name="DropAsk" Grid.Column="4" AllowDrop="True" Background="Transparent"
+                              DragEnter="OnChooserDragEnter" DragOver="OnChooserDragOver" DragLeave="OnChooserDragLeave" Drop="OnChooserDrop">
+                            <Rectangle x:Name="DropAskFrame" IsHitTestVisible="False" RadiusX="14" RadiusY="14" StrokeThickness="1.5" StrokeDashArray="4 3"
+                                       Stroke="{DynamicResource SubTextBrush}" Opacity="0.5" />
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                                <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
+                                    <hero:HeroIcon Kind="Sparkles" Width="20" Height="20" Foreground="{DynamicResource AccentBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="Ask AI" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0" />
+                                <TextBlock x:Name="DropAskSub" Text="Ask about it" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11.5"
                                            HorizontalAlignment="Center" Margin="0,2,0,0" />
                             </StackPanel>
                         </Grid>
