@@ -75,7 +75,7 @@ public sealed partial class CalendarFeedService : ObservableObject
             EventReminderService.Instance.Reload();
             Updated?.Invoke();
             Status = feeds.Count == 0 ? ""
-                : failed.Count > 0 ? $"Couldn't load {failed.Count} of {feeds.Count} · showing the last copy"
+                : failed.Count > 0 ? $"{failed.Count} of {feeds.Count} failed · using last copy"
                 : $"Synced {DateTime.Now:t} · {events.Count(e => e.Date >= DateTime.Today)} upcoming";
         }
         finally

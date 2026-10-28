@@ -282,8 +282,7 @@ public partial class SettingsView : UserControl, IToolView
                     Render();
                 }));
         }
-        var url = TextInput("", "https://… or webcal://… .ics link", _ => { });
-        url.Width = 230;
+        var url = TextInput("", "Paste .ics link", _ => { });
         var add = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0) };
         void AddFeed()
         {
@@ -304,9 +303,38 @@ public partial class SettingsView : UserControl, IToolView
         var addRow = new StackPanel { Orientation = Orientation.Horizontal };
         addRow.Children.Add(url);
         addRow.Children.Add(add);
-        Row("Add a calendar", feeds.Status.Length > 0 ? feeds.Status
-                : "Paste a calendar's iCal link: Google Calendar → Settings → \"Secret address in iCal format\", or Outlook → Shared calendars → Publish → ICS. The link is stored encrypted.",
-            addRow);
+        var help = new TextBlock
+        {
+            Text = "Google: calendar.google.com → ⚙ Settings → under \"Settings for my calendars\" pick the calendar → "
+                + "Integrate calendar → copy \"Secret address in iCal format\". Each calendar has its own link.\n"
+                + "Outlook: Settings → Calendar → Shared calendars → Publish → ICS link.\n"
+                + "webcal:// links work too. Links are stored encrypted.",
+            Style = (Style)FindResource("SubText"),
+            FontSize = 11.5,
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        // (i) shows / hides the step-by-step help under the row.
+        var helpButton = new Button
+        {
+            Width = RowControlHeight,
+            Height = RowControlHeight,
+            Margin = new Thickness(4, 0, 0, 0),
+            ToolTip = "How to find the link",
+            Content = new HeroIcon { Kind = AppIcon.Info, Width = 15, Height = 15 },
+        };
+        helpButton.SetResourceReference(StyleProperty, "IconButton");
+        helpButton.SetResourceReference(ForegroundProperty, "SubTextBrush");
+        System.Windows.Automation.AutomationProperties.SetName(helpButton, "How to find the calendar link");
+        helpButton.Click += (_, _) =>
+        {
+            var open = help.Visibility != Visibility.Visible;
+            help.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            helpButton.SetResourceReference(ForegroundProperty, open ? "AccentBrush" : "SubTextBrush");
+        };
+        addRow.Children.Add(helpButton);
+        Row("Add a calendar", feeds.Status.Length > 0 ? feeds.Status : "Google, Outlook or iCloud link.",
+            addRow, footer: help);
 
         Section("NOTIFICATIONS");
         var watcher = NotificationWatcher.Instance;
@@ -1099,18 +1127,29 @@ public partial class SettingsView : UserControl, IToolView
 
     /// <summary>Settings row: title + description on the left, control on the right. Consecutive rows share a card.</summary>
     /// <param name="titleContent">Replaces the plain title text (e.g. a logo beside the name).</param>
-    private void Row(string title, string description, FrameworkElement control, FrameworkElement? titleContent = null)
+    /// <param name="footer">Full-width line under the title and control (longer help).</param>
+    private void Row(string title, string description, FrameworkElement control, FrameworkElement? titleContent = null,
+        FrameworkElement? footer = null)
     {
         var grid = new Grid { Margin = new Thickness(0, 11, 0, 11), MinHeight = 30 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        if (footer is not null)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            footer.Margin = new Thickness(0, 8, 0, 0);
+            Grid.SetRow(footer, 1);
+            Grid.SetColumnSpan(footer, 2);
+        }
         var text = new StackPanel { Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(titleContent ?? new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
         text.Children.Add(new TextBlock { Text = description, Style = (Style)FindResource("SubText"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) });
         control.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(control, 1);
-        grid.Children.Add(text);
+        grid.Children.Add(text); // first child: search reads the row's text from it
         grid.Children.Add(control);
+        if (footer is not null) grid.Children.Add(footer);
 
         // Append to the previous card when the last element is one, so related rows group together.
         if (Page.Children.Count > 0 && Page.Children[^1] is Border { Child: StackPanel rows, Tag: "rows" })
