@@ -20,7 +20,7 @@ namespace OrixNotch.Shell;
 public partial class NotchWindow : Window
 {
     // Expanded chrome around the active tool's content
-    // Measured from OmniNotch's demo videos (≈1.15 px per pt), in DIPs:
+    // In DIPs (see docs/ui-measurements.md):
     // open panel 726×323, header 56, tab bar 64, 18 side padding.
     private const double HeaderH = 56;
     private const double TabBarH = 64;
@@ -112,6 +112,8 @@ public partial class NotchWindow : Window
         _leaveTimer.Tick += (_, _) => CheckLeave();
         _repelTimer.Tick += (_, _) =>
         {
+            UpdateConceal();
+            FollowPointerScreen();
             if (!(_dodging && _animating)) Repel(_repelTimer.Interval.TotalSeconds); // the frame loop owns it while dodging
         };
         _guardTimer.Tick += (_, _) => Guard();
@@ -144,11 +146,16 @@ public partial class NotchWindow : Window
         AiLimitWatcher.Instance.Reconfigure();
         PhoneTransferService.Instance.Received += ShowPhoneReceivedPeek;
         UpdateService.Instance.Available += ShowUpdatePeek;
+        PowerWatcher.Instance.Alert += ShowPowerPeek;
+        VolumeService.Instance.Changed += ShowVolumePeek;
+        BluetoothWatcher.Instance.Changed += ShowBluetoothPeek;
+        DownloadWatcher.Instance.Finished += ShowDownloadPeek;
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
         ProfileService.Changed += () => _idleAvatarLoaded = false;
         _peekTimer.Tick += (_, _) => EndPeek();
+        _trackTimer.Tick += (_, _) => ShowTrackPeek();
         // A reminder already due at launch fired its alert before we subscribed: show it once we're up.
         Dispatcher.BeginInvoke(ShowReminderPeek, DispatcherPriority.ContextIdle);
         SettingsService.Changed += OnSettingsChanged;
@@ -186,6 +193,10 @@ public partial class NotchWindow : Window
         Place();
         ThemeService.Changed += ApplyGlass;
         ApplyGlass();
+        ApplyCaptureAffinity();
+        VolumeService.Instance.Start();
+        BluetoothWatcher.Instance.Start();
+        DownloadWatcher.Instance.Start();
         _guardTimer.Start();
         _repelTimer.Start();
     }
@@ -232,7 +243,17 @@ public partial class NotchWindow : Window
     {
         var screens = Forms.Screen.AllScreens;
         var index = App.Settings.MonitorIndex;
+        if (index == -2) return Forms.Screen.FromPoint(Forms.Cursor.Position);
         return index >= 0 && index < screens.Length ? screens[index] : Forms.Screen.PrimaryScreen ?? screens[0];
+    }
+
+    private string? _placedOn; // device name of the display the notch sits on
+
+    /// <summary>Settings → Display "Follow the pointer": the closed notch hops to the display the pointer moves to.</summary>
+    private void FollowPointerScreen()
+    {
+        if (App.Settings.MonitorIndex != -2 || _expanded || _peeking) return;
+        if (Forms.Screen.FromPoint(Forms.Cursor.Position).DeviceName != _placedOn) Place();
     }
 
     /// <summary>Pins the window to the top-center of the chosen monitor (physical pixels).</summary>
@@ -240,6 +261,7 @@ public partial class NotchWindow : Window
     {
         if (_hwnd == IntPtr.Zero) return;
         var screen = CurrentScreen();
+        _placedOn = screen.DeviceName;
         var dpi = VisualTreeHelper.GetDpi(this);
         var w = (int)Math.Round(Width * dpi.DpiScaleX);
         var h = (int)Math.Round(Height * dpi.DpiScaleY);
@@ -255,12 +277,71 @@ public partial class NotchWindow : Window
     private void Guard()
     {
         if (_hwnd == IntPtr.Zero) return;
-        var hide = App.Settings.HideInFullscreen && !_expanded && Win32.IsSomethingFullscreen();
+        PowerWatcher.Instance.Poll();
+        // A full-screen window (video, F11) fades the notch out but the top edge brings it back;
+        // an exclusive game hides it outright (a window over it can knock it out of full screen).
+        var fullscreen = App.Settings.HideInFullscreen && !_expanded ? Win32.FullscreenKind() : 0;
+        _fullscreen = fullscreen == 1;
+        var hide = fullscreen == 2;
         var target = hide ? Visibility.Hidden : Visibility.Visible;
         if (Visibility != target) Visibility = target;
         if (!hide)
             Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0,
                 Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+    }
+
+    // ---------------------------------------------------------------- auto-hide
+
+    private bool _fullscreen;          // a full-screen window is up (see Guard)
+    private bool _revealed;            // the pointer touched the top edge over the hidden notch
+    private double _opacityTarget = 1;
+
+    /// <summary>Whether the closed notch should be faded out now (Settings → Show notch, or full screen).</summary>
+    private bool Concealable()
+    {
+        if (_expanded || _peeking) return false;
+        if (_fullscreen) return true;
+        return App.Settings.NotchVisibility switch
+        {
+            "HoverOnly" => true,
+            "WhenActive" => NotchActivityService.Instance.Kind == NotchActivityKind.None,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Polled with the dodge. Fades the pill out when it should hide (fully transparent, so clicks pass
+    /// through to what's below) and back in once the pointer touches the top edge above it; it stays
+    /// until the pointer wanders off.
+    /// </summary>
+    private void UpdateConceal()
+    {
+        var conceal = Concealable();
+        if (conceal && Win32.GetCursorPos(out var p))
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var x = Math.Abs(p.X - (_homeX + Width * dpi.DpiScaleX / 2)) / dpi.DpiScaleX;
+            var y = (p.Y - _homeY) / dpi.DpiScaleY;
+            var half = _idleW / 2 + 40;
+            if (y <= 1 && x <= half) _revealed = true;
+            else if (y > _collapsedH + DodgeBand || x > half + 40) _revealed = false;
+        }
+        else _revealed = false;
+
+        var target = conceal && !_revealed ? 0.0 : 1.0;
+        if (_opacityTarget == target) return;
+        _opacityTarget = target;
+        var fade = TimeSpan.FromMilliseconds(target > 0 ? 160 : 300);
+        Pill.BeginAnimation(OpacityProperty, new DoubleAnimation(target, fade));
+        // Hidden by choice, mark the spot; hidden for a full-screen video, stay out of sight entirely.
+        EdgeHint.Width = Math.Round(_idleW * 0.55);
+        EdgeHint.BeginAnimation(OpacityProperty, new DoubleAnimation(target == 0 && !_fullscreen ? 0.7 : 0, fade));
+    }
+
+    private void ApplyCaptureAffinity()
+    {
+        if (_hwnd != IntPtr.Zero)
+            Win32.SetWindowDisplayAffinity(_hwnd, App.Settings.HideFromCapture ? Win32.WDA_EXCLUDEFROMCAPTURE : Win32.WDA_NONE);
     }
 
     private void ApplyNotchSize()
@@ -270,7 +351,7 @@ public partial class NotchWindow : Window
             "Small" => (180.0, 34.0),
             "Large" => (236.0, 42.0),
             "ExtraLarge" => (266.0, 46.0),
-            _ => (207.0, 38.0), // OmniNotch's closed notch, ≈ a MacBook hardware notch
+            _ => (207.0, 38.0), // ≈ a MacBook hardware notch
         };
         _timerW = _idleW + 44;
         _musicW = _idleW + 150;
@@ -312,6 +393,7 @@ public partial class NotchWindow : Window
                 PeekLayer.Visibility = Visibility.Collapsed;
             }
             _expanded = true;
+            UpdateConceal();
             _idleRotate.Stop();
             _repelTimer.Stop();
             SetShove(0);
@@ -413,6 +495,7 @@ public partial class NotchWindow : Window
     private bool Repel(double dt)
     {
         if (!App.Settings.RepelCursor || _expanded || _peeking || !IsVisible || !SystemParameters.ClientAreaAnimation
+            || Concealable() // hidden notch: reaching the top edge reveals it, it mustn't run from that pointer
             || (Win32.GetAsyncKeyState(Win32.VK_LBUTTON) & 0x8000) != 0 // mid-drag: dropping onto the notch must stay easy
             || !Win32.GetCursorPos(out var p) || _hwnd == IntPtr.Zero)
         {
@@ -746,6 +829,41 @@ public partial class NotchWindow : Window
             or nameof(NowPlayingService.Title) or nameof(NowPlayingService.Artist) or nameof(NowPlayingService.ArtTint)
             or nameof(PomodoroService.IsRunning) or nameof(CountdownService.IsRunning) or nameof(StopwatchService.IsRunning))
             UpdateActivity();
+        if (e.PropertyName == nameof(NowPlayingService.Title))
+        {
+            _trackTimer.Stop(); // art and artist land a moment after the title
+            _trackTimer.Start();
+        }
+    }
+
+    // ---------------------------------------------------------------- new-song alert
+
+    private readonly DispatcherTimer _trackTimer = new() { Interval = TimeSpan.FromMilliseconds(700) };
+    private readonly DateTime _createdAt = DateTime.Now;
+    private string? _announcedTrack;
+
+    /// <summary>Settings → Now Playing "Announce new songs": a short alert with the art when the track changes.</summary>
+    private void ShowTrackPeek()
+    {
+        _trackTimer.Stop();
+        var np = NowPlayingService.Instance;
+        var key = np.Title + "\n" + np.Artist;
+        if (key == _announcedTrack) return;
+        _announcedTrack = key;
+        // Not the song already playing at launch, and not while the panel shows it anyway.
+        if (!App.Settings.TrackPeek || DateTime.Now - _createdAt < TimeSpan.FromSeconds(5)
+            || !np.HasSession || !np.IsPlaying || _expanded || string.IsNullOrWhiteSpace(np.Title)) return;
+        var art = np.Art;
+        EnqueuePeek(new PeekRequest("track", () => ArtTile(art), np.Title, np.Artist, TimeSpan.FromSeconds(3),
+            OnClick: () => OpenTool("nowplaying")));
+    }
+
+    private static FrameworkElement ArtTile(ImageSource? art)
+    {
+        if (art is null) return GlyphTile(AppIcon.MusicNote);
+        var image = new Image { Source = art, Width = 40, Height = 40, Stretch = Stretch.UniformToFill };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+        return new Border { Width = 40, Height = 40, Child = image, Clip = new RectangleGeometry(new Rect(0, 0, 40, 40), 11, 11) };
     }
 
     private void UpdateActivity()
@@ -1045,7 +1163,7 @@ public partial class NotchWindow : Window
         ["streak"] = "00 today",
         ["clipboard"] = "000 clips",
         ["shelf"] = "00 files",
-        ["aiUsage"] = "Antigravity 100%",
+        ["aiUsage"] = "100%",
         ["weather"] = "-00°",
     };
 
@@ -1133,20 +1251,40 @@ public partial class NotchWindow : Window
     {
         // A newer alert with the same key (same app / same reminder) replaces the waiting one.
         _peekQueue.RemoveAll(r => r.Key == request.Key);
+        // The same alert already showing (volume steps): refresh it in place.
+        if (_peeking && _currentPeek?.Key == request.Key)
+        {
+            _currentPeek = request;
+            PeekIconHost.Content = request.Icon();
+            PeekTitle.Text = OneLine(request.Title);
+            PeekSub.Text = OneLine(request.Sub);
+            _peekTimer.Stop();
+            _peekTimer.Interval = request.Duration;
+            _peekTimer.Start();
+            return;
+        }
         _peekQueue.Add(request);
         if (_peekQueue.Count > 4) _peekQueue.RemoveAt(0);
         if (!_peeking) ShowNextPeek();
+        UpdatePeekMore();
+    }
+
+    private void UpdatePeekMore()
+    {
+        PeekMore.Text = $"+{_peekQueue.Count}";
+        PeekMore.Visibility = _peekQueue.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ShowNextPeek()
     {
-        if (_expanded || Visibility != Visibility.Visible) return; // stays queued until the notch is closed again
+        if (_expanded || Visibility != Visibility.Visible || _fullscreen) return; // stays queued until the notch is closed again
         _peekQueue.RemoveAll(r => DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
         if (_peekQueue.Count == 0) return;
         var next = _peekQueue[0];
         _peekQueue.RemoveAt(0);
 
         _currentPeek = next;
+        UpdatePeekMore();
         PeekIconHost.Content = next.Icon();
         PeekTitle.Text = OneLine(next.Title);
         PeekSub.Text = OneLine(next.Sub);
@@ -1158,6 +1296,7 @@ public partial class NotchWindow : Window
             PeekLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
         }
         _peeking = true;
+        UpdateConceal();
         PeekLayer.Height = _peekH;
         _peekTimer.Stop();
         _peekTimer.Interval = next.Duration;
@@ -1274,6 +1413,43 @@ public partial class NotchWindow : Window
         var sub = version.Length > 0 ? $"OrixNotch {version} · click to install" : "A new version is ready · click to install";
         EnqueuePeek(new PeekRequest("update", () => GlyphTile(AppIcon.ArrowDown), "Update available", sub,
             TimeSpan.FromSeconds(8), OnClick: () => _ = UpdateService.Instance.InstallAsync()));
+    }
+
+    private void ShowPowerPeek(string title, string sub, bool charging) =>
+        EnqueuePeek(new PeekRequest("power", () => GlyphTile(charging ? AppIcon.Bolt : AppIcon.BatteryFull), title, sub,
+            TimeSpan.FromSeconds(3)));
+
+    private void ShowVolumePeek(float level, bool muted)
+    {
+        if (!App.Settings.VolumeHud) return;
+        var pct = (int)Math.Round(level * 100);
+        EnqueuePeek(new PeekRequest("volume", () => GlyphTile(muted || pct == 0 ? AppIcon.SpeakerMuted : AppIcon.Speaker),
+            "Volume", muted ? "Muted" : $"{pct}%", TimeSpan.FromSeconds(1.5)));
+    }
+
+    private void ShowBluetoothPeek(string device, bool connected)
+    {
+        if (!App.Settings.BluetoothAlerts) return;
+        EnqueuePeek(new PeekRequest("bt:" + device, () => GlyphTile(AppIcon.Bluetooth), device,
+            connected ? "Connected" : "Disconnected", TimeSpan.FromSeconds(3)));
+    }
+
+    private void ShowDownloadPeek(string path)
+    {
+        if (!App.Settings.DownloadAlerts) return;
+        EnqueuePeek(new PeekRequest("download:" + path, () => GlyphTile(AppIcon.ArrowDown), "Download finished",
+            System.IO.Path.GetFileName(path) + " · click to show", TimeSpan.FromSeconds(4),
+            OnClick: () =>
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+                }
+                catch (Exception ex)
+                {
+                    App.Log(ex);
+                }
+            }));
     }
 
     private void ShowPhoneReceivedPeek(string peer, int count, bool text)
@@ -1477,8 +1653,15 @@ public partial class NotchWindow : Window
     public void ShowSettings()
     {
         if (_activeTool != SettingsId) _backTarget = _activeTool;
-        // Settings opens taller than the tools (≈750×512 in OmniNotch).
+        // Settings opens taller than the tools (≈750×512).
         Present(SettingsId, "Settings", 714, 438, () => new SettingsView(), showTabs: false);
+    }
+
+    /// <summary>Opens the notch on one Settings page ("tabs", "appearance"…).</summary>
+    public void OpenSettings(string page)
+    {
+        OpenTool(SettingsId);
+        if (_views.GetValueOrDefault(SettingsId) is SettingsView settings) settings.ShowPage(page);
     }
 
     private void Present(string id, string title, double w, double h, Func<FrameworkElement> create, bool showTabs)
@@ -1604,6 +1787,7 @@ public partial class NotchWindow : Window
         ApplyNotchSize();
         BuildTabs();
         Place();
+        ApplyCaptureAffinity();
     }
 
     // ---------------------------------------------------------------- drag & drop → shelf

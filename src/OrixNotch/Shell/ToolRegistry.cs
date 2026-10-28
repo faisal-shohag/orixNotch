@@ -23,7 +23,7 @@ public sealed record ToolDef(string Id, string Name, AppIcon Icon, double Width,
 
 public static class ToolRegistry
 {
-    // OmniNotch keeps one panel size (≈726×323) for every tool: 690 wide content after
+    // One panel size (≈726×323) for every tool: 690 wide content after
     // 18 px padding, ≈203 tall between header and tab bar. A few tools need a little more.
     private const double W = 720;
     private const double H = 220;

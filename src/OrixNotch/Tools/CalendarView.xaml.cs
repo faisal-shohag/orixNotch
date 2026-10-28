@@ -15,14 +15,23 @@ public sealed class CalendarEvent
     public DateTime Date { get; set; }
     public string Time { get; set; } = "";
     public string Title { get; set; } = "";
+    /// <summary>Which subscribed calendar this came from (an id, not the secret link; read-only); null for events added here.</summary>
+    public string? Feed { get; set; }
 
     [JsonIgnore] public string TimeLabel => string.IsNullOrEmpty(Time) ? "All day" : Time;
+    [JsonIgnore] public bool IsSubscribed => Feed is not null;
+
+    /// <summary>Events added here plus those from subscribed calendars.</summary>
+    public static List<CalendarEvent> LoadAll() =>
+        [.. Storage.Load<List<CalendarEvent>>("events.json"), .. Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName)];
 }
 
 public partial class CalendarView : UserControl, IToolView, IEscapeHandler
 {
     private const string FileName = "events.json";
-    private readonly List<CalendarEvent> _events = Storage.Load<List<CalendarEvent>>(FileName);
+    private readonly List<CalendarEvent> _events = Storage.Load<List<CalendarEvent>>(FileName); // the user's own (editable)
+    private List<CalendarEvent> _feed = Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName); // subscribed (read-only)
+    private IEnumerable<CalendarEvent> All => _events.Concat(_feed);
     private DateTime _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime _selected = DateTime.Today;
 
@@ -47,6 +56,11 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
         ThemeService.Changed += () =>
         {
             BuildWeekdays();
+            Render();
+        };
+        CalendarFeedService.Instance.Updated += () =>
+        {
+            _feed = Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName);
             Render();
         };
     }
@@ -112,7 +126,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             var isToday = day.Date == DateTime.Today;
             var inMonth = day.Month == _month.Month;
             var weekend = day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-            var count = _events.Count(e => e.Date.Date == day.Date);
+            var count = All.Count(e => e.Date.Date == day.Date);
 
             var label = new TextBlock
             {
@@ -183,7 +197,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
         DayTitle.Text = isToday ? "Today" : _selected.ToString("dddd", CultureInfo.CurrentCulture);
         TodayChip.Visibility = isToday ? Visibility.Collapsed : Visibility.Visible;
 
-        var items = _events.Where(e => e.Date.Date == _selected.Date)
+        var items = All.Where(e => e.Date.Date == _selected.Date)
             .OrderBy(e => string.IsNullOrEmpty(e.Time) ? "" : e.Time)
             .ToList();
         var countText = items.Count switch { 0 => "No events", 1 => "1 event", var n => $"{n} events" };

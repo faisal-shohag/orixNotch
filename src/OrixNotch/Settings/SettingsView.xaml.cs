@@ -58,13 +58,15 @@ public partial class SettingsView : UserControl, IToolView
                 Content = content,
                 GroupName = "settingsNav",
                 IsChecked = id == _page,
+                Tag = id,
             };
             var pageId = id;
             nav.Checked += (_, _) =>
             {
                 if (_page == pageId) return;
                 _page = pageId;
-                Render(resetScroll: true);
+                if (SearchBox.Text.Length > 0) SearchBox.Clear(); // re-renders, now on this page
+                else Render(resetScroll: true);
             };
             Nav.Children.Add(nav);
         }
@@ -74,10 +76,22 @@ public partial class SettingsView : UserControl, IToolView
             if (_page == "appearance" && !_themeFromSlider) Render();
         };
         PreviewKeyDown += OnRecordKey;
+        // Show the calendar sync result once it lands (not mid-edit: re-rendering drops focus).
+        CalendarFeedService.Instance.Updated += () =>
+        {
+            if (_page == "general" && IsVisible && !IsKeyboardFocusWithin) Render();
+        };
         Render();
     }
 
     public void OnShown() => Render();
+
+    /// <summary>Switches to a page by id ("appearance", "ai"…), as if its nav button was clicked.</summary>
+    public void ShowPage(string id)
+    {
+        foreach (var nav in Nav.Children.OfType<RadioButton>())
+            if ((string?)nav.Tag == id) nav.IsChecked = true;
+    }
 
     public void OnHidden() => _recordingAction = null;
 
@@ -91,7 +105,16 @@ public partial class SettingsView : UserControl, IToolView
         var offset = resetScroll ? 0 : PageScroll.VerticalOffset;
         Page.Children.Clear();
         if (resetScroll) PageScroll.ScrollToTop();
-        switch (_page)
+        if (_query.Length > 0) RenderSearch();
+        else RenderPage(_page);
+        if (!resetScroll && offset > 0)
+            Dispatcher.BeginInvoke(() => PageScroll.ScrollToVerticalOffset(offset),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void RenderPage(string id)
+    {
+        switch (id)
         {
             case "general": RenderGeneral(); break;
             case "appearance": RenderAppearance(); break;
@@ -102,9 +125,83 @@ public partial class SettingsView : UserControl, IToolView
             case "data": RenderData(); break;
             case "about": RenderAbout(); break;
         }
-        if (!resetScroll && offset > 0)
-            Dispatcher.BeginInvoke(() => PageScroll.ScrollToVerticalOffset(offset),
-                System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    // ---------------------------------------------------------------- search
+
+    private string _query = "";
+
+    private void OnSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        var query = SearchBox.Text.Trim();
+        if (query == _query) return;
+        _query = query;
+        Render(resetScroll: true);
+    }
+
+    /// <summary>
+    /// Builds every page, then keeps only the rows whose title or description matches, under their page's
+    /// name and section. Everything else (titles, swatches, lists) hides. The rows are the real controls.
+    /// </summary>
+    private void RenderSearch()
+    {
+        var caps = FindResource("Caps");
+        foreach (var (id, name, _, _) in Pages)
+        {
+            var start = Page.Children.Count;
+            RenderPage(id);
+            var added = Page.Children.Cast<UIElement>().Skip(start).ToList();
+            var matched = 0;
+            TextBlock? section = null;
+            foreach (var element in added)
+            {
+                if (element is Border { Tag: "rows", Child: StackPanel rows })
+                {
+                    var visible = FilterRows(rows, _query);
+                    element.Visibility = visible > 0 ? Visibility.Visible : Visibility.Collapsed;
+                    if (visible > 0 && section is not null) section.Visibility = Visibility.Visible;
+                    matched += visible;
+                }
+                else
+                {
+                    element.Visibility = Visibility.Collapsed;
+                    if (element is TextBlock tb && tb.Style == caps) section = tb;
+                }
+            }
+            if (matched == 0)
+            {
+                Page.Children.RemoveRange(start, added.Count);
+                continue;
+            }
+            Page.Children.Insert(start, new TextBlock { Text = name, FontSize = 17, FontWeight = FontWeights.Bold, Margin = new Thickness(0, start == 0 ? 0 : 18, 0, 0) });
+        }
+        if (Page.Children.Count == 0)
+            Page.Children.Add(new TextBlock { Text = $"No settings match \"{_query}\".", Style = (Style)FindResource("SubText"), FontSize = 12.5, Margin = new Thickness(4, 8, 0, 0) });
+    }
+
+    /// <summary>Hides a card's rows that don't mention <paramref name="query"/> (and the dividers between hidden rows).</summary>
+    private static int FilterRows(StackPanel rows, string query)
+    {
+        var visible = 0;
+        for (var i = 0; i < rows.Children.Count; i++)
+        {
+            if (rows.Children[i] is not Grid row) continue;
+            var text = string.Join(" ", TextsIn(row.Children[0]));
+            var match = text.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+            row.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
+            // The divider above a row shows only when a shown row sits above it too.
+            if (i > 0) rows.Children[i - 1].Visibility = match && visible > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (match) visible++;
+        }
+        return visible;
+    }
+
+    private static IEnumerable<string> TextsIn(DependencyObject element)
+    {
+        if (element is TextBlock { Text: { Length: > 0 } text }) yield return text;
+        foreach (var child in LogicalTreeHelper.GetChildren(element).OfType<DependencyObject>())
+            foreach (var t in TextsIn(child))
+                yield return t;
     }
 
     private void RenderGeneral()
@@ -122,8 +219,14 @@ public partial class SettingsView : UserControl, IToolView
         Row("Hover delay", "How long the pointer rests on the notch before it opens.",
             Combo(["Instant", "Fast", "Normal", "Slow"], Array.IndexOf(new[] { 0, 80, 150, 400 }, S.HoverDelayMs) is var d and >= 0 ? d : 2,
                 i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(); }));
-        Row("Hide in full screen", "Stay out of the way of full-screen apps, games and videos.",
+        string[] visibility = ["Always", "WhenActive", "HoverOnly"];
+        Row("Show notch", "Always, only while music, a timer or a reminder is on, or only when the pointer touches the top edge of the screen.",
+            Combo(["Always", "When active", "On top-edge hover"], Math.Max(0, Array.IndexOf(visibility, S.NotchVisibility)),
+                i => { S.NotchVisibility = visibility[i]; Save(); }));
+        Row("Hide in full screen", "Stay out of the way of full-screen apps and videos; touch the top edge to bring it back. Games hide it completely.",
             Toggle(S.HideInFullscreen, v => { S.HideInFullscreen = v; Save(); }));
+        Row("Hide from screenshots", "Leave the notch out of screenshots, recordings and screen sharing.",
+            Toggle(S.HideFromCapture, v => { S.HideFromCapture = v; Save(); }));
         Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
             Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); }));
 
@@ -142,6 +245,8 @@ public partial class SettingsView : UserControl, IToolView
         Section("NOW PLAYING");
         Row("Lyrics", "Show time-synced lyrics on Now Playing. Songs are looked up on LRCLIB, a free lyrics library.",
             Toggle(S.LyricsEnabled, v => { S.LyricsEnabled = v; Save(false); }));
+        Row("Announce new songs", "Pop the new song's art and title out of the notch for a moment when the track changes.",
+            Toggle(S.TrackPeek, v => { S.TrackPeek = v; Save(false); }));
 
         Section("CALENDAR REMINDERS");
         Row("Event reminders", "Show upcoming calendar events on the closed notch.",
@@ -164,6 +269,44 @@ public partial class SettingsView : UserControl, IToolView
                     Save(false);
                     EventReminderService.PlaySound(S.ReminderSound); // preview
                 }));
+
+        Section("SUBSCRIBED CALENDARS");
+        var feeds = CalendarFeedService.Instance;
+        foreach (var feed in CalendarFeedService.Feeds)
+        {
+            var link = feed;
+            Row(CalendarFeedService.Label(link), "Read-only. Shows in Calendar, Home and reminders; refreshes every 30 minutes.",
+                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                {
+                    feeds.Remove(link);
+                    Render();
+                }));
+        }
+        var url = TextInput("", "https://… or webcal://… .ics link", _ => { });
+        url.Width = 230;
+        var add = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0) };
+        void AddFeed()
+        {
+            var text = url.Text.Trim();
+            if (!CalendarFeedService.IsValidUrl(text))
+            {
+                Field.ShowError(url);
+                return;
+            }
+            feeds.Add(text);
+            Render();
+        }
+        add.Click += (_, _) => AddFeed();
+        url.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter) AddFeed();
+        };
+        var addRow = new StackPanel { Orientation = Orientation.Horizontal };
+        addRow.Children.Add(url);
+        addRow.Children.Add(add);
+        Row("Add a calendar", feeds.Status.Length > 0 ? feeds.Status
+                : "Paste a calendar's iCal link: Google Calendar → Settings → \"Secret address in iCal format\", or Outlook → Shared calendars → Publish → ICS. The link is stored encrypted.",
+            addRow);
 
         Section("NOTIFICATIONS");
         var watcher = NotificationWatcher.Instance;
@@ -196,6 +339,14 @@ public partial class SettingsView : UserControl, IToolView
                 Save(false);
                 AiLimitWatcher.Instance.Reconfigure();
             }));
+        Row("Battery alerts", "Show on the notch when the charger is plugged in or pulled, and when the battery drops to 20% and 10%.",
+            Toggle(S.PowerAlerts, v => { S.PowerAlerts = v; Save(false); }));
+        Row("Volume on the notch", "Show the volume level on the notch when it changes. Windows still shows its own volume pop-up too.",
+            Toggle(S.VolumeHud, v => { S.VolumeHud = v; Save(false); }));
+        Row("Bluetooth devices", "Show on the notch when paired headphones, a mouse or other Bluetooth device connects or disconnects.",
+            Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); }));
+        Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
+            Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); }));
 
         if (S.NotifySeenApps.Count > 0)
         {
@@ -282,12 +433,13 @@ public partial class SettingsView : UserControl, IToolView
         Title("Display", "Where the notch appears, and how big it is.");
         Section("LOCATION");
         var screens = Forms.Screen.AllScreens;
-        var names = new List<string> { "Primary display" };
+        // Combo items: primary (-1), follow the pointer (-2), then each display by index.
+        var names = new List<string> { "Primary display", "Follow the pointer" };
         for (var i = 0; i < screens.Length; i++)
             names.Add($"Display {i + 1} · {screens[i].Bounds.Width}×{screens[i].Bounds.Height}{(screens[i].Primary ? " (primary)" : "")}");
-        Row("Show notch on", "Which monitor hosts the notch.",
-            Combo(names, S.MonitorIndex >= 0 && S.MonitorIndex < screens.Length ? S.MonitorIndex + 1 : 0,
-                i => { S.MonitorIndex = i - 1; Save(); }, 210));
+        var selected = S.MonitorIndex == -2 ? 1 : S.MonitorIndex >= 0 && S.MonitorIndex < screens.Length ? S.MonitorIndex + 2 : 0;
+        Row("Show notch on", "Which monitor hosts the notch. Follow the pointer moves it to whichever display you're using.",
+            Combo(names, selected, i => { S.MonitorIndex = i switch { 0 => -1, 1 => -2, _ => i - 2 }; Save(); }, 210));
 
         Section("SIZE");
         var sizes = new[] { "Small", "Default", "Large", "ExtraLarge" };
@@ -390,7 +542,10 @@ public partial class SettingsView : UserControl, IToolView
 
     private void RenderTabs()
     {
-        Title("Tabs", "The tools in the notch's bottom bar, and their order.");
+        Title(SettingsService.FirstRun ? "Welcome! Pick your tools" : "Tabs",
+            SettingsService.FirstRun
+                ? "Turn off the tools you won't use and move the rest into order with the arrows. You can change this anytime in Settings → Tabs."
+                : "The tools in the notch's bottom bar, and their order.");
         Section("IN THE NOTCH");
         var visible = ToolRegistry.Ordered();
         var list = new StackPanel();
@@ -827,6 +982,7 @@ public partial class SettingsView : UserControl, IToolView
             var (text, kind, accent) = updates.Status switch
             {
                 UpdateStatus.Checking => ("Checking…", AppIcon.Refresh, false),
+                UpdateStatus.Downloading => ("Downloading…", AppIcon.ArrowDown, false),
                 UpdateStatus.UpToDate => ("Up to date", AppIcon.Check, false),
                 UpdateStatus.Available => (updates.LatestVersion.Length > 0 ? $"Install {updates.LatestVersion}" : "Install update", AppIcon.ArrowDown, true),
                 UpdateStatus.Failed => ("Couldn't check", AppIcon.Refresh, false),
@@ -834,7 +990,7 @@ public partial class SettingsView : UserControl, IToolView
             };
             label.Text = text;
             icon.Kind = kind;
-            button.IsEnabled = updates.Status != UpdateStatus.Checking;
+            button.IsEnabled = updates.Status is not (UpdateStatus.Checking or UpdateStatus.Downloading);
             if (accent) button.SetResourceReference(StyleProperty, "AccentButton");
             else button.ClearValue(StyleProperty);
             button.ToolTip = updates.CheckedAt is { } at ? $"Version {UpdateService.CurrentVersion} · checked {at:t}" : $"Version {UpdateService.CurrentVersion}";

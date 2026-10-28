@@ -1,0 +1,205 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=block");
+
+/* 1920x1080 CSS px, rendered at 2x to 3840x2160. Notch captures are 3x PNGs, so any size up to
+   a third of their pixel width stays sharp. */
+:root {
+  --bg: #07070b;
+  --text: #f5f5f7;
+  --sub: #a1a1aa;
+  --dim: #71717a;
+  --line: rgba(255, 255, 255, 0.08);
+  --brand: linear-gradient(90deg, #2e9cff 0%, #6d5bff 45%, #d946ef 100%);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Background: near-black with a soft brand glow and a whisper of grain. */
+.stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 620px at var(--gx, 70%) var(--gy, 38%), rgba(99, 82, 255, 0.24), transparent 70%),
+    radial-gradient(900px 520px at calc(var(--gx, 70%) + 14%) calc(var(--gy, 38%) + 30%), rgba(217, 70, 239, 0.12), transparent 70%),
+    radial-gradient(1400px 900px at 10% 110%, rgba(46, 156, 255, 0.10), transparent 70%),
+    linear-gradient(180deg, #0b0b14 0%, #07070b 55%, #050508 100%);
+}
+.stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+/* The top edge of a screen, where a notch lives. */
+.screen-edge {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+}
+
+/* Type */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand);
+}
+h1 {
+  font-size: 68px;
+  line-height: 1.04;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  margin-top: 22px;
+}
+h1 .soft { color: var(--dim); }
+.lede {
+  font-size: 23px;
+  line-height: 1.5;
+  color: var(--sub);
+  margin-top: 22px;
+  max-width: 560px;
+  font-weight: 400;
+}
+.points { list-style: none; margin-top: 38px; display: grid; gap: 18px; }
+.points li {
+  position: relative;
+  padding-left: 38px;
+  font-size: 19px;
+  line-height: 1.45;
+  color: #d4d4d8;
+  font-weight: 500;
+}
+.points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='m6 12.5 4 4 8-9'/></svg>") center/14px no-repeat,
+    var(--brand);
+}
+.points li b { color: var(--text); font-weight: 600; }
+
+/* Brand mark, bottom-left of every frame */
+.mark {
+  position: absolute;
+  left: 96px;
+  bottom: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--sub);
+  letter-spacing: -0.01em;
+}
+.mark i {
+  width: 34px;
+  height: 14px;
+  border-radius: 14px;
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 18px rgba(109, 91, 255, 0.45);
+  position: relative;
+}
+.mark i::after {
+  content: "";
+  position: absolute;
+  right: 4px; top: 4px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #6d5bff;
+}
+
+/* Split layout: copy on the left, captures on the right */
+.copy {
+  position: absolute;
+  left: 96px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 640px;
+}
+.shots { position: absolute; }
+
+/* A notch capture, floating */
+.notch {
+  display: block;
+  height: auto;
+  filter: drop-shadow(0 40px 60px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 1px rgba(255, 255, 255, 0.06));
+}
+.label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 12px 30px;
+}
+
+/* Phone device */
+.device {
+  position: absolute;
+  width: 360px;
+  height: 760px;
+  border-radius: 58px;
+  padding: 12px;
+  background: linear-gradient(160deg, #2a2a30, #0d0d10 40%, #1b1b20);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.12), 0 50px 90px rgba(0, 0, 0, 0.6);
+}
+.device .screen {
+  width: 100%;
+  height: 100%;
+  border-radius: 46px;
+  overflow: hidden;
+  background: #0a0a0c;
+  padding-top: 46px; /* status bar under the island */
+}
+.device img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: top;
+  display: block;
+}
+.device::after {
+  content: "";
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 104px;
+  height: 30px;
+  border-radius: 20px;
+  background: #000;
+}

@@ -51,7 +51,7 @@ public sealed partial class EventReminderService : ObservableObject
     /// <summary>Call after events.json changes (the Calendar does on add/delete).</summary>
     public void Reload()
     {
-        _events = Storage.Load<List<CalendarEvent>>("events.json");
+        _events = CalendarEvent.LoadAll();
         Check();
     }
 

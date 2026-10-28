@@ -95,10 +95,22 @@ internal static class Win32
         public ulong ullAvailExtendedVirtual;
     }
 
-    public static bool IsSomethingFullscreen()
+    public const uint WDA_NONE = 0;
+    public const uint WDA_EXCLUDEFROMCAPTURE = 0x11; // Windows 10 2004+
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
+
+    /// <summary>0: nothing full screen. 1: a full-screen window (video, F11 browser, presentation). 2: an exclusive D3D game.</summary>
+    public static int FullscreenKind()
     {
-        if (SHQueryUserNotificationState(out var state) != 0) return false;
-        return state is QUNS_BUSY or QUNS_RUNNING_D3D_FULL_SCREEN or QUNS_PRESENTATION_MODE;
+        if (SHQueryUserNotificationState(out var state) != 0) return 0;
+        return state switch
+        {
+            QUNS_RUNNING_D3D_FULL_SCREEN => 2,
+            QUNS_BUSY or QUNS_PRESENTATION_MODE => 1,
+            _ => 0,
+        };
     }
 
     public static void UseDarkTitleBar(IntPtr hwnd, bool dark = true)

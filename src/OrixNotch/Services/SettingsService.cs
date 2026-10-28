@@ -14,12 +14,20 @@ public sealed class AppSettings
     public int HoverDelayMs { get; set; } = 150;
     public List<string> ToolOrder { get; set; } = new();
     public List<string> HiddenTools { get; set; } = new();
-    public int MonitorIndex { get; set; } = -1; // -1 = primary display
+    public int MonitorIndex { get; set; } = -1; // -1 = primary display, -2 = the display the pointer is on
     /// <summary>Open at login. Turned on once for new installs (see StartupService.SyncAsync).</summary>
     public bool LaunchAtStartup { get; set; }
     public bool StartupDefaultApplied { get; set; }
     public bool HideInFullscreen { get; set; } = true;
-    /// <summary>The closed notch dodges a pointer coming from its sides (it can be caught from below).</summary>
+    /// <summary>"Always" | "WhenActive" (music, timer, reminder) | "HoverOnly"; hidden, it comes back at the top edge.</summary>
+    public string NotchVisibility { get; set; } = "Always";
+    /// <summary>Leave the notch out of screenshots, recordings and screen sharing.</summary>
+    public bool HideFromCapture { get; set; }
+    public bool PowerAlerts { get; set; } = true;  // charger in/out, low battery
+    public bool VolumeHud { get; set; }            // off: Windows shows its own volume flyout too
+    public bool BluetoothAlerts { get; set; } = true;
+    public bool DownloadAlerts { get; set; } = true;
+    public bool TrackPeek { get; set; }            // a short alert with the new song when the track changes    /// <summary>The closed notch dodges a pointer coming from its sides (it can be caught from below).</summary>
     public bool RepelCursor { get; set; } = true;
 
     public bool ClipboardEnabled { get; set; } = true;
@@ -124,6 +132,9 @@ public sealed class AppSettings
 public static class SettingsService
 {
     private const string FileName = "settings.json";
+
+    /// <summary>No settings saved yet: this is the first launch (read before anything saves).</summary>
+    public static bool FirstRun { get; } = !System.IO.File.Exists(Storage.PathOf(FileName));
 
     public static AppSettings Current { get; } = Storage.Load<AppSettings>(FileName);
 

@@ -87,4 +87,7 @@ public enum AppIcon
     BatteryFull,
     Bell,
     DevicePhone,
+    Speaker,
+    SpeakerMuted,
+    Bluetooth,
 }
