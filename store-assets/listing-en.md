@@ -18,12 +18,14 @@ Everything is stored locally on your PC. Network is used only for weather, stock
 A dynamic-island toolbox for Windows: music, calendar reminders, notifications, to-dos, timers, weather and AI at the top of your screen.
 
 ## What's new
-v0.6.3: redesigned text fields with icons, clear buttons and inline errors; the closed notch playfully dodges the pointer (Settings → General); Esc closes inline editors first; the notch stays open while you type; polish across Calendar, To-Dos, Converter, Shortcuts and Stocks.
+New look and a smarter notch: a fresh logo; the notch can auto-hide and come back when you touch the top edge, hide for apps you pick, and stay out of screenshots and screen sharing; alerts for finished downloads, Bluetooth devices, charging and low battery; subscribe to Google, Outlook or iCloud calendars; and a search box in Settings.
 
 ## Product features
 - Dynamic-island notch with smooth spring animations
+- Auto-hide with a top-edge reveal, hide in full screen or for apps you pick, hidden from screenshots
+- Alerts for finished downloads, Bluetooth devices, charging and low battery
 - Now Playing controls and synced lyrics for Spotify, browsers and media apps
-- Calendar with reminders that pop out of the notch, with sound
+- Calendar with reminders that pop out of the notch, with sound; subscribe to Google, Outlook or iCloud calendars
 - Windows notifications mirrored on the notch
 - Customizable idle notch: clock, weather, battery, network speed, AI usage
 - AI Usage for Claude Code, Codex, OpenCode, Cursor, Antigravity and more
@@ -36,7 +38,7 @@ v0.6.3: redesigned text fields with icons, clear buttons and inline errors; the 
 dynamic island · notch · clipboard history · calendar reminders · pomodoro timer · productivity tools · ai usage
 
 ## Screenshots (store-assets/screenshots, 1920x1080)
-1-home, 2-calendar, 3-todos, 4-weather, 5-timers, 6-closed-notch · Box art: BoxArt-1080.png · Poster: Poster-720x1080.png
+01-hero, 02-alerts, 03-music, 04-calendar, 05-ask-ai, 06-phone, 07-shelf-clipboard, 08-focus, 09-out-of-your-way, 10-themes (made by marketing/store-shots/Make-StoreShots.ps1) · Box art: BoxArt-1080.png · Poster: Poster-720x1080.png
 
 ## Copyright and trademark info
 Copyright © 2026. All rights reserved. OrixNotch and the OrixNotch logo are trademarks of Abu Nayim Faisal.

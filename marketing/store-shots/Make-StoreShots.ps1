@@ -71,6 +71,7 @@ function New-Seed([string]$dir) {
         StockTickers = @("AAPL", "MSFT", "NVDA", "BTC-USD")
         AiProvider = "anthropic"; AiModel = "claude-opus-5-5"
         AskAiHeight = 400; PhoneEnabled = $true; LastNoteId = "note-standup"; LastTool = "home"
+        HideForApps = @("powerpnt", "vlc") # the "Hide for these apps" shot (names resolve via App Paths)
     })
 
     Write-Json "$dir/todos.json" @(
@@ -233,9 +234,14 @@ if (-not $SkipCapture) {
 
 # ------------------------------------------------------------------ frames
 
+# The logo chip in every frame's corner (.mark i), drawn from Assets/Brand/mark.svg.
+. "$repo/tools/BrandMark.ps1"
+Save-BrandMarkPng "$repo" 1024 (Join-Path $out "mark.png") -MarkScale 1.0 # big enough for the social posters too
+
 $big = Join-Path $out "store-3840"
 $small = Join-Path $out "store-1920"
 New-Item -ItemType Directory -Force $big, $small | Out-Null
+Get-ChildItem $big, $small -Filter *.png | Remove-Item # frames that were renamed or dropped mustn't linger
 $profileDir = Join-Path ([IO.Path]::GetTempPath()) "orixnotch-shots-chrome"
 foreach ($frame in Get-ChildItem "$here/frames" -Filter "*.html" | Sort-Object Name) {
     $png = Join-Path $big ($frame.BaseName + ".png")
@@ -252,4 +258,8 @@ foreach ($frame in Get-ChildItem "$here/frames" -Filter "*.html" | Sort-Object N
     $g.Dispose(); $dst.Dispose(); $src.Dispose()
     Write-Host "Rendered $($frame.BaseName)"
 }
-Write-Host "Done: $big"
+# The 1920x1080 set is what gets uploaded: keep store-assets/screenshots in step with the frames.
+$listing = Join-Path $repo "store-assets/screenshots"
+Get-ChildItem $listing -Filter *.png -ErrorAction SilentlyContinue | Remove-Item
+Copy-Item (Join-Path $small "*.png") $listing
+Write-Host "Done: $big (1920x1080 copies in $listing)"
