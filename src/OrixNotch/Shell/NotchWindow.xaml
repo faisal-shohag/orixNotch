@@ -150,6 +150,9 @@
                                     Foreground="{DynamicResource SubTextBrush}" Visibility="Collapsed" Click="OnBackClick">
                                 <hero:HeroIcon Kind="ChevronLeft" Width="17" Height="17" />
                             </Button>
+                            <!-- The logo beside "OrixNotch" on the Home page -->
+                            <hero:BrandMark x:Name="TitleLogo" Variant="Gradient" Width="20" Height="20" Margin="0,0,8,0"
+                                            VerticalAlignment="Center" Visibility="Collapsed" />
                             <TextBlock x:Name="TitleText" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">

@@ -32,6 +32,7 @@ public partial class NotchWindow
         TabBar.Visibility = Visibility.Collapsed;
         BackButton.Visibility = Visibility.Collapsed;
         TitleText.Text = "Drop to…";
+        TitleLogo.Visibility = Visibility.Collapsed;
         DropChooser.Visibility = Visibility.Visible;
         SetToolSize(ask ? ChooserWithAskW : ChooserW, ChooserH, showTabs: false);
         DropChooser.MouseMove += OnChooserMouseMove;

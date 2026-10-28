@@ -106,15 +106,40 @@ public partial class NotchWindow
             await Tool("phone", 1500);
         }
 
-        if (Want("settings"))
+        async Task SettingsShot(string name, string page, string? section = null)
         {
+            if (!Want(name)) return;
             if (!_expanded) Expand(activate: false);
             _pinned = true;
             OpenTool(SettingsId);
-            if (_views.GetValueOrDefault(SettingsId) is Settings.SettingsView settings) settings.ShowPage("appearance");
-            await Task.Delay(900);
-            await Shot("settings");
+            if (_views.GetValueOrDefault(SettingsId) is Settings.SettingsView settings)
+            {
+                settings.ShowPage(page);
+                if (section is not null) settings.ScrollToSection(section);
+            }
+            await Task.Delay(1200);
+            await Shot(name);
         }
+        await SettingsShot("settings", "appearance");
+        await SettingsShot("settings-behavior", "general", "BEHAVIOR");          // show / auto-hide / full screen / capture
+        await SettingsShot("settings-hideapps", "general", "HIDE FOR THESE APPS");
+
+        // Alerts out of the closed notch.
+        async Task Peek(string name, Action show)
+        {
+            if (!Want(name)) return;
+            _pinned = false;
+            Collapse();
+            await Task.Delay(900);
+            show();
+            await Task.Delay(400);
+            await Shot(name);
+            EndPeek();
+            await Task.Delay(700);
+        }
+        await Peek("peek-download", () => ShowDownloadPeek(Path.Combine(Storage.PathOf("shelf"), "Brand assets.zip")));
+        await Peek("peek-bluetooth", () => ShowBluetoothPeek("AirPods Pro", true));
+        await Peek("peek-battery", () => ShowPowerPeek("Charging", "84%", true));
 
         // Pomodoro running: the Timers panel and the collapsed timer pill.
         if (Want("timer") || Want("pill-timer"))

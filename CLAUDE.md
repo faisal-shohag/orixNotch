@@ -38,7 +38,7 @@ It also exposes `Instance`, `OpenTool(id)`, `ShowTool(id)` and `HoldOpen()`. Wra
 
 **Services (`Services/`)** are either singletons (`X.Instance`) or static classes (`SettingsService`, `ThemeService`, `HotkeyService`, `StartupService`, `AiService`). Many are CommunityToolkit.Mvvm `ObservableObject`s with `[ObservableProperty]`, and views bind to them or listen to `PropertyChanged`. Work done off the UI thread (sockets, Kestrel, file I/O) must marshal back through `Application.Current.Dispatcher` before touching observable collections.
 
-Device alerts: `PowerWatcher` (polled from `Guard()`), `VolumeService` (Core Audio COM callback), `BluetoothWatcher` (WinRT `DeviceWatcher`), `DownloadWatcher` (`FileSystemWatcher` on the real Downloads folder, firing on the `.crdownload`/`.part` → final rename). Each raises an event on the UI thread that `NotchWindow` turns into a peek, gated by its `AppSettings` toggle.
+Device alerts: `PowerWatcher` (polled from `Guard()`), `VolumeService` (Core Audio COM callback), `BluetoothWatcher` (WinRT `DeviceWatcher`), `DownloadWatcher` (`FileSystemWatcher` on the real Downloads folder, firing on the `.crdownload`/`.part` → final rename). Each raises an event on the UI thread that `NotchWindow` turns into a peek, gated by its `AppSettings` toggle. `ForegroundAppWatcher` (a `SetWinEventHook` foreground hook plus a `Recheck()` from `Guard()`) drives "Hide for these apps": a listed app in front fades the pill (`Concealable`) or hides the window (`Guard`, mode `Hidden`), and `AlertsHeld()` decides whether peeks wait. A listed app's alert setting beats the general full-screen rule, and exclusive games always hold alerts.
 
 **Calendar:** `CalendarEvent.LoadAll()` merges the user's `events.json` with `events-feed.json`. The feed file is written by `CalendarFeedService` from subscribed `.ics` links (stored DPAPI-protected in `calendar-feeds.bin`; events carry only a hashed `Feed` id) and expanded by `IcsParser`, a pure class with no WPF dependencies. Calendar, Home, idle items and reminders all read through `LoadAll()`. Subscribed events are read-only.
 
@@ -48,7 +48,7 @@ Device alerts: `PowerWatcher` (polled from `Guard()`), `VolumeService` (Core Aud
 - `Services/Storage.cs`: `Storage.Load<T>` and `Save` write JSON files under the data dir (atomic tmp+move); `Storage.Dir(name)` gives a subfolder.
 - `SettingsService.Current` (also `App.Settings`) is one `AppSettings` POCO. Add new settings as properties with defaults. `SettingsService.Save(notify)` raises `Changed` when `notify` is true, and the shell re-applies layout on that.
 - Secrets (API keys, the phone key, subscribed calendar links) are stored DPAPI-protected via `ProtectedData`.
-- `SettingsService.FirstRun` is true when no settings file existed at launch. The first launch opens Settings → Tabs as a "pick your tools" welcome.
+- `SettingsService.FirstRun` is true when no settings file existed at launch. The first launch opens Settings → Tabs as a "pick your tools" welcome. `ApplyFirstRunDefaults()` (called from `App` before the window) sets the PC-dependent defaults once: weather city from the time zone and region, °F/°C, and niche tools hidden. Static defaults stay as property initializers; existing users keep their saved values.
 
 **Settings UI (`Settings/SettingsView.xaml.cs`)** is built in code rather than XAML. It uses the `Pages` table plus helpers: `Title`, `Section`, `Row(title, description, control)`, `Toggle`, `Combo`, `TextInput`. Consecutive `Row`s group into one card. Search renders every page and filters `Row` cards by their text, so a setting is only searchable if it is a `Row`.
 
@@ -56,6 +56,8 @@ Device alerts: `PowerWatcher` (polled from `Guard()`), `VolumeService` (Core Aud
 - `AppIcon` enum members are rendered by `HeroIcon`.
 - The artwork comes from `HeroIconsData.g.cs` (generated Heroicons, do not hand-edit) or `HeroCustomIcons.cs` (hand-added Tabler/Phosphor paths with their own viewBox).
 - To add an icon, add an enum member plus one of those entries.
+
+**Brand:** `Assets/Brand/mark.svg` (the designer's file) is the single source of the logo. `Shell/BrandMark.cs` draws it in the app, and `tools/BrandMark.ps1` renders it for `tools/Export-BrandIcon.ps1` (`OrixNotch.ico`, `logo-512.png`, also used for the tray) and `store-assets/Export-StoreArt.ps1`. The colours are pink `#FD0388` → orange `#FC6F18` on tile `#0B0E17`. After changing the SVG, re-run both scripts.
 
 **Theming:** `Themes/Theme.xaml` defines brushes (`SurfaceBrush`, `AccentBrush`, `SubTextBrush`, …) and styles (`IconButton`, `AccentButton`, `Card`, `Caps`, `SubText`, `ToggleSwitch`). `ThemeService` swaps the colors live, so reference brushes with `DynamicResource` or `SetResourceReference`, never hard-coded colors.
 

@@ -47,6 +47,7 @@ public partial class App : Application
         // Before any UI measures text.
         Resources["UiFont"] = BuildUiFont();
         ThemeService.Apply();
+        SettingsService.ApplyFirstRunDefaults(); // weather city, units, a shorter tab bar (first launch only)
         var window = new NotchWindow();
         MainWindow = window;
         window.Show();

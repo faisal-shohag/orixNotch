@@ -55,6 +55,7 @@ These providers process requests under their own privacy policies. The app's dev
 - **Global hotkey** (`Ctrl+Alt+N`): handled locally to open the panel.
 - **Clipboard monitoring:** runs only while the app is running; history never leaves the device. Clear it anytime from the Clipboard tool.
 - **Device alerts:** to show short alerts on the notch, the app reads on your PC the battery and charger status, the speaker volume, which paired Bluetooth devices are connected (their names), and the names of files that finish downloading into your Downloads folder. None of this is stored or sent anywhere. Each alert can be turned off in Settings → General → Notifications.
+- **Hide for these apps:** if you list apps in Settings → General, the app checks which app is in front (its process name only) to hide the notch for them. Only your list is saved; nothing is sent anywhere.
 - **Fonts:** a bundled Bengali font is installed per-user on first run so mixed-language text renders correctly.
 
 ## 5. Data retention & deletion

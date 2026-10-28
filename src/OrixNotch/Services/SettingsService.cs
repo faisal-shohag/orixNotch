@@ -19,6 +19,10 @@ public sealed class AppSettings
     public bool LaunchAtStartup { get; set; }
     public bool StartupDefaultApplied { get; set; }
     public bool HideInFullscreen { get; set; } = true;
+    /// <summary>Hide while one of these apps is in front: process names, lowercase, no ".exe" (ForegroundAppWatcher).</summary>
+    public List<string> HideForApps { get; set; } = new();
+    public string HideForAppsMode { get; set; } = "Fade";     // "Fade" (top edge brings it back) | "Hidden"
+    public bool HideForAppsHoldAlerts { get; set; } = true;   // alerts wait until the app is no longer in front
     /// <summary>"Always" | "WhenActive" (music, timer, reminder) | "HoverOnly"; hidden, it comes back at the top edge.</summary>
     public string NotchVisibility { get; set; } = "Always";
     /// <summary>Leave the notch out of screenshots, recordings and screen sharing.</summary>
@@ -27,7 +31,8 @@ public sealed class AppSettings
     public bool VolumeHud { get; set; }            // off: Windows shows its own volume flyout too
     public bool BluetoothAlerts { get; set; } = true;
     public bool DownloadAlerts { get; set; } = true;
-    public bool TrackPeek { get; set; }            // a short alert with the new song when the track changes    /// <summary>The closed notch dodges a pointer coming from its sides (it can be caught from below).</summary>
+    public bool TrackPeek { get; set; }            // a short alert with the new song when the track changes
+    /// <summary>The closed notch dodges a pointer coming from its sides (it can be caught from below).</summary>
     public bool RepelCursor { get; set; } = true;
 
     public bool ClipboardEnabled { get; set; } = true;
@@ -50,8 +55,8 @@ public sealed class AppSettings
     public int PomodoroWorkMin { get; set; } = 25;
     public int PomodoroBreakMin { get; set; } = 5;
     public int TimerMinutes { get; set; } = 10;
-    public string PomodoroSound { get; set; } = "No Sound";
-    public string TimerSound { get; set; } = "No Sound";
+    public string PomodoroSound { get; set; } = "Soft Chime"; // a timer that ends silently is easy to miss
+    public string TimerSound { get; set; } = "Soft Chime";
 
     // Calendar reminders on the closed notch
     public bool RemindersEnabled { get; set; } = true;
@@ -78,7 +83,7 @@ public sealed class AppSettings
     public string IdleAiMode { get; set; } = "Auto";
     public List<string> IdleAiTools { get; set; } = new();
 
-    public string LastTool { get; set; } = "nowplaying";
+    public string LastTool { get; set; } = "home";
 
     /// <summary>Look for a newer version (Microsoft Store or GitHub releases) and say so once per version.</summary>
     public bool CheckForUpdates { get; set; } = true;
@@ -99,12 +104,16 @@ public sealed class AppSettings
     public bool LyricsEnabled { get; set; } = true;
 
     /// <summary>Action id → gesture such as "Ctrl+Alt+N". Empty gesture = disabled.</summary>
+    /// <remarks>
+    /// Only the toggle is on by default: global Ctrl+Alt shortcuts are AltGr on many keyboard layouts (Polish
+    /// AltGr+A = ą…) and would swallow those letters everywhere; Ctrl+Alt+V is also Word's Paste Special.
+    /// </remarks>
     public Dictionary<string, string> Hotkeys { get; set; } = new()
     {
         ["toggle"] = "Ctrl+Alt+N",
-        ["ask"] = "Ctrl+Alt+A",
-        ["clipboard"] = "Ctrl+Alt+V",
-        ["teleprompter"] = "Ctrl+Alt+T",
+        ["ask"] = "",
+        ["clipboard"] = "",
+        ["teleprompter"] = "",
     };
 
     // Teleprompter
@@ -137,6 +146,37 @@ public static class SettingsService
     public static bool FirstRun { get; } = !System.IO.File.Exists(Storage.PathOf(FileName));
 
     public static AppSettings Current { get; } = Storage.Load<AppSettings>(FileName);
+
+    /// <summary>
+    /// Defaults that depend on this PC, set once on the first launch (saved values win afterwards): the weather
+    /// city from the Windows time zone and region, °F where the region isn't metric, and a shorter tab bar. Niche
+    /// tools start hidden (one switch away in Settings → Tabs), and so does AI Usage unless Claude Code or Codex is here.
+    /// </summary>
+    public static void ApplyFirstRunDefaults()
+    {
+        if (!FirstRun) return;
+        var settings = Current;
+        var region = System.Globalization.RegionInfo.CurrentRegion;
+        if (CityFromTimeZone(TimeZoneInfo.Local.Id, region.TwoLetterISORegionName) is { } city) settings.WeatherCity = city;
+        settings.UseFahrenheit = !region.IsMetric;
+
+        settings.HiddenTools.AddRange(["teleprompter", "stocks", "converter", "system", "shortcuts"]);
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!System.IO.Directory.Exists(System.IO.Path.Combine(home, ".claude")) && !System.IO.Directory.Exists(System.IO.Path.Combine(home, ".codex")))
+            settings.HiddenTools.Add("aiusage");
+        Save(notify: false);
+    }
+
+    /// <summary>
+    /// The city a Windows time zone is named after, using the region to pick between zones' cities
+    /// ("W. Europe Standard Time" in IT → "Rome", in DE → "Berlin"). Null for UTC-style zones.
+    /// </summary>
+    internal static string? CityFromTimeZone(string windowsId, string region)
+    {
+        if (!TimeZoneInfo.TryConvertWindowsIdToIanaId(windowsId, region, out var iana) || iana.StartsWith("Etc/")) return null;
+        var slash = iana.LastIndexOf('/');
+        return slash < 0 ? null : iana[(slash + 1)..].Replace('_', ' '); // "America/New_York" → "New York"
+    }
 
     /// <summary>Raised after settings that affect layout or behaviour were saved.</summary>
     public static event Action? Changed;

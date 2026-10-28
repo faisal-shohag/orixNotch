@@ -197,6 +197,8 @@ public partial class NotchWindow : Window
         VolumeService.Instance.Start();
         BluetoothWatcher.Instance.Start();
         DownloadWatcher.Instance.Start();
+        ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
+        ForegroundAppWatcher.Instance.Start();
         _guardTimer.Start();
         _repelTimer.Start();
     }
@@ -204,6 +206,7 @@ public partial class NotchWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         HotkeyService.UnregisterAll();
+        ForegroundAppWatcher.Instance.Stop();
         Win32.RemoveClipboardFormatListener(_hwnd);
         base.OnClosed(e);
     }
@@ -278,11 +281,14 @@ public partial class NotchWindow : Window
     {
         if (_hwnd == IntPtr.Zero) return;
         PowerWatcher.Instance.Poll();
+        ForegroundAppWatcher.Instance.Recheck(); // raises Changed (which re-enters Guard) only when the app in front changed
         // A full-screen window (video, F11) fades the notch out but the top edge brings it back;
         // an exclusive game hides it outright (a window over it can knock it out of full screen).
         var fullscreen = App.Settings.HideInFullscreen && !_expanded ? Win32.FullscreenKind() : 0;
         _fullscreen = fullscreen == 1;
-        var hide = fullscreen == 2;
+        _exclusive = fullscreen == 2;
+        // A listed app set to "Hide completely" hides it too, except while an alert it lets through is showing.
+        var hide = _exclusive || HiddenForApp && App.Settings.HideForAppsMode == "Hidden" && !_peeking;
         var target = hide ? Visibility.Hidden : Visibility.Visible;
         if (Visibility != target) Visibility = target;
         if (!hide)
@@ -293,14 +299,33 @@ public partial class NotchWindow : Window
     // ---------------------------------------------------------------- auto-hide
 
     private bool _fullscreen;          // a full-screen window is up (see Guard)
+    private bool _exclusive;           // an exclusive full-screen game: the window is hidden outright
     private bool _revealed;            // the pointer touched the top edge over the hidden notch
     private double _opacityTarget = 1;
+
+    /// <summary>One of the apps in Settings → General "Hide for these apps" is in front.</summary>
+    private bool HiddenForApp =>
+        !_expanded && ForegroundAppWatcher.Instance.Current is { } app && App.Settings.HideForApps.Contains(app);
+
+    /// <summary>
+    /// Whether alerts wait in the queue. A listed app's own choice wins over the general full-screen rule;
+    /// an exclusive game always holds them (a window over it can knock it out of full screen).
+    /// </summary>
+    private bool AlertsHeld() =>
+        _exclusive || (HiddenForApp ? App.Settings.HideForAppsHoldAlerts : _fullscreen);
+
+    private void OnForegroundAppChanged()
+    {
+        Guard();
+        UpdateConceal();
+        if (!_peeking && !AlertsHeld() && _peekQueue.Count > 0) ShowNextPeek(); // held alerts play now
+    }
 
     /// <summary>Whether the closed notch should be faded out now (Settings → Show notch, or full screen).</summary>
     private bool Concealable()
     {
         if (_expanded || _peeking) return false;
-        if (_fullscreen) return true;
+        if (_fullscreen || HiddenForApp) return true; // before the Show-notch mode: these win over "When active"
         return App.Settings.NotchVisibility switch
         {
             "HoverOnly" => true,
@@ -335,7 +360,7 @@ public partial class NotchWindow : Window
         Pill.BeginAnimation(OpacityProperty, new DoubleAnimation(target, fade));
         // Hidden by choice, mark the spot; hidden for a full-screen video, stay out of sight entirely.
         EdgeHint.Width = Math.Round(_idleW * 0.55);
-        EdgeHint.BeginAnimation(OpacityProperty, new DoubleAnimation(target == 0 && !_fullscreen ? 0.7 : 0, fade));
+        EdgeHint.BeginAnimation(OpacityProperty, new DoubleAnimation(target == 0 && !_fullscreen && !HiddenForApp ? 0.7 : 0, fade));
     }
 
     private void ApplyCaptureAffinity()
@@ -1277,7 +1302,8 @@ public partial class NotchWindow : Window
 
     private void ShowNextPeek()
     {
-        if (_expanded || Visibility != Visibility.Visible || _fullscreen) return; // stays queued until the notch is closed again
+        if (_expanded || AlertsHeld()) return; // stays queued until the notch is closed / the app is left
+        if (Visibility != Visibility.Visible) Visibility = Visibility.Visible; // a listed app hid it but lets alerts through
         _peekQueue.RemoveAll(r => DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
         if (_peekQueue.Count == 0) return;
         var next = _peekQueue[0];
@@ -1350,6 +1376,7 @@ public partial class NotchWindow : Window
         _width.Target = ActivityWidth();
         _height.Target = _collapsedH;
         StartAnimation();
+        if (HiddenForApp) Guard(); // "Hide completely" let this alert through; hide again now it's done
     }
 
     private void OnPeekDismiss(object sender, RoutedEventArgs e)
@@ -1683,6 +1710,7 @@ public partial class NotchWindow : Window
 
         _activeTool = id;
         TitleText.Text = title;
+        TitleLogo.Visibility = id == "home" ? Visibility.Visible : Visibility.Collapsed;
         BackButton.Visibility = _backTarget is not null && id != SettingsId ? Visibility.Visible : Visibility.Collapsed;
         CloseButton.Visibility = id == SettingsId ? Visibility.Visible : Visibility.Collapsed;
         PinButton.Visibility = id == SettingsId ? Visibility.Collapsed : Visibility.Visible;

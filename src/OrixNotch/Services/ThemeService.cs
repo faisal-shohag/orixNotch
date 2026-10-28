@@ -95,7 +95,7 @@ public static class ThemeService
         new("mono", "Mono", C("#9A9AA2")),
 
         // Gradient accents (left to right).
-        new("brand", "OrixNotch", C("#4F46FF"), C("#2E9CFF"), C("#4F46FF"), C("#7C3CFF"), C("#D946EF")),
+        new("brand", "OrixNotch", C("#FD3A50"), C("#FD0388"), C("#FC6F18")),
         new("sunrise", "Sunrise", C("#FF7E5F"), C("#FF7E5F"), C("#FEB47B")),
         new("flamingo", "Flamingo", C("#FF5ACD"), C("#FF5ACD"), C("#FBDA61")),
         new("ocean-g", "Ocean", C("#2BC0E4"), C("#2BC0E4"), C("#4F7CFF")),

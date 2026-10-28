@@ -1,6 +1,6 @@
 # OrixNotch
 
-<img src="src/OrixNotch/Assets/Brand/logo-512.png" width="180" alt="OrixNotch brand — gradient notch mark" />
+<img src="src/OrixNotch/Assets/Brand/logo-512.png" width="180" alt="OrixNotch logo — sparkles and a notched ring, pink to orange" />
 
 > **Your Screen, Smarter** — Smoother • Faster • Smarter
 
@@ -25,9 +25,9 @@ A small black pill sits at the top-center of your screen. Hover it (or click it,
 | Unit Converter | Length, mass, temperature, volume and speed. |
 | Emoji | Full emoji picker with search and recents; click to copy. |
 
-Tool visibility and order, open mode (hover/click), hover delay, display, autostart and more live in **Settings** (gear icon or tray menu). Settings has a search box, and the first launch opens on Settings → Tabs to pick your tools.
+Tool visibility and order, open mode (hover/click), hover delay, display, autostart and more live in **Settings** (gear icon or tray menu). Settings has a search box, and the first launch opens on Settings → Tabs to pick your tools. Teleprompter, Shortcuts, System, Stocks and Converter start switched off (AI Usage too, unless Claude Code or Codex is installed); turn them on there. Weather starts on your time zone's city, in °F where your region uses it.
 
-The closed notch can stay visible, show only while something is happening (music, a timer, a reminder), or hide until the pointer touches the top edge of the screen (a thin accent line marks the spot). It steps aside for full-screen videos and games, can follow the pointer to another display, and can be left out of screenshots and screen sharing.
+The closed notch can stay visible, show only while something is happening (music, a timer, a reminder), or hide until the pointer touches the top edge of the screen (a thin accent line marks the spot). It steps aside for full-screen videos and games and for apps you pick (fading out or hiding completely, with alerts held or let through), can follow the pointer to another display, and can be left out of screenshots and screen sharing.
 
 Short alerts pop out of the closed notch for reminders, Windows notifications, AI usage limits, phone transfers, charger plugged in or pulled and low battery, Bluetooth devices connecting, finished browser downloads, and optionally volume changes and new songs. Each can be turned off in Settings → General.
 

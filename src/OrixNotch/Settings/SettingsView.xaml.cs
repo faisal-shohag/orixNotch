@@ -50,7 +50,9 @@ public partial class SettingsView : UserControl, IToolView
                 });
 
             var content = new StackPanel { Orientation = Orientation.Horizontal };
-            content.Children.Add(new HeroIcon { Kind = icon, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(id == "about" // About is about OrixNotch itself: its own logo
+                ? new BrandMark { Variant = BrandVariant.Gradient, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center }
+                : new HeroIcon { Kind = icon, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center });
             content.Children.Add(new TextBlock { Text = name, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
             var nav = new RadioButton
             {
@@ -204,6 +206,68 @@ public partial class SettingsView : UserControl, IToolView
                 yield return t;
     }
 
+    /// <summary>Apps with an open window right now, for "Hide for these apps": (process name, friendly name).</summary>
+    private static List<(string Name, string Label)> RunningApps()
+    {
+        var apps = new Dictionary<string, string>();
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.Id == Environment.ProcessId || process.MainWindowHandle == IntPtr.Zero || process.MainWindowTitle.Length == 0) continue;
+                    var name = process.ProcessName.ToLowerInvariant();
+                    if (name == "applicationframehost") continue; // hosts every Store app: can't tell them apart (ForegroundAppWatcher)
+                    if (!apps.ContainsKey(name)) apps[name] = FriendlyName(process, name);
+                }
+                catch (Exception)
+                {
+                    // exited while we looked
+                }
+            }
+        }
+        return apps.Select(a => (a.Key, a.Value)).OrderBy(a => a.Value, StringComparer.CurrentCultureIgnoreCase).ToList();
+    }
+
+    /// <summary>A listed app's name as its exe describes itself: from a running copy, else the exe Windows registered
+    /// for it (App Paths, e.g. powerpnt → "Microsoft PowerPoint"), else its process name.</summary>
+    private static string AppLabel(string name)
+    {
+        foreach (var process in Process.GetProcessesByName(name))
+            using (process)
+                return FriendlyName(process, name);
+        foreach (var root in new[] { "HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE" })
+        {
+            if (Microsoft.Win32.Registry.GetValue($@"{root}\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{name}.exe", "", null) is string exe
+                && System.IO.File.Exists(exe = exe.Trim('"'))
+                && FileVersionInfo.GetVersionInfo(exe).FileDescription is { Length: > 0 } description)
+                return description.Trim();
+        }
+        return name;
+    }
+
+    /// <summary>Scrolls the page so the section headed <paramref name="caps"/> is at the top (Store screenshot mode).</summary>
+    internal void ScrollToSection(string caps) =>
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (Page.Children.OfType<TextBlock>().FirstOrDefault(t => t.Text == caps) is { } header)
+                PageScroll.ScrollToVerticalOffset(Math.Max(0, header.TransformToAncestor(Page).Transform(new Point()).Y - 4));
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
+
+    private static string FriendlyName(Process process, string name)
+    {
+        try
+        {
+            if (process.MainModule?.FileVersionInfo.FileDescription is { Length: > 0 } description) return description.Trim();
+        }
+        catch (Exception)
+        {
+            // elevated or protected process: no access to its file
+        }
+        return name;
+    }
+
     private void RenderGeneral()
     {
         Title("General", "How OrixNotch behaves on your PC.");
@@ -229,6 +293,42 @@ public partial class SettingsView : UserControl, IToolView
             Toggle(S.HideFromCapture, v => { S.HideFromCapture = v; Save(); }));
         Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
             Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); }));
+
+        Section("HIDE FOR THESE APPS");
+        foreach (var listed in S.HideForApps.ToList())
+        {
+            var name = listed;
+            Row(AppLabel(name), $"{name}.exe",
+                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                {
+                    S.HideForApps.Remove(name);
+                    Save();
+                    Render();
+                }));
+        }
+        var running = RunningApps().Where(a => !S.HideForApps.Contains(a.Name)).ToList();
+        var pick = Combo(running.Select(a => a.Label), running.Count > 0 ? 0 : -1, _ => { }, width: 200);
+        var addApp = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = running.Count > 0 };
+        addApp.Click += (_, _) =>
+        {
+            if (pick.SelectedIndex < 0) return;
+            S.HideForApps.Add(running[pick.SelectedIndex].Name);
+            Save();
+            Render();
+        };
+        var addAppRow = new StackPanel { Orientation = Orientation.Horizontal };
+        addAppRow.Children.Add(pick);
+        addAppRow.Children.Add(addApp);
+        Row("Add an app", "Hide the notch while it's in front, on any display.", addAppRow);
+        if (S.HideForApps.Count > 0)
+        {
+            Row("When one is in front", "Fade out (touch the top edge to bring it back), or hide completely.",
+                Combo(["Fade out", "Hide completely"], S.HideForAppsMode == "Hidden" ? 1 : 0,
+                    i => { S.HideForAppsMode = i == 1 ? "Hidden" : "Fade"; Save(); }, width: 170));
+            Row("Alerts", "Hold alerts until you switch away, or let them pop out anyway.",
+                Combo(["Wait until I switch away", "Show them anyway"], S.HideForAppsHoldAlerts ? 0 : 1,
+                    i => { S.HideForAppsHoldAlerts = i == 0; Save(); }, width: 200));
+        }
 
         Section("SYSTEM");
         Row("Open at login", StartupService.DisabledByUser
@@ -572,7 +672,8 @@ public partial class SettingsView : UserControl, IToolView
     {
         Title(SettingsService.FirstRun ? "Welcome! Pick your tools" : "Tabs",
             SettingsService.FirstRun
-                ? "Turn off the tools you won't use and move the rest into order with the arrows. You can change this anytime in Settings → Tabs."
+                ? "A few tools start switched off: turn on any you want, and move the rest into order with the arrows. "
+                    + "Notifications shown on the notch are kept on this PC for 30 days (Settings → General to turn that off)."
                 : "The tools in the notch's bottom bar, and their order.");
         Section("IN THE NOTCH");
         var visible = ToolRegistry.Ordered();
@@ -861,7 +962,7 @@ public partial class SettingsView : UserControl, IToolView
             CornerRadius = new CornerRadius(18),
             VerticalAlignment = VerticalAlignment.Top,
             BorderThickness = new Thickness(1),
-            Child = new BrandMark { Variant = BrandVariant.Gradient, Width = 50, Height = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+            Child = new BrandMark { Variant = BrandVariant.Gradient, Width = 46, Height = 46, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
         };
         tile.SetResourceReference(Border.BackgroundProperty, "PillBrush");
         tile.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
