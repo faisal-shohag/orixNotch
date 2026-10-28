@@ -185,8 +185,11 @@ public sealed partial class PhoneTransferService
             using var reader = new StreamReader(stream);
             _page = reader.ReadToEnd();
         }
-        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(Environment.MachineName)).Replace("{{ACCENT}}", AccentHex());
+        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(PcName)).Replace("{{ACCENT}}", AccentHex());
     }
+
+    /// <summary>How the page names this PC (ORIXNOTCH_PC_NAME overrides it, for screenshots).</summary>
+    private static string PcName => Environment.GetEnvironmentVariable("ORIXNOTCH_PC_NAME") is { Length: > 0 } name ? name : Environment.MachineName;
 
     /// <summary>The notch's accent, so the page matches the PC's theme.</summary>
     private static string AccentHex()

@@ -29,7 +29,7 @@ public partial class EmojiView : UserControl
 
     private static readonly Lazy<List<EmojiEntry>> AllEmoji = new(LoadEmoji);
     private readonly List<string> _recent = Storage.Load<List<string>>(RecentFile);
-    private string _group = "SmileyFillys & Emotion";
+    private string _group = "Smileys & Emotion";
 
     public EmojiView()
     {

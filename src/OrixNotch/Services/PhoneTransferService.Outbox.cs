@@ -208,7 +208,7 @@ public sealed partial class PhoneTransferService
         if (!Allowed(ctx)) return Results.StatusCode(403);
         var items = OnUi(() => Outbox.Where(o => o.Kind != PhoneOutboxKind.Text).Reverse().ToList()); // oldest first
         if (items.Count == 0) return Results.NotFound();
-        await ZipAsync(ctx, $"From {Environment.MachineName}.zip", items);
+        await ZipAsync(ctx, $"From {PcName}.zip", items);
         return Results.Empty;
     }
 
@@ -342,7 +342,7 @@ public sealed partial class PhoneTransferService
         var aborted = ctx.RequestAborted;
         try
         {
-            await WriteAsync($"event: hello\ndata: {JsonSerializer.Serialize(new { name = Environment.MachineName })}\n\n");
+            await WriteAsync($"event: hello\ndata: {JsonSerializer.Serialize(new { name = PcName })}\n\n");
             var reader = channel.Reader;
             while (!aborted.IsCancellationRequested)
             {
