@@ -41,7 +41,7 @@ public partial class HomeView : UserControl, IToolView
         _clockText = "";
         UpdateClock();
 
-        var today = Storage.Load<List<CalendarEvent>>("events.json")
+        var today = CalendarEvent.LoadAll()
             .Where(e => e.Date.Date == DateTime.Today)
             .OrderBy(e => e.Time)
             .ToList();

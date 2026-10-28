@@ -58,6 +58,8 @@ public static partial class AiUsageService
 
     public static async Task<List<ProviderUsage>> LoadAsync()
     {
+        if (Environment.GetEnvironmentVariable("ORIXNOTCH_AIUSAGE_DEMO") == "1") return Demo(); // screenshots
+
         // Every tool loads in parallel; ones that aren't on this PC come back null.
         var claudeTask = Task.Run(async () =>
         {
@@ -68,13 +70,50 @@ public static partial class AiUsageService
         var codexTask = Task.Run(LoadCodex);
         var openCodeTask = Task.Run(LoadOpenCode);
         var cursorTask = Task.Run(LoadCursorAsync);
-        var antigravityTask = Task.Run(LoadAntigravity);
+        var antigravityTask = Task.Run(LoadAntigravityAsync);
         var deepSeekTask = Task.Run(LoadDeepSeekAsync);
         var perplexityTask = Task.Run(LoadPerplexity);
         await Task.WhenAll(claudeTask, codexTask, openCodeTask, cursorTask, antigravityTask, deepSeekTask, perplexityTask);
         return new[] { claudeTask.Result, codexTask.Result, openCodeTask.Result, cursorTask.Result, antigravityTask.Result, deepSeekTask.Result, perplexityTask.Result }
             .OfType<ProviderUsage>()
             .ToList();
+    }
+
+    /// <summary>Made-up usage for Store screenshots (ORIXNOTCH_AIUSAGE_DEMO=1); nothing is read from the PC.</summary>
+    private static List<ProviderUsage> Demo()
+    {
+        var now = DateTime.Now;
+        var claude = new ProviderUsage
+        {
+            Id = "claude", Name = "Claude Code", HasCost = true, Logo = BrandLogo.Claude,
+            SessionTokens = 1_840_000, WeeklyTokens = 21_600_000, TodayTokens = 3_120_000, TodayCost = 18.42m, MonthCost = 412.75m,
+            SessionStarted = now.AddHours(-2.2), SessionPercent = 42, SessionResets = now.AddHours(2.8),
+            WeeklyPercent = 31, WeeklyResets = now.Date.AddDays(4).AddHours(15),
+        };
+        claude.SessionModels["Opus"] = 1_210_000;
+        claude.SessionModels["Sonnet"] = 630_000;
+        var codex = new ProviderUsage
+        {
+            Id = "codex", Name = "Codex · ChatGPT", Logo = BrandLogo.OpenAi,
+            SessionTokens = 920_000, WeeklyTokens = 8_400_000, TodayTokens = 1_050_000,
+            SessionStarted = now.AddHours(-1.1), SessionPercent = 18, SessionResets = now.AddHours(3.9),
+            WeeklyPercent = 24, WeeklyResets = now.Date.AddDays(3).AddHours(9),
+        };
+        var cursor = new ProviderUsage { Id = "cursor", Name = "Cursor", Logo = BrandLogo.Cursor, Badge = "Pro" };
+        cursor.Meters.Add(new UsageMeter("Included usage", 57, "57% used", $"Resets {now.Date.AddDays(12):MMM d}", "43% left"));
+        cursor.Meters.Add(new UsageMeter("On-demand", 12, "$6.20", $"Resets {now.Date.AddDays(12):MMM d}", "of $50.00"));
+        var deepSeek = new ProviderUsage
+        {
+            Id = "deepseek", Name = "DeepSeek API", Logo = BrandLogo.DeepSeek, Badge = "API",
+            Headline = "$24.80", HeadlineSub = "Balance · granted $0.00 · topped up $24.80",
+        };
+        var shape = new[] { 0.35, 0.5, 0.42, 0.7, 0.62, 0.3, 0.25, 0.55, 0.8, 0.68, 0.74, 0.9, 0.6, 0.85 };
+        for (var i = 0; i < 14; i++)
+        {
+            claude.Daily[i] = (long)(3_600_000 * shape[i]);
+            codex.Daily[i] = (long)(1_400_000 * shape[(i + 5) % 14]);
+        }
+        return [claude, codex, cursor, deepSeek];
     }
 
     /// <summary>Fills Claude's 5-hour and weekly plan utilization; leaves them null on any failure.</summary>

@@ -10,6 +10,9 @@
         Foreground="{DynamicResource TextBrush}" FontFamily="{DynamicResource UiFont}" FontSize="14"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
     <Grid>
+        <!-- While the notch is hidden (Settings → Show notch), a thin accent line marks where the top edge brings it back -->
+        <Border x:Name="EdgeHint" Width="120" Height="3" CornerRadius="0,0,2,2" VerticalAlignment="Top" HorizontalAlignment="Center"
+                Background="{DynamicResource AccentBrush}" Opacity="0" IsHitTestVisible="False" />
         <!-- Pill = notch silhouette (Shape) + clipped content (Body). Sizes are driven by springs in code. -->
         <Grid x:Name="Pill" VerticalAlignment="Top" HorizontalAlignment="Center" AllowDrop="True">
             <Path x:Name="Shape" Fill="{DynamicResource PillBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1" />
@@ -127,11 +130,16 @@
                                    Typography.NumeralAlignment="Tabular" TextWrapping="Wrap" TextTrimming="WordEllipsis"
                                    LineHeight="16" LineStackingStrategy="BlockLineHeight" MaxHeight="32" />
                     </StackPanel>
-                    <Button x:Name="PeekDismiss" Grid.Column="2" Width="28" Height="28" Style="{StaticResource IconButton}"
-                            Foreground="{DynamicResource SubTextBrush}" Background="{DynamicResource HoverBrush}" VerticalAlignment="Center"
-                            ToolTip="Dismiss" AutomationProperties.Name="Dismiss alert" Click="OnPeekDismiss">
-                        <hero:HeroIcon Kind="XMark" Width="11" Height="11" />
-                    </Button>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- "+2": more alerts waiting; dismissing shows the next -->
+                        <TextBlock x:Name="PeekMore" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SubTextBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed" />
+                        <Button x:Name="PeekDismiss" Width="28" Height="28" Style="{StaticResource IconButton}"
+                                Foreground="{DynamicResource SubTextBrush}" Background="{DynamicResource HoverBrush}" VerticalAlignment="Center"
+                                ToolTip="Dismiss" AutomationProperties.Name="Dismiss alert" Click="OnPeekDismiss">
+                            <hero:HeroIcon Kind="XMark" Width="11" Height="11" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
 
                 <!-- Expanded: header (title + pin) / tool / tab bar at the bottom -->
@@ -142,6 +150,9 @@
                                     Foreground="{DynamicResource SubTextBrush}" Visibility="Collapsed" Click="OnBackClick">
                                 <hero:HeroIcon Kind="ChevronLeft" Width="17" Height="17" />
                             </Button>
+                            <!-- The logo beside "OrixNotch" on the Home page -->
+                            <hero:BrandMark x:Name="TitleLogo" Variant="Gradient" Width="20" Height="20" Margin="0,0,8,0"
+                                            VerticalAlignment="Center" Visibility="Collapsed" />
                             <TextBlock x:Name="TitleText" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">

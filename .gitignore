@@ -496,3 +496,5 @@ publish/
 # Local installer output (EXE/MSI/MSIX). Not tracked: builds aren't byte-identical
 # and installers ship via GitHub Releases.
 output/
+marketing/store-shots/out/
+marketing/social/out/

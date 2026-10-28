@@ -47,6 +47,7 @@ public partial class App : Application
         // Before any UI measures text.
         Resources["UiFont"] = BuildUiFont();
         ThemeService.Apply();
+        SettingsService.ApplyFirstRunDefaults(); // weather city, units, a shorter tab bar (first launch only)
         var window = new NotchWindow();
         MainWindow = window;
         window.Show();
@@ -54,6 +55,7 @@ public partial class App : Application
         _ = StartupService.SyncAsync(); // open-at-login: on by default, kept in step with Windows
         _ = PhoneTransferService.Instance.SyncAsync(); // LAN server, only when the user turned it on
         UpdateService.Instance.Start(); // first look a couple of minutes in, then daily
+        CalendarFeedService.Instance.Start(); // subscribed calendars, every 30 minutes
 
         // `OrixNotch.exe --open weather` starts with the panel open on a tool.
         var openAt = Array.IndexOf(e.Args, "--open");
@@ -63,6 +65,8 @@ public partial class App : Application
             if (openAt + 1 < e.Args.Length) window.ShowTool(e.Args[openAt + 1]);
         }
         if (e.Args.Contains("--settings")) window.OpenTool(NotchWindow.SettingsId);
+        else if (SettingsService.FirstRun && openAt < 0) window.OpenSettings("tabs"); // welcome: pick your tools
+        if (NotchWindow.ShotsDir is not null) window.RunShots(); // Store screenshots (dev only)
     }
 
     protected override void OnExit(ExitEventArgs e)

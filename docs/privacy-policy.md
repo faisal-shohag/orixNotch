@@ -1,6 +1,6 @@
 # Privacy Policy — OrixNotch
 
-**Effective date:** October 9, 2026
+**Effective date:** October 28, 2026
 
 OrixNotch ("the app") is a Windows utility developed by Faisal Shohag. This policy explains what data the app handles. In short: **your data stays on your PC — the app has no accounts, no analytics, and no advertising.**
 
@@ -17,6 +17,8 @@ Everything the app saves lives locally under `%LOCALAPPDATA%\OrixNotch` (setting
 | Profile name, avatar | Your PC only | Optional, used for the greeting |
 | AI usage stats (Claude Code and Codex logs, OpenCode's local database, Antigravity's cached quota) | Read from your user profile folder, displayed locally | Never transmitted |
 | API keys (Anthropic / OpenAI / Google / DeepSeek) | Your PC only, encrypted with Windows DPAPI | Only sent to the provider you choose (see §2) |
+| Subscribed calendar links (.ics) | Your PC only, encrypted with Windows DPAPI | Only used to fetch that calendar (see §2) |
+| Events from subscribed calendars | Your PC only (`events-feed.json`) | A local copy, refreshed every 30 minutes; never transmitted |
 | Windows notifications (title, text, app name) | Read on your PC, shown on the notch for a few seconds; kept in a local history file for up to 30 days unless you turn history off | Never transmitted |
 
 ## 2. Network requests (only when you use the feature)
@@ -32,6 +34,9 @@ The app makes internet requests only for features you use — while the tool is 
 | AI Usage — Claude plan limits | Anthropic (`api.anthropic.com`) | Claude Code's own sign-in token, to read your plan usage |
 | AI Usage — Cursor | Cursor (`cursor.com`) | Cursor's own saved sign-in, to read your plan usage |
 | AI Usage — DeepSeek balance | DeepSeek (`api.deepseek.com`) | Your DeepSeek API key, to read your balance |
+| Subscribed calendars | The calendar service whose link you added (e.g. Google, Outlook, iCloud) | A request for that link, every 30 minutes |
+| Update checks (GitHub builds) | GitHub (`api.github.com`, `github.com`) | A request for the latest release; the MSI install also downloads the new installer |
+| Update checks (Microsoft Store build) | Microsoft Store | Handled by Windows' Store service |
 
 These providers process requests under their own privacy policies. The app's developer receives none of this data.
 
@@ -49,6 +54,8 @@ These providers process requests under their own privacy policies. The app's dev
 - **Notifications:** with your permission (Windows notification access), the app reads incoming Windows notifications to show them briefly on the notch. You can turn this off or mute individual apps in Settings → General → Notifications. Notifications shown on the notch are saved in a history file on your PC (`notifications.json`) for up to 30 days so you can reread them in the Notifications tool; you can delete them one by one, clear all, or turn history off in Settings → General → Notifications. Notification content is never sent anywhere.
 - **Global hotkey** (`Ctrl+Alt+N`): handled locally to open the panel.
 - **Clipboard monitoring:** runs only while the app is running; history never leaves the device. Clear it anytime from the Clipboard tool.
+- **Device alerts:** to show short alerts on the notch, the app reads on your PC the battery and charger status, the speaker volume, which paired Bluetooth devices are connected (their names), and the names of files that finish downloading into your Downloads folder. None of this is stored or sent anywhere. Each alert can be turned off in Settings → General → Notifications.
+- **Hide for these apps:** if you list apps in Settings → General, the app checks which app is in front (its process name only) to hide the notch for them. Only your list is saved; nothing is sent anywhere.
 - **Fonts:** a bundled Bengali font is installed per-user on first run so mixed-language text renders correctly.
 
 ## 5. Data retention & deletion

@@ -1,9 +1,12 @@
 using System.Globalization;
 using System.IO;
+using System.Management;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using OrixNotch.Shell;
 
@@ -38,6 +41,11 @@ public static partial class AiUsageService
                 ? testDb
                 : Path.Combine(AppData, "Cursor", "User", "globalStorage", "state.vscdb");
             if (!File.Exists(db)) return null;
+            // Uninstalling Cursor leaves its data folder behind, with a sign-in that only Cursor itself can refresh.
+            var installed = db != Path.Combine(AppData, "Cursor", "User", "globalStorage", "state.vscdb") ||
+                            Directory.Exists(Path.Combine(LocalAppData, "Programs", "cursor")) ||
+                            Directory.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "cursor"));
+            if (!installed) return null;
             var token = ReadVsCodeState(db, "cursorAuth/accessToken");
             var membership = ReadVsCodeState(db, "cursorAuth/stripeMembershipType");
             var usage = new ProviderUsage
@@ -135,48 +143,50 @@ public static partial class AiUsageService
     // ---------------------------------------------------------------- Antigravity
 
     /// <summary>
-    /// Antigravity keeps the per-model quota it last fetched in its state DB
-    /// (<c>antigravityUnifiedStateSync.userStatus</c>, base64 protobuf): model name + remaining fraction + reset time.
+    /// Antigravity quota, live when the app is running: its <c>language_server.exe</c> answers <c>GetUserStatus</c>
+    /// on localhost (port and CSRF token are on its command line). Otherwise the per-model quota an older,
+    /// VS Code-based Antigravity last saved in its state DB (<c>antigravityUnifiedStateSync.userStatus</c>);
+    /// the current app no longer saves it there.
     /// </summary>
-    private static ProviderUsage? LoadAntigravity()
+    private static async Task<ProviderUsage?> LoadAntigravityAsync()
     {
         try
         {
-            var db = Path.Combine(AppData, "Antigravity", "User", "globalStorage", "state.vscdb");
-            if (!File.Exists(db)) return null;
-            var usage = new ProviderUsage { Id = "antigravity", Name = "Antigravity", Logo = BrandLogo.Antigravity, Badge = "Local" };
-            var raw = ReadVsCodeState(db, "antigravityUnifiedStateSync.userStatus");
-            if (string.IsNullOrEmpty(raw))
+            var usage = new ProviderUsage { Id = "antigravity", Name = "Antigravity", Logo = BrandLogo.Antigravity, Badge = "Live" };
+            if (await AntigravityLiveAsync() is { } live)
             {
+                if (live.Models.Count == 0) usage.Note = "No quota information yet.";
+                else FillAntigravityMeters(usage, live.Models, stale: false, live.Tier);
+                return usage;
+            }
+
+            // Not running: the newest state DB, from the old app or the interim "Antigravity IDE".
+            var db = new[] { "Antigravity", "Antigravity IDE" }
+                .Select(name => new FileInfo(Path.Combine(AppData, name, "User", "globalStorage", "state.vscdb")))
+                .Where(f => f.Exists)
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .Select(f => (f.FullName, Raw: ReadVsCodeState(f.FullName, "antigravityUnifiedStateSync.userStatus")))
+                .FirstOrDefault(d => !string.IsNullOrEmpty(d.Raw));
+            var installed = Directory.Exists(Path.Combine(LocalAppData, "Programs", "Antigravity")) ||
+                            Directory.Exists(Path.Combine(AppData, "Antigravity"));
+            usage.Badge = "Local";
+            if (db.Raw is null)
+            {
+                if (!installed) return null;
                 usage.Note = "Open Antigravity and sign in to see quota.";
                 return usage;
             }
 
-            var models = AntigravityQuota(Convert.FromBase64String(raw));
+            var models = AntigravityQuota(Convert.FromBase64String(db.Raw));
             if (models.Count == 0)
             {
                 usage.Note = "No quota information yet.";
                 return usage;
             }
-
-            var now = DateTime.Now;
-            var lastReset = models.Max(m => m.Reset);
             // A reset time already in the past means the window has refilled since Antigravity last synced.
-            var stale = lastReset is { } r && r < now;
+            var stale = models.Max(m => m.Reset) is { } r && r < DateTime.Now;
             if (stale) usage.Badge = "Cached";
-            // The card fits three rows: three models, or two models plus a note.
-            var shown = stale || models.Count > 3 ? 2 : 3;
-            foreach (var m in models.Select(m => (m.Name, Remaining: m.Reset is { } t && t < now ? 1.0 : m.Remaining, m.Reset))
-                         .OrderBy(m => m.Remaining).ThenBy(m => m.Name).Take(shown))
-            {
-                var used = Math.Clamp((1 - m.Remaining) * 100, 0, 100);
-                var left = m.Reset is { } t && t > now ? $"Resets {t:ddd h:mm tt}" : "Full";
-                usage.Meters.Add(new UsageMeter(m.Name, used, $"{used:0}% used", left, $"{100 - used:0}% left"));
-            }
-            var more = models.Count > shown ? $"+{models.Count - shown} more models." : "";
-            usage.Note = stale
-                ? $"{more} As of Antigravity's last sync (before {lastReset:MMM d}); quotas have reset since.".Trim()
-                : more.Length > 0 ? more : null;
+            FillAntigravityMeters(usage, models, stale, tier: null);
             return usage;
         }
         catch (Exception ex)
@@ -185,6 +195,146 @@ public static partial class AiUsageService
             return null;
         }
     }
+
+    /// <summary>The lowest-remaining models as meters; the card fits three rows: three models, or two plus a note.</summary>
+    private static void FillAntigravityMeters(ProviderUsage usage, List<(string Name, double Remaining, DateTime? Reset)> models, bool stale, string? tier)
+    {
+        var now = DateTime.Now;
+        var lastReset = models.Max(m => m.Reset);
+        var hasNote = stale || models.Count > 3 || tier is not null;
+        var shown = hasNote ? 2 : 3;
+        foreach (var m in models.Select(m => (m.Name, Remaining: m.Reset is { } t && t < now ? 1.0 : m.Remaining, m.Reset))
+                     .OrderBy(m => m.Remaining).ThenBy(m => m.Name).Take(shown))
+        {
+            var used = Math.Clamp((1 - m.Remaining) * 100, 0, 100);
+            var left = m.Reset is { } t && t > now ? $"Resets {t:ddd h:mm tt}" : "Full";
+            usage.Meters.Add(new UsageMeter(m.Name, used, $"{used:0}% used", left, $"{100 - used:0}% left"));
+        }
+        var more = models.Count > shown ? $"+{models.Count - shown} more models." : "";
+        var note = stale
+            ? $"{more} As of Antigravity's last sync (before {lastReset:MMM d}); quotas have reset since."
+            : tier is not null ? $"{tier}. {more}" : more;
+        usage.Note = note.Trim() is { Length: > 0 } n ? n : null;
+    }
+
+    /// <summary>Accepts the language server's self-signed certificate, for 127.0.0.1 only.</summary>
+    private static readonly Lazy<HttpClient> LocalHttp = new(() => new HttpClient(new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = (request, _, _, _) => request.RequestUri?.IsLoopback == true,
+    }) { Timeout = TimeSpan.FromSeconds(4) });
+
+    /// <summary>
+    /// Asks each running Antigravity language server for the signed-in user's status (undocumented Connect RPC
+    /// <c>LanguageServerService/GetUserStatus</c>). Null when none is running or none answers.
+    /// </summary>
+    private static async Task<(List<(string Name, double Remaining, DateTime? Reset)> Models, string? Tier)?> AntigravityLiveAsync()
+    {
+        foreach (var (port, csrf) in AntigravityServers())
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post,
+                    $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus")
+                {
+                    Content = new StringContent("""{"metadata":{"ideName":"antigravity","extensionName":"antigravity","locale":"en"}}""", Encoding.UTF8, "application/json"),
+                };
+                request.Headers.Add("X-Codeium-Csrf-Token", csrf);
+                request.Headers.Add("Connect-Protocol-Version", "1");
+                using var response = await LocalHttp.Value.SendAsync(request);
+                if (!response.IsSuccessStatusCode) continue;
+                using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                if (!doc.RootElement.TryGetProperty("userStatus", out var status)) continue;
+                var tier = status.TryGetProperty("userTier", out var t) && t.TryGetProperty("name", out var tn) ? tn.GetString() : null;
+                return (AntigravityLiveQuota(status), tier);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+            {
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// <c>cascadeModelConfigData.clientModelConfigs[]</c>: {label, quotaInfo: {remainingFraction, resetTime}}.
+    /// A missing remainingFraction is zero (proto3 default); models without quotaInfo aren't metered.
+    /// </summary>
+    internal static List<(string Name, double Remaining, DateTime? Reset)> AntigravityLiveQuota(JsonElement status)
+    {
+        var result = new List<(string, double, DateTime?)>();
+        if (!status.TryGetProperty("cascadeModelConfigData", out var data) ||
+            !data.TryGetProperty("clientModelConfigs", out var configs) || configs.ValueKind != JsonValueKind.Array)
+            return result;
+        foreach (var model in configs.EnumerateArray())
+        {
+            if (!model.TryGetProperty("label", out var label) || label.GetString() is not { } name) continue;
+            if (!model.TryGetProperty("quotaInfo", out var quota) || quota.ValueKind != JsonValueKind.Object ||
+                !quota.EnumerateObject().Any()) continue;
+            var remaining = Num(quota, "remainingFraction") ?? 0;
+            DateTime? reset = quota.TryGetProperty("resetTime", out var rt) &&
+                              DateTimeOffset.TryParse(rt.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var r)
+                ? r.LocalDateTime : null;
+            result.Add((name, remaining, reset));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Port and CSRF token of each running Antigravity <c>language_server.exe</c>. The token is on its command line;
+    /// the port usually isn't (<c>--https_server_port 0</c> picks a random one), so every port it listens on is a candidate.
+    /// </summary>
+    private static List<(int Port, string Csrf)> AntigravityServers()
+    {
+        var result = new List<(int, string)>();
+        using var search = new ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'language_server.exe'");
+        using var processes = search.Get();
+        foreach (var process in processes)
+        {
+            using (process)
+            {
+                if (process["CommandLine"] is not string line || !line.Contains("Antigravity", StringComparison.OrdinalIgnoreCase)) continue;
+                var csrf = Regex.Match(line, @"--csrf_token[= ]""?([^\s""]+)");
+                if (!csrf.Success) continue;
+                var port = Regex.Match(line, @"--https_server_port[= ](\d+)");
+                var ports = port.Success && int.TryParse(port.Groups[1].Value, out var p) && p > 0
+                    ? [p]
+                    : ListeningPorts(Convert.ToInt32(process["ProcessId"]));
+                result.AddRange(ports.Select(x => (x, csrf.Groups[1].Value)));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Local TCP (IPv4) ports a process is listening on, lowest first.</summary>
+    private static List<int> ListeningPorts(int pid)
+    {
+        const int AF_INET = 2, TCP_TABLE_OWNER_PID_LISTENER = 3, RowSize = 24;
+        var size = 0;
+        GetExtendedTcpTable(IntPtr.Zero, ref size, false, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0);
+        var buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            if (GetExtendedTcpTable(buffer, ref size, false, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) != 0) return [];
+            var ports = new List<int>();
+            var count = Marshal.ReadInt32(buffer);
+            for (var i = 0; i < count; i++)
+            {
+                // MIB_TCPROW_OWNER_PID: state, localAddr, localPort (network byte order), remoteAddr, remotePort, owningPid.
+                var row = buffer + 4 + i * RowSize;
+                if (Marshal.ReadInt32(row, 20) != pid) continue;
+                var raw = (ushort)Marshal.ReadInt32(row, 8);
+                ports.Add((raw >> 8) | ((raw & 0xFF) << 8));
+            }
+            ports.Sort();
+            return ports;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    [DllImport("iphlpapi.dll")]
+    private static extern uint GetExtendedTcpTable(IntPtr table, ref int size, bool order, int ipVersion, int tableClass, uint reserved);
 
     /// <summary>
     /// Walks the userStatus protobuf: outer {1: {2: {1: base64(status)}}}; status field 33 lists models,
@@ -283,17 +433,32 @@ public static partial class AiUsageService
             using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath, Mode = SqliteOpenMode.ReadOnly }.ToString());
             db.Open();
             using var cmd = db.CreateCommand();
-            cmd.CommandText = """
-                SELECT time_created,
-                       json_extract(data, '$.modelID'),
-                       json_extract(data, '$.cost'),
-                       json_extract(data, '$.tokens.input'),
-                       json_extract(data, '$.tokens.output'),
-                       json_extract(data, '$.tokens.reasoning'),
-                       json_extract(data, '$.tokens.cache.write')
-                FROM message
-                WHERE time_created >= $cutoff AND json_extract(data, '$.role') = 'assistant'
-                """;
+            // Newer OpenCode moved messages to session_message (type column, model.id) and migrated the old
+            // rows across, but left the message table behind and stopped writing to it.
+            cmd.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_message'";
+            cmd.CommandText = cmd.ExecuteScalar() is not null
+                ? """
+                  SELECT time_created,
+                         json_extract(data, '$.model.id'),
+                         json_extract(data, '$.cost'),
+                         json_extract(data, '$.tokens.input'),
+                         json_extract(data, '$.tokens.output'),
+                         json_extract(data, '$.tokens.reasoning'),
+                         json_extract(data, '$.tokens.cache.write')
+                  FROM session_message
+                  WHERE time_created >= $cutoff AND type = 'assistant'
+                  """
+                : """
+                  SELECT time_created,
+                         json_extract(data, '$.modelID'),
+                         json_extract(data, '$.cost'),
+                         json_extract(data, '$.tokens.input'),
+                         json_extract(data, '$.tokens.output'),
+                         json_extract(data, '$.tokens.reasoning'),
+                         json_extract(data, '$.tokens.cache.write')
+                  FROM message
+                  WHERE time_created >= $cutoff AND json_extract(data, '$.role') = 'assistant'
+                  """;
             cmd.Parameters.AddWithValue("$cutoff", DateTimeOffset.UtcNow.AddDays(-31).ToUnixTimeMilliseconds());
             using var reader = cmd.ExecuteReader();
             while (reader.Read())

@@ -196,9 +196,10 @@ public sealed class IdleInfoService
     /// </summary>
     private IEnumerable<IdleItem?> BuildAi()
     {
-        // Tools without a plan limit (OpenCode) show today's tokens instead of "N%".
+        // The brand logo names the tool, so the value is just the number. Tools without a plan limit
+        // (OpenCode) show today's tokens instead of "N%".
         static IdleItem Item(string id, (string Id, string Name, BrandLogo Logo, double? Percent, long TodayTokens) t) =>
-            new(id, AppIcon.Sparkles, t.Percent is { } p ? $"{t.Name} {p:0}%" : $"{t.Name} {CompactTokens(t.TodayTokens)}",
+            new(id, AppIcon.Sparkles, t.Percent is { } p ? $"{p:0}%" : CompactTokens(t.TodayTokens),
                 t.Percent >= 80 ? "AccentBrush" : "TextBrush", Logo: t.Logo);
 
         if (_ai.Count == 0) return [];
@@ -272,7 +273,7 @@ public sealed class IdleInfoService
         _openTodos = Storage.Load<List<TodoItem>>("todos.json").Count(t => !t.Done);
         var now = DateTime.Now.TimeOfDay;
         _nextEvent = null;
-        foreach (var e in Storage.Load<List<CalendarEvent>>("events.json")
+        foreach (var e in CalendarEvent.LoadAll()
                      .Where(e => e.Date.Date == DateTime.Today)
                      .OrderBy(e => e.Time))
         {

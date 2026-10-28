@@ -196,6 +196,10 @@
                                     <Setter TargetName="Row" Property="Opacity" Value="0.5" />
                                     <Setter TargetName="Node" Property="Stroke" Value="{DynamicResource SubTextBrush}" />
                                 </DataTrigger>
+                                <!-- Subscribed events are edited in their own calendar app, not here -->
+                                <DataTrigger Binding="{Binding Event.IsSubscribed}" Value="True">
+                                    <Setter TargetName="Del" Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

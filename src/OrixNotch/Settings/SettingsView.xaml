@@ -40,6 +40,8 @@
         </Grid.ColumnDefinitions>
 
         <DockPanel>
+            <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Tag="Search settings" shell:Field.Icon="Magnifier" shell:Field.Clearable="True"
+                     Margin="0,0,0,8" TextChanged="OnSearchChanged" AutomationProperties.Name="Search settings" />
             <TextBlock x:Name="VersionText" DockPanel.Dock="Bottom" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="9.5" Margin="8,0,0,2" />
             <StackPanel x:Name="Nav" />
         </DockPanel>

@@ -1,6 +1,6 @@
 # UI measurements
 
-Sizes OrixNotch uses, measured from OmniNotch's public demo videos and converted to WPF DIPs.
+Sizes OrixNotch uses, in WPF DIPs.
 
 **Calibration.** Frames were scaled at ≈1.15 px per pt (the menu-bar glyph height and the macOS switch, 38×22 pt, agree). Videos that zoom in on the panel were normalized against the open-panel width. 1 macOS pt ≈ 1 Windows DIP.
 
