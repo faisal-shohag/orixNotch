@@ -55,13 +55,15 @@
 
         <!-- Empty state -->
         <StackPanel x:Name="EmptyState" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-            <Border Width="34" Height="34" CornerRadius="17" HorizontalAlignment="Center" Background="{DynamicResource Surface2Brush}">
+            <Border x:Name="EmptyLogoTile" Width="34" Height="34" CornerRadius="17" HorizontalAlignment="Center" Background="{DynamicResource Surface2Brush}">
                 <ContentControl x:Name="EmptyLogo" Focusable="False" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <TextBlock x:Name="EmptyTitle" Text="How can I help?" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0" />
             <TextBlock x:Name="EmptySub" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="12" HorizontalAlignment="Center" Margin="0,3,0,10" />
             <StackPanel x:Name="Suggestions" Orientation="Horizontal" HorizontalAlignment="Center" />
             <StackPanel x:Name="KeySetup" HorizontalAlignment="Center" Margin="0,2,0,0" Visibility="Collapsed">
+                <!-- Every supported provider, so a first look doesn't read as "Claude only"; filled in code. -->
+                <StackPanel x:Name="ProviderPicker" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10" />
                 <ContentControl x:Name="KeyInputHost" Focusable="False" HorizontalAlignment="Center" />
                 <TextBlock x:Name="KeyHint" Style="{StaticResource SubText}" FontWeight="Normal" HorizontalAlignment="Center" Margin="0,8,0,0" FontSize="12"
                            Text="Get a key at console.anthropic.com → API keys. It's stored encrypted on this PC." />

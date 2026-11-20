@@ -238,6 +238,47 @@ public partial class AskAiView : UserControl, IToolView
     private static string ProviderName => AiService.Active.Name;
     private static BrandLogo ProviderLogo => BrandLogos.ForProvider(AiService.ActiveProvider);
 
+    /// <summary>One chip per supported provider; picking one switches the key field to it.</summary>
+    private void BuildProviderPicker(string active)
+    {
+        ProviderPicker.Children.Clear();
+        foreach (var p in AiService.Providers)
+        {
+            var selected = p.Id == active;
+            var chip = new Button
+            {
+                Style = (Style)FindResource("IconButton"),
+                Width = double.NaN,
+                Height = 26,
+                Margin = new Thickness(3, 0, 3, 0),
+                ToolTip = $"Use {p.Name} ({p.Company})",
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Margin = new Thickness(9, 0, 10, 0),
+                    Children =
+                    {
+                        BrandLogos.Create(BrandLogos.ForProvider(p.Id), 12),
+                        new TextBlock { Text = p.Name, FontSize = 11.5, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center },
+                    },
+                },
+            };
+            System.Windows.Automation.AutomationProperties.SetName(chip, p.Name);
+            chip.SetResourceReference(BackgroundProperty, selected ? "AccentSoftBrush" : "Surface2Brush");
+            chip.SetResourceReference(ForegroundProperty, selected ? "TextBrush" : "SubTextBrush");
+            var id = p.Id;
+            chip.Click += (_, _) =>
+            {
+                if (id == AiService.ActiveProvider) return;
+                App.Settings.AiProvider = id;
+                App.Settings.AiModel = AiService.DefaultModelFor(id);
+                SettingsService.Save(notify: false);
+                UpdateKeyState();
+            };
+            ProviderPicker.Children.Add(chip);
+        }
+    }
+
     /// <summary>No key yet for the active provider → show the key field instead of suggestions.</summary>
     private void UpdateKeyState()
     {
@@ -245,10 +286,13 @@ public partial class AskAiView : UserControl, IToolView
         var info = AiService.Info(provider);
         var hasKey = AiService.HasKeyFor(provider);
         EmptyLogo.Content = BrandLogos.Create(ProviderLogo, 17);
-        EmptyTitle.Text = hasKey ? "How can I help?" : $"Connect {ProviderName}";
+        // No key yet: the provider chips stand in for the single logo, so it doesn't read as "Claude only".
+        EmptyLogoTile.Visibility = hasKey ? Visibility.Visible : Visibility.Collapsed;
+        EmptyTitle.Text = hasKey ? "How can I help?" : "Connect an AI";
         EmptySub.Text = hasKey
             ? $"{info.Name} · messages go to {info.Company}'s API"
-            : $"Paste your {info.Company} API key to start chatting.";
+            : $"Pick a provider and paste your {info.Company} API key.";
+        if (!hasKey) BuildProviderPicker(provider);
         KeyHint.Text = $"Get a key at {info.KeySource}. It's stored encrypted on this PC.";
         Input.Tag = $"Message {ProviderName}…";
         Suggestions.Visibility = hasKey ? Visibility.Visible : Visibility.Collapsed;
