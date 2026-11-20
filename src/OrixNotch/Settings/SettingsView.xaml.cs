@@ -16,7 +16,7 @@ namespace OrixNotch.Settings;
 /// </summary>
 public partial class SettingsView : UserControl, IToolView
 {
-    private static readonly (string Id, string Name, AppIcon Icon, string? Section)[] Pages =
+    internal static readonly (string Id, string Name, AppIcon Icon, string? Section)[] Pages =
     [
         ("general", "General", AppIcon.Adjust, null),
         ("automations", "Automations", AppIcon.Bolt, null),
@@ -39,7 +39,7 @@ public partial class SettingsView : UserControl, IToolView
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
-        ["keyboard"] = ["Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
+        ["keyboard"] = ["Command palette", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
     };
 

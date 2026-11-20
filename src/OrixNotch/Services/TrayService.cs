@@ -23,6 +23,7 @@ public sealed class TrayService : IDisposable
 
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open panel  (Ctrl+Alt+N)", null, (_, _) => window.Expand(activate: true));
+        menu.Items.Add("Command palette…", null, (_, _) => window.ShowPalette());
         menu.Items.Add("Settings…", null, (_, _) => window.OpenTool(NotchWindow.SettingsId));
         menu.Items.Add(new Forms.ToolStripSeparator());
         var quiet = new Forms.ToolStripMenuItem("Quiet for 1 hour", null, (_, _) => NotchWindow.ToggleQuietHour());

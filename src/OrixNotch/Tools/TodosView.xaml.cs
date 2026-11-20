@@ -93,14 +93,20 @@ public partial class TodosView : UserControl, IToolView
 
     private void Add()
     {
-        var text = Input.Text.Trim();
+        AddText(Input.Text);
+        Input.Clear();
+    }
+
+    /// <summary>Adds a to-do (Enter in the box, or the command palette).</summary>
+    public void AddText(string raw)
+    {
+        var text = raw.Trim();
         if (text.Length == 0) return;
         // A new item wouldn't show under the Starred / Done filters; jump back to All so it's visible.
         if (FilterStarred.IsChecked == true || FilterDone.IsChecked == true) FilterAll.IsChecked = true;
         var item = new TodoItem { Text = text };
         item.PropertyChanged += OnItemChanged;
         _items.Add(item);
-        Input.Clear();
         Save();
     }
 

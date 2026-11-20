@@ -296,6 +296,14 @@ public partial class AskAiView : UserControl, IToolView
         SetInput(text + ": ");
     }
 
+    /// <summary>From the command palette: sends the question, or leaves it in the box when it can't be sent yet (no key).</summary>
+    public void Ask(string question)
+    {
+        SetInput(question);
+        UpdateSendState();
+        if (SendButton.IsEnabled && _cts is null) OnSend(this, new RoutedEventArgs());
+    }
+
     private void SetInput(string text)
     {
         Input.Text = text;

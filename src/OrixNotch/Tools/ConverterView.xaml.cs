@@ -158,28 +158,48 @@ public partial class ConverterView : UserControl
     {
         var had = _rates is { PerUsd.Count: > 0 };
         ShowRatesStatus();
-        if (_fetching || (had && DateTime.UtcNow - _rates!.Fetched < TimeSpan.FromHours(12))) return;
+        var task = FetchRatesAsync();
+        ShowRatesStatus(); // "Loading rates…" while it runs
+        if (await task && !had && _category == Currency) SelectCategory(Currency); // first rates: fill the pickers
+        ShowRatesStatus();
+    }
+
+    /// <summary>Loads fresh rates when missing or stale. True when new rates arrived. Also used by the command palette.</summary>
+    internal static async Task<bool> FetchRatesAsync()
+    {
+        _rates ??= Storage.Load<Rates>(RatesFile);
+        if (_fetching || (_rates.PerUsd.Count > 0 && DateTime.UtcNow - _rates.Fetched < TimeSpan.FromHours(12))) return false;
         _fetching = true;
         try
         {
             using var doc = JsonDocument.Parse(await Http.Client.GetStringAsync("https://open.er-api.com/v6/latest/USD"));
-            if (doc.RootElement.GetProperty("result").GetString() != "success") return;
+            if (doc.RootElement.GetProperty("result").GetString() != "success") return false;
             var rates = new Rates { Fetched = DateTime.UtcNow };
             foreach (var r in doc.RootElement.GetProperty("rates").EnumerateObject()) rates.PerUsd[r.Name] = r.Value.GetDouble();
             _rates = rates;
             Storage.Save(RatesFile, rates);
-            if (!had && _category == Currency) SelectCategory(Currency); // first rates: fill the pickers
+            return true;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            // Offline: cached rates (if any) stay in use.
+            return false; // offline: cached rates (if any) stay in use
         }
         finally
         {
             _fetching = false;
-            ShowRatesStatus();
         }
     }
+
+    /// <summary>An amount in one currency in another, through the dollar; null when either code has no rate yet.</summary>
+    internal static double? ConvertCurrency(double amount, string from, string to)
+    {
+        _rates ??= Storage.Load<Rates>(RatesFile);
+        return _rates.PerUsd.TryGetValue(from.ToUpperInvariant(), out var f) && _rates.PerUsd.TryGetValue(to.ToUpperInvariant(), out var t) && f > 0
+            ? amount / f * t
+            : null;
+    }
+
+    internal static bool HasRates => (_rates ??= Storage.Load<Rates>(RatesFile)).PerUsd.Count > 0;
 
     private void ShowRatesStatus()
     {

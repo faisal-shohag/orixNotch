@@ -11,6 +11,7 @@ public static class HotkeyService
     public static IReadOnlyList<HotkeyAction> Actions { get; } =
     [
         new("toggle", "Open or close the notch", "Works from anywhere."),
+        new("palette", "Command palette", "Type a command: timer 10, todo buy milk, 20 usd to eur, ask …, or a tool's name."),
         new("ask", "Ask AI", "Opens the notch on the AI chat."),
         new("clipboard", "Clipboard history", "Opens the notch on clipboard history."),
         new("teleprompter", "Teleprompter", "Opens the teleprompter and starts or pauses scrolling."),

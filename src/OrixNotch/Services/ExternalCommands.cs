@@ -97,6 +97,12 @@ public static class ExternalCommands
                 else if (ToolRegistry.All.Any(t => t.Id == link.Target)) window.OpenTool(link.Target);
                 else window.Expand(activate: true);
                 break;
+            case "palette":
+                window.ShowPalette();
+                break;
+            case "run": // the same commands as the palette: orixnotch://run?text=timer%2010
+                if (!CommandRegistry.RunText(link.Get("text"))) window.ShowPalette();
+                break;
             case "timer":
                 if (!int.TryParse(link.Get("min"), out var min)) min = App.Settings.TimerMinutes;
                 CountdownService.Instance.SetMinutes(Math.Clamp(min, 1, 600));
@@ -117,6 +123,8 @@ public static class ExternalCommands
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out, PipeOptions.CurrentUserOnly);
             client.Connect(2000);
+            // We were just launched, so Windows lets us take the foreground: hand that to the running copy.
+            if (Interop.Win32.GetNamedPipeServerProcessId(client.SafePipeHandle, out var pid)) Interop.Win32.AllowSetForegroundWindow(pid);
             var bytes = Encoding.UTF8.GetBytes(string.Join('\n', args));
             client.Write(bytes);
             return true;

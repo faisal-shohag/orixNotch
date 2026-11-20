@@ -33,6 +33,13 @@ internal static class Win32
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
 
+    /// <summary>Lets another process bring its window to the front; a second launch passes this on to the running copy.</summary>
+    [DllImport("user32.dll")]
+    public static extern bool AllowSetForegroundWindow(uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 

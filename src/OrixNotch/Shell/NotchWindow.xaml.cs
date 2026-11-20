@@ -196,7 +196,7 @@ public partial class NotchWindow : Window
         BuildEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
-            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool != SettingsId) MoveTabIndicator(_activeTool, animate: false);
+            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool is not (SettingsId or PaletteId)) MoveTabIndicator(_activeTool, animate: false);
         };
         WireTabScroll();
         BuildTabs();
@@ -281,6 +281,10 @@ public partial class NotchWindow : Window
                 break;
             case "ocr":
                 OcrService.Instance.Start();
+                break;
+            case "palette":
+                if (_expanded && _activeTool == PaletteId) Collapse();
+                else ShowPalette();
                 break;
             default:
                 OpenTool(action);
@@ -546,7 +550,7 @@ public partial class NotchWindow : Window
             _repelTimer.Stop();
             SetShove(0);
             if (EventReminderService.Instance.IsActive) ShowTool("calendar");
-            else ShowTool(_activeTool == SettingsId ? App.Settings.LastTool : _activeTool);
+            else ShowTool(_activeTool is SettingsId or PaletteId ? App.Settings.LastTool : _activeTool);
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
             _leaveTimer.Start();
@@ -1839,7 +1843,7 @@ public partial class NotchWindow : Window
         if (tools.Count == 0) tools = [ToolRegistry.All[0]];
 
         var previousActive = _activeTool;
-        if (_activeTool != SettingsId && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
+        if (_activeTool is not (SettingsId or PaletteId) && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
 
         // Settings isn't in the scrolling strip: it's pinned at the right end (SettingsTabHost).
         SettingsTabHost.Child ??= MakeTab(SettingsId, "Settings", AppIcon.Gear);
@@ -1948,6 +1952,19 @@ public partial class NotchWindow : Window
             SettingsService.Save(notify: false);
         }
     }
+
+    public const string PaletteId = "palette";
+
+    /// <summary>Opens the notch on the command palette ("timer 10", "todo …", "20 usd to eur", tool names…).</summary>
+    public void ShowPalette()
+    {
+        Expand(activate: true);
+        _backTarget = null;
+        Present(PaletteId, "Command", 720, 220, () => new Tools.CommandPaletteView(), showTabs: false);
+    }
+
+    /// <summary>A tool's view when it has been created (opening it creates it).</summary>
+    public T? View<T>(string id) where T : FrameworkElement => _views.GetValueOrDefault(id) as T;
 
     public void ShowSettings()
     {
