@@ -82,9 +82,9 @@ public sealed partial class PhoneTransferService
         app.MapGet("/", (HttpContext ctx) => Allowed(ctx)
             ? Results.Content(Page(), "text/html; charset=utf-8")
             : Results.Content(Denied, "text/html; charset=utf-8", statusCode: 403));
-        app.MapGet("/web/files", (HttpContext ctx) => Allowed(ctx) ? Results.Json(ShelfFiles().Select((f, i) => new
+        app.MapGet("/web/files", (HttpContext ctx) => Allowed(ctx) ? Results.Json(ShelfFiles().Select(f => new
         {
-            id = i,
+            id = FileId(f),
             name = Path.GetFileName(f),
             size = new FileInfo(f).Length,
             image = Shell.DropPayload.IsImagePath(f),
@@ -103,9 +103,10 @@ public sealed partial class PhoneTransferService
         app.MapGet("/web/file", (HttpContext ctx) =>
         {
             if (!Allowed(ctx)) return Results.StatusCode(403);
-            var files = ShelfFiles();
-            if (!int.TryParse(ctx.Request.Query["id"], out var id) || id < 0 || id >= files.Count) return Results.NotFound();
-            return Results.File(files[id], ContentTypeOf(files[id]), Path.GetFileName(files[id]), enableRangeProcessing: true);
+            var id = ctx.Request.Query["id"].ToString();
+            var file = ShelfFiles().FirstOrDefault(f => FileId(f) == id);
+            if (file is null) return Results.NotFound(); // gone or changed since the page loaded: never another file
+            return Results.File(file, ContentTypeOf(file), Path.GetFileName(file), enableRangeProcessing: true);
         });
         app.MapPost("/web/upload", Handler(WebUploadAsync));
         app.MapPost("/web/text", Handler(WebTextAsync));
@@ -116,7 +117,19 @@ public sealed partial class PhoneTransferService
         _webKey.Length > 0 && CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(ctx.Request.Query["k"].ToString()), Encoding.UTF8.GetBytes(_webKey));
 
-    /// <summary>Shelf files (folders are skipped), read on the UI thread; ids index this list.</summary>
+    /// <summary>
+    /// Stable id of a Shelf file for the phone page: the same file keeps its id while the Shelf changes around it,
+    /// and an edited or different file gets a new one. (Ids used to be list positions, so a new photo could reuse an
+    /// old one's URL and the phone showed the cached old photo.)
+    /// </summary>
+    internal static string FileId(string path)
+    {
+        var info = new FileInfo(path);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}"));
+        return Convert.ToHexString(hash, 0, 8).ToLowerInvariant();
+    }
+
+    /// <summary>Shelf files (folders are skipped), read on the UI thread.</summary>
     private static List<string> ShelfFiles() =>
         OnUi(() => ShelfService.Instance.Items.Where(i => File.Exists(i.Path)).Select(i => i.Path).ToList());
 

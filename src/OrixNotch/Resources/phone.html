@@ -552,7 +552,6 @@
     const dl = el('span', 'dl'); dl.innerHTML = svg('down');
     info.append(body, dl);
     a.append(pv, info);
-    a.update = it => { a.href = q('/web/file?id=' + it.id); };
     return a;
   }
   async function loadShelf() {
@@ -560,8 +559,8 @@
       const files = await api('/web/files');
       const grid = $('shelf');
       grid.style.display = files.length ? '' : 'block';
-      // Ids are positions, so key on what the file is.
-      const fresh = render(grid, files, f => f.name + '|' + f.size, shelfTile,
+      // Ids come from the file itself (path, size, modified), so a changed file gets a fresh tile and URL.
+      const fresh = render(grid, files, f => f.id, shelfTile,
         () => { const c = el('div', 'card'); c.append(empty('shelf', 'The Shelf is empty. Drop files on the notch on your PC to park them here.')()); return c; });
       $('shelfCount').hidden = !files.length;
       $('shelfCount').textContent = files.length;
