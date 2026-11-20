@@ -186,7 +186,8 @@ public static class ThemeService
             // Glass: the notch is a see-through tint over the desktop (NotchWindow.Glass.cs),
             // panels are lighter panes on it and the rim catches light at the top.
             var pill = PillAlpha;
-            res["PillBrush"] = s.PillTo is { } to ? Gradient([WithAlpha(s.Pill, pill), WithAlpha(to, pill)], vertical: true) : Solid(WithAlpha(s.Pill, pill));
+            var tint = GlassTint(s);
+            res["PillBrush"] = s.PillTo is { } to ? Gradient([WithAlpha(tint, pill), WithAlpha(to, pill)], vertical: true) : Solid(WithAlpha(tint, pill));
             var pane = (byte)Math.Max(0x70, pill * 0.75);
             res["SurfaceBrush"] = Solid(WithAlpha(s.Surface, pane));
             res["Surface2Brush"] = Solid(WithAlpha(s.Surface2, pane));
@@ -226,6 +227,95 @@ public static class ThemeService
         res["CodeTagBrush"] = Solid(C(dark ? "#7EE787" : "#116329"));
 
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// The glass colour: the scheme's notch colour, or with "Tint from wallpaper" that blended with the colour of
+    /// the wallpaper behind the notch (kept dark on dark schemes, light on light ones, so text stays readable).
+    /// </summary>
+    private static Color GlassTint(ColorScheme s)
+    {
+        if (!App.Settings.GlassWallpaperTint || WallpaperColor() is not { } wall) return s.Pill;
+        var (h, sat, _) = ToHsl(wall);
+        var tinted = FromHsl(h, Math.Min(sat, 0.55), s.IsLight ? 0.9 : 0.12);
+        return Mix(s.Pill, tinted, 0.75);
+    }
+
+    private static Color? _wallpaper;
+    private static bool _wallpaperRead;
+
+    /// <summary>Average colour of the top-centre strip of the current wallpaper (where the notch sits); null if it can't be read.</summary>
+    private static Color? WallpaperColor()
+    {
+        if (_wallpaperRead) return _wallpaper;
+        _wallpaperRead = true;
+        try
+        {
+            // The image Windows actually shows (also for slideshows and Spotlight), else the one set in Settings.
+            var transcoded = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Themes\TranscodedWallpaper");
+            var path = System.IO.File.Exists(transcoded) ? transcoded
+                : Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Control Panel\Desktop", "WallPaper", null) as string;
+            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return _wallpaper = null;
+            var image = new System.Windows.Media.Imaging.BitmapImage();
+            using (var stream = System.IO.File.OpenRead(path))
+            {
+                image.BeginInit();
+                image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                image.StreamSource = stream;
+                image.DecodePixelWidth = 160;
+                image.EndInit();
+            }
+            var bgra = new System.Windows.Media.Imaging.FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+            int w = bgra.PixelWidth, h = Math.Max(1, bgra.PixelHeight / 6), x0 = w * 3 / 10, cols = w * 4 / 10; // top sixth, middle 40%
+            var pixels = new byte[cols * h * 4];
+            bgra.CopyPixels(new Int32Rect(x0, 0, cols, h), pixels, cols * 4, 0);
+            long r = 0, g = 0, b = 0;
+            for (var i = 0; i < pixels.Length; i += 4)
+            {
+                b += pixels[i];
+                g += pixels[i + 1];
+                r += pixels[i + 2];
+            }
+            var n = pixels.Length / 4;
+            return _wallpaper = Color.FromRgb((byte)(r / n), (byte)(g / n), (byte)(b / n));
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            return _wallpaper = null;
+        }
+    }
+
+    /// <summary>Re-reads the wallpaper when Windows says the desktop changed (call once at start).</summary>
+    public static void WatchWallpaper() =>
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, e) =>
+        {
+            if (e.Category != Microsoft.Win32.UserPreferenceCategory.Desktop || !App.Settings.GlassWallpaperTint) return;
+            _wallpaperRead = false;
+            Application.Current?.Dispatcher.BeginInvoke(Apply);
+        };
+
+    /// <summary>One-click looks: a scheme with its glass settings.</summary>
+    public static readonly (string Name, string Scheme, bool Glass, double Strength, bool WallpaperTint)[] Looks =
+    [
+        ("Midnight", "midnight", false, 0.6, false),
+        ("Liquid", "midnight", true, 0.35, true),
+        ("Frost", "frost", true, 0.75, true),
+        ("Aurora", "aurora", false, 0.6, false),
+    ];
+
+    public static void ApplyLook(int index)
+    {
+        var look = Looks[index];
+        var s = App.Settings;
+        s.ThemeScheme = look.Scheme;
+        s.ThemeAccent = AutoAccent;
+        s.Glass = look.Glass;
+        s.GlassStrength = look.Strength;
+        s.GlassWallpaperTint = look.WallpaperTint;
+        _wallpaperRead = false;
+        SettingsService.Save(notify: false);
+        Apply();
     }
 
     /// <summary>The notch is frosted glass (Settings › Appearance › Glass).</summary>

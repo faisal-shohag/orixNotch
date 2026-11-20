@@ -37,7 +37,7 @@ public partial class SettingsView : UserControl, IToolView
     {
         ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals"],
-        ["appearance"] = ["Follow album art"],
+        ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
@@ -633,6 +633,11 @@ public partial class SettingsView : UserControl, IToolView
     private void RenderAppearance()
     {
         Title("Appearance", "Color scheme and accent. Changes apply instantly.");
+        Section("LOOKS");
+        var looks = new System.Windows.Controls.Primitives.UniformGrid { Columns = ThemeService.Looks.Length, Margin = new Thickness(-4, 0, -4, 0) };
+        for (var i = 0; i < ThemeService.Looks.Length; i++) looks.Children.Add(LookCard(i));
+        Page.Children.Add(looks);
+
         Section("COLOR SCHEME");
         var schemes = new WrapPanel();
         foreach (var scheme in ThemeService.Schemes.Where(s => !s.IsGradient)) schemes.Children.Add(SchemeCard(scheme));
@@ -688,9 +693,37 @@ public partial class SettingsView : UserControl, IToolView
         Row("Glass", "See-through notch tinted by the color scheme.",
             Toggle(S.Glass, v => { S.Glass = v; Save(false); ThemeService.Apply(); }));
         Row("Tint", "Lower shows more of the background; higher keeps text easier to read.", strength);
+        Row("Tint from wallpaper", "The glass takes on the colour of your wallpaper behind the notch, and follows it when the wallpaper changes.",
+            Toggle(S.GlassWallpaperTint, v => { S.GlassWallpaperTint = v; Save(false); ThemeService.Apply(); }));
 
         Section("UNITS");
         Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; Save(false); }));
+    }
+
+    /// <summary>A one-click look: a small notch preview in its colours, and its name.</summary>
+    private FrameworkElement LookCard(int index)
+    {
+        var look = ThemeService.Looks[index];
+        var scheme = ThemeService.Schemes.First(s => s.Id == look.Scheme);
+        var accent = ThemeService.Accents.FirstOrDefault(a => a.Id == scheme.Accent) ?? ThemeService.Accents[0];
+        var preview = new Border
+        {
+            Height = 34, CornerRadius = new CornerRadius(10), Background = scheme.PillBrush(),
+            Opacity = look.Glass ? 0.75 : 1, BorderThickness = new Thickness(1),
+            Child = new Border { Width = 26, Height = 5, CornerRadius = new CornerRadius(2.5), Background = accent.Brush(), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+        };
+        preview.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+        var stack = new StackPanel();
+        stack.Children.Add(preview);
+        stack.Children.Add(new TextBlock { Text = look.Name, FontSize = 12.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 7, 0, 0) });
+        stack.Children.Add(new TextBlock
+        {
+            Text = look.Glass ? (look.WallpaperTint ? "Glass, wallpaper tint" : "Glass") : scheme.IsGradient ? "Gradient" : "Solid",
+            Style = (Style)FindResource("SubText"), FontWeight = FontWeights.Normal, FontSize = 11,
+        });
+        var button = new Button { Style = (Style)FindResource("RowButton"), Content = stack, Padding = new Thickness(10), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        button.Click += (_, _) => ThemeService.ApplyLook(index); // Changed re-renders this page
+        return new Border { Style = (Style)FindResource("Card"), Padding = new Thickness(0), Margin = new Thickness(4, 0, 4, 0), Child = button };
     }
 
     private void RenderDisplay()

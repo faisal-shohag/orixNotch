@@ -137,6 +137,7 @@ public partial class NotchWindow : Window
 
         NowPlayingService.Instance.PropertyChanged += OnActivityChanged;
         ThemeService.FollowAlbumArt();
+        ThemeService.WatchWallpaper();
         PomodoroService.Instance.PropertyChanged += OnActivityChanged;
         CountdownService.Instance.PropertyChanged += OnActivityChanged;
         StopwatchService.Instance.PropertyChanged += OnActivityChanged;

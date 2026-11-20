@@ -120,6 +120,7 @@ public sealed class AppSettings
     public bool AlbumAccent { get; set; }             // while music plays, the accent follows the cover
     public bool Glass { get; set; }                    // see-through, tinted notch with a glass sheen
     public double GlassStrength { get; set; } = 0.6;   // 0 = nearly clear, 1 = nearly opaque tint
+    public bool GlassWallpaperTint { get; set; }       // the glass takes on the wallpaper's colour
 
     /// <summary>Small, Default, Large or ExtraLarge — size of the closed notch.</summary>
     public string NotchSize { get; set; } = "Default";
