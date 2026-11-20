@@ -590,7 +590,7 @@ public partial class AskAiView : UserControl, IToolView
         card.HorizontalAlignment = HorizontalAlignment.Stretch;
         card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         card.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
-        if (animate) card.BeginAnimation(OpacityProperty, new DoubleAnimation(0.4, 1, TimeSpan.FromMilliseconds(220)));
+        if (animate) card.BeginAnimation(OpacityProperty, new DoubleAnimation(0.4, 1, Motion.Base));
     }
 
     /// <summary>Footer of a finished reply: Copy on the left, the time it arrived on the right.</summary>

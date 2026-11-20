@@ -3,6 +3,9 @@
                     xmlns:svc="clr-namespace:OrixNotch.Services"
                     xmlns:shell="clr-namespace:OrixNotch.Shell">
 
+    <!-- Motion: XAML-side twin of Shell/Motion.cs (Fast). -->
+    <Duration x:Key="MotionFast">0:0:0.15</Duration>
+
     <!-- Composite UI font (Fonts/OrixUI.CompositeFont): Inter for Latin, Noto Sans Bengali for
          Bengali. App.BuildUiFont() swaps in the SF Pro variant when SF Pro is installed. -->
     <FontFamily x:Key="UiFont">../Fonts/#OrixUI</FontFamily>
@@ -320,7 +323,7 @@
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
-                                                         To="1" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                                         To="1" Duration="{StaticResource MotionFast}" Timeline.DesiredFrameRate="60" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.EnterActions>
@@ -328,7 +331,7 @@
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                                         To="0" Duration="{StaticResource MotionFast}" Timeline.DesiredFrameRate="60" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.ExitActions>
@@ -449,7 +452,7 @@
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
-                                                         To="1" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                                         To="1" Duration="{StaticResource MotionFast}" Timeline.DesiredFrameRate="60" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.EnterActions>
@@ -457,7 +460,7 @@
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.12" Timeline.DesiredFrameRate="60" />
+                                                         To="0" Duration="{StaticResource MotionFast}" Timeline.DesiredFrameRate="60" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.ExitActions>
@@ -589,7 +592,7 @@
                             <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}" />                            <Trigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="KnobShift" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.18">
+                                        <DoubleAnimation Storyboard.TargetName="KnobShift" Storyboard.TargetProperty="X" To="16" Duration="{StaticResource MotionFast}">
                                             <DoubleAnimation.EasingFunction>
                                                 <CubicEase EasingMode="EaseOut" />
                                             </DoubleAnimation.EasingFunction>
@@ -600,7 +603,7 @@
                             <Trigger.ExitActions>
                                 <BeginStoryboard>
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="KnobShift" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.18">
+                                        <DoubleAnimation Storyboard.TargetName="KnobShift" Storyboard.TargetProperty="X" To="0" Duration="{StaticResource MotionFast}">
                                             <DoubleAnimation.EasingFunction>
                                                 <CubicEase EasingMode="EaseOut" />
                                             </DoubleAnimation.EasingFunction>

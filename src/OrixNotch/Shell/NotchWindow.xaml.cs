@@ -514,7 +514,7 @@ public partial class NotchWindow : Window
         var target = conceal && !_revealed ? 0.0 : 1.0;
         if (_opacityTarget == target) return;
         _opacityTarget = target;
-        var fade = TimeSpan.FromMilliseconds(target > 0 ? 160 : 300);
+        var fade = target > 0 ? Motion.Fast : Motion.Scale(300);
         Pill.BeginAnimation(OpacityProperty, new DoubleAnimation(target, fade));
         // Hidden by choice, mark the spot; hidden for a full-screen video, stay out of sight entirely.
         EdgeHint.Width = Math.Round(_idleW * 0.55);
@@ -736,9 +736,9 @@ public partial class NotchWindow : Window
             _shove.Velocity = 0;
             _dodgeSpeed = 0;
             target = DodgeTarget(x, half);
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180))
+            var fadeIn = new DoubleAnimation(0, 1, Motion.Fast)
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                EasingFunction = Motion.Out,
             };
             Timeline.SetDesiredFrameRate(fadeIn, 60);
             Pill.BeginAnimation(OpacityProperty, fadeIn);
@@ -1102,7 +1102,7 @@ public partial class NotchWindow : Window
         if (pulse != _reminderPulsing)
         {
             _reminderPulsing = pulse;
-            ReminderTile.BeginAnimation(OpacityProperty, pulse
+            ReminderTile.BeginAnimation(OpacityProperty, pulse && !Motion.Reduced // a looping pulse stays still with animations off
                 ? new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever }
                 : null);
         }
@@ -1279,11 +1279,11 @@ public partial class NotchWindow : Window
         foreach (var (slot, delay) in new[] { (IdleSlotA, 0), (IdleSlotB, 60) })
         {
             if (App.Settings.IdleLayout == "Split" && slot == IdleSlotA) continue; // left item stays put
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            var begin = TimeSpan.FromMilliseconds(delay);
-            slot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(320)) { BeginTime = begin, EasingFunction = ease });
+            var ease = Motion.Out;
+            var begin = Motion.Scale(delay);
+            slot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Slow) { BeginTime = begin, EasingFunction = ease });
             ((TranslateTransform)slot.RenderTransform).BeginAnimation(TranslateTransform.YProperty,
-                new DoubleAnimation(7, 0, TimeSpan.FromMilliseconds(320)) { BeginTime = begin, EasingFunction = ease });
+                new DoubleAnimation(7, 0, Motion.Slow) { BeginTime = begin, EasingFunction = ease });
         }
         if (!_expanded && !_peeking)
         {
@@ -1398,7 +1398,7 @@ public partial class NotchWindow : Window
         {
             var flip = new ScaleTransform(1, 1);
             tile.RenderTransform = flip;
-            flip.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.05, 1, TimeSpan.FromMilliseconds(380))
+            flip.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.05, 1, Motion.Scale(380))
             {
                 EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.35 },
             });
@@ -1537,7 +1537,7 @@ public partial class NotchWindow : Window
         if (_peeking)
         {
             // Already open: swap the content with a quick fade instead of shrinking and growing again.
-            PeekLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
+            PeekLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, Motion.Base));
         }
         _peeking = true;
         UpdateConceal();
@@ -2294,22 +2294,22 @@ public partial class NotchWindow : Window
             TabIndicator.Opacity = 1;
             return;
         }
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var ease = Motion.Out;
         TabIndicatorShift.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(x, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+            new DoubleAnimation(x, Motion.Base) { EasingFunction = ease });
     }
 
     /// <summary>New content slides in from the side of the tab it came from and fades up.</summary>
     private static void SlideIn(UIElement element, int direction)
     {
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+        var ease = Motion.Out;
+        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Base) { EasingFunction = ease });
         var shift = new TranslateTransform();
         element.RenderTransform = shift;
         if (direction == 0)
-            shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(6, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+            shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(6, 0, Motion.Base) { EasingFunction = ease });
         else
-            shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(18 * direction, 0, TimeSpan.FromMilliseconds(280)) { EasingFunction = ease });
+            shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(18 * direction, 0, Motion.Base) { EasingFunction = ease });
     }
 
     private void OnSettingsChanged()

@@ -118,9 +118,9 @@ public partial class NotchWindow
             return;
         }
         // From the live offset so chained wheel notches retarget mid-glide.
-        BeginAnimation(TabScrollProperty, new DoubleAnimation(TabScroller.HorizontalOffset, target, TimeSpan.FromMilliseconds(220))
+        BeginAnimation(TabScrollProperty, new DoubleAnimation(TabScroller.HorizontalOffset, target, Motion.Base)
         {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            EasingFunction = Motion.Out,
         });
     }
 

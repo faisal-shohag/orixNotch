@@ -33,10 +33,10 @@ public static class ChargingTile
 
         var target = Math.Max(1.5, (bodyW - inset * 2) * Math.Clamp(percent, 0, 100) / 100.0);
         tile.Loaded += (_, _) => fill.BeginAnimation(FrameworkElement.WidthProperty,
-            new DoubleAnimation(0, target, TimeSpan.FromMilliseconds(900))
+            new DoubleAnimation(0, target, Motion.Scale(900))
             {
-                BeginTime = TimeSpan.FromMilliseconds(150),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                BeginTime = Motion.Fast,
+                EasingFunction = Motion.Out,
             });
         return tile;
     }

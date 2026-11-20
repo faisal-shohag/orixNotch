@@ -117,7 +117,7 @@ public partial class NowPlayingView : UserControl, IToolView
         {
             var tb = (TextBlock)LyricsLines.Children[i];
             var target = i == index ? 1.0 : Math.Abs(i - index) == 1 ? 0.5 : 0.3;
-            tb.BeginAnimation(OpacityProperty, new DoubleAnimation(target, TimeSpan.FromMilliseconds(250)));
+            tb.BeginAnimation(OpacityProperty, new DoubleAnimation(target, Motion.Base));
         }
         if (index < 0) return;
 

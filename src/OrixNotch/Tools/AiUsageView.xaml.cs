@@ -38,7 +38,7 @@ public partial class AiUsageView : UserControl, IToolView
     {
         if (element.Tag is bool shown && shown == visible) return;
         element.Tag = visible;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(visible ? 1.0 : 0.0, TimeSpan.FromMilliseconds(160)));
+        element.BeginAnimation(OpacityProperty, new DoubleAnimation(visible ? 1.0 : 0.0, Motion.Fast));
     }
 
     /// <summary>Edge fades go from the notch color to transparent, so cards dissolve into the edge (same as Clipboard).</summary>
