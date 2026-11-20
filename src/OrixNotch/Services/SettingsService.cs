@@ -113,6 +113,7 @@ public sealed class AppSettings
     public bool CheckForUpdates { get; set; } = true;
     public string? UpdateNotified { get; set; }
     public string? LastSeenVersion { get; set; }    // the "Updated to …" alert shows once per version
+    public List<string> SeenNew { get; set; } = new(); // "page|row title" whose "New" chip has been seen
 
     public string ThemeScheme { get; set; } = "midnight";
     public string ThemeAccent { get; set; } = "auto"; // "auto" = the scheme's own accent

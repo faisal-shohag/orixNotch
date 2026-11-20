@@ -29,6 +29,29 @@ public partial class SettingsView : UserControl, IToolView
         ("about", "About", AppIcon.Info, ""),
     ];
 
+    /// <summary>
+    /// Settings added in this release, by page: each gets a "New" chip (and its page a dot in the sidebar) until
+    /// that page has been opened once. Update the list with each release; a page id alone ("automations") marks a new page.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> NewRows = new()
+    {
+        ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
+        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals"],
+        ["appearance"] = ["Follow album art"],
+        ["display"] = ["Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
+        ["keyboard"] = ["Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
+        ["about"] = ["Report a problem", "Request a tool"],
+    };
+
+    private string _rendering = ""; // the page Row() is adding to, for its "New" chip
+
+    private static bool IsNew(string page, string title) =>
+        NewRows.TryGetValue(page, out var titles) && titles.Contains(title) && !App.Settings.SeenNew.Contains($"{page}|{title}");
+
+    private static bool HasNew(string page) => NewRows.TryGetValue(page, out var titles) && titles.Any(t => IsNew(page, t));
+
+    private readonly Dictionary<string, FrameworkElement> _navDots = new();
+
     private string _page = "general";
     private string? _recordingAction;
 
@@ -38,6 +61,7 @@ public partial class SettingsView : UserControl, IToolView
     {
         InitializeComponent();
         VersionText.Text = $"OrixNotch {typeof(App).Assembly.GetName().Version?.ToString(3)}";
+        if (SettingsService.FirstRun) MarkSeen(NewRows.Keys); // everything is new on a new install: no chips
 
         foreach (var (id, name, icon, section) in Pages)
         {
@@ -55,6 +79,14 @@ public partial class SettingsView : UserControl, IToolView
                 ? new BrandMark { Variant = BrandVariant.Gradient, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center }
                 : new HeroIcon { Kind = icon, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center });
             content.Children.Add(new TextBlock { Text = name, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            var dot = new System.Windows.Shapes.Ellipse
+            {
+                Width = 6, Height = 6, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+                Visibility = HasNew(id) ? Visibility.Visible : Visibility.Collapsed, ToolTip = "Something new here",
+            };
+            dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentBrush");
+            content.Children.Add(dot);
+            _navDots[id] = dot;
             var nav = new RadioButton
             {
                 Style = (Style)Resources["NavButton"],
@@ -96,7 +128,13 @@ public partial class SettingsView : UserControl, IToolView
             if ((string?)nav.Tag == id) nav.IsChecked = true;
     }
 
-    public void OnHidden() => _recordingAction = null;
+    public void OnHidden()
+    {
+        _recordingAction = null;
+        if (IsLoaded) MarkSeen(_viewed); // only pages actually shown (the first render happens before Settings is on screen)
+    }
+
+    private readonly HashSet<string> _viewed = new();
 
     // ---------------------------------------------------------------- page rendering
 
@@ -109,14 +147,37 @@ public partial class SettingsView : UserControl, IToolView
         Page.Children.Clear();
         if (resetScroll) PageScroll.ScrollToTop();
         if (_query.Length > 0) RenderSearch();
-        else RenderPage(_page);
+        else
+        {
+            RenderPage(_page);
+            // Seen once Settings closes: chips stay while it's open, and the page's sidebar dot goes now.
+            _viewed.Add(_page);
+            if (_navDots.TryGetValue(_page, out var dot)) dot.Visibility = Visibility.Collapsed;
+        }
         if (!resetScroll && offset > 0)
             Dispatcher.BeginInvoke(() => PageScroll.ScrollToVerticalOffset(offset),
                 System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
+    private void MarkSeen(IEnumerable<string> pages)
+    {
+        var added = false;
+        foreach (var page in pages)
+        {
+            if (!NewRows.TryGetValue(page, out var titles)) continue;
+            foreach (var title in titles)
+                if (!S.SeenNew.Contains($"{page}|{title}"))
+                {
+                    S.SeenNew.Add($"{page}|{title}");
+                    added = true;
+                }
+        }
+        if (added) Save(false);
+    }
+
     private void RenderPage(string id)
     {
+        _rendering = id;
         switch (id)
         {
             case "general": RenderGeneral(); break;
@@ -1452,7 +1513,7 @@ public partial class SettingsView : UserControl, IToolView
             Grid.SetColumnSpan(footer, 2);
         }
         var text = new StackPanel { Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(titleContent ?? new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
+        text.Children.Add(titleContent ?? (IsNew(_rendering, title) ? TitleWithNewChip(title) : new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold }));
         text.Children.Add(new TextBlock { Text = description, Style = (Style)FindResource("SubText"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) });
         control.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(control, 1);
@@ -1474,6 +1535,18 @@ public partial class SettingsView : UserControl, IToolView
         var card = Group(stack);
         card.Tag = "rows";
         Page.Children.Add(card);
+    }
+
+    private static FrameworkElement TitleWithNewChip(string title)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
+        var label = new TextBlock { Text = "NEW", FontSize = 9, FontWeight = FontWeights.Bold };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        var chip = new Border { CornerRadius = new CornerRadius(5), Padding = new Thickness(5, 1, 5, 1), Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = label };
+        chip.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
+        panel.Children.Add(chip);
+        return panel;
     }
 
     private static CheckBox Toggle(bool value, Action<bool> changed)
