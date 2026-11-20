@@ -91,20 +91,34 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusS}" RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform><ScaleTransform /></Border.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="0.9" Duration="0:0:0.09" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="0.9" Duration="0:0:0.09" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="{StaticResource MotionFast}" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="{StaticResource MotionFast}" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
                         </Trigger>
                         <!-- Pressed: dims and dips a little, like a physical key -->
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.7" />
-                            <Setter TargetName="Bd" Property="RenderTransform">
-                                <Setter.Value>
-                                    <ScaleTransform ScaleX="0.9" ScaleY="0.9" />
-                                </Setter.Value>
-                            </Setter>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.35" />
@@ -127,10 +141,29 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusS}" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusS}" Padding="{TemplateBinding Padding}" RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform><ScaleTransform /></Border.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="0.96" Duration="0:0:0.09" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="0.96" Duration="0:0:0.09" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="{StaticResource MotionFast}" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="{StaticResource MotionFast}" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.85" />
                         </Trigger>
@@ -161,10 +194,29 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusS}" Padding="6,4">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusS}" Padding="6,4" RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform><ScaleTransform /></Border.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="0.985" Duration="0:0:0.09" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="0.985" Duration="0:0:0.09" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="{StaticResource MotionFast}" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="{StaticResource MotionFast}" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface2Brush}" />
                         </Trigger>
@@ -185,10 +237,29 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusM}">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusM}" RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform><ScaleTransform /></Border.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="0.9" Duration="0:0:0.09" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="0.9" Duration="0:0:0.09" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="{StaticResource MotionFast}" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd" Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="{StaticResource MotionFast}" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface2Brush}" />
                             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
@@ -675,7 +746,7 @@
                                           Content="{TemplateBinding SelectionBoxItem}"
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" />
                         <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
-                               AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                               AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
                             <Border Background="{DynamicResource Surface2Brush}" CornerRadius="{StaticResource RadiusM}" Margin="0,4,0,0"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                     MaxHeight="240" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" Padding="0,3"

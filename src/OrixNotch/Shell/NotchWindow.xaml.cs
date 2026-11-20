@@ -209,6 +209,7 @@ public partial class NotchWindow : Window
         HotkeyService.Triggered += OnHotkey;
 
         BuildEqualizer();
+        TabBar.RenderTransform = _tabRise;
         _eqLive.Tick += (_, _) => TickEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
@@ -952,6 +953,11 @@ public partial class NotchWindow : Window
         // Content materialises out of a blur as the notch opens (and dissolves back on close).
         var reveal = Math.Clamp((p - 0.35) / 0.65, 0, 1);
         ExpandedLayer.Opacity = reveal;
+        // Staggered: the header leads, the tab bar follows and rises a few pixels into place.
+        Header.Opacity = Math.Clamp(reveal / 0.7, 0, 1);
+        var tabs = Math.Clamp((reveal - 0.3) / 0.7, 0, 1);
+        TabBar.Opacity = tabs;
+        _tabRise.Y = Motion.Reduced ? 0 : (1 - tabs) * 6;
         ExpandedLayer.Visibility = p > 0.3 ? Visibility.Visible : Visibility.Collapsed;
         _blur.Radius = (1 - reveal) * 14;
         ExpandedLayer.Effect = reveal < 0.999 && ExpandedLayer.Visibility == Visibility.Visible ? _blur : null;
@@ -1869,6 +1875,8 @@ public partial class NotchWindow : Window
         geometry.Freeze();
         return geometry;
     }
+
+    private readonly TranslateTransform _tabRise = new();
 
     private void BuildEqualizer()
     {
