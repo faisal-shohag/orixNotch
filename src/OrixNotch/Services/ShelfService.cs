@@ -66,7 +66,6 @@ public sealed class ShelfItem
         }
     }
 
-    [JsonIgnore] public bool HasIcon => Icon is not null;
 }
 
 /// <summary>Temporary holding area for files dragged onto the notch.</summary>
@@ -107,8 +106,10 @@ public sealed class ShelfService
 
     public void AddText(string text)
     {
-        var name = $"Text {DateTime.Now:yyyy-MM-dd HHmmss}.txt";
-        var path = System.IO.Path.Combine(Storage.Dir("shelf"), name);
+        // Two drops in the same second must not share (and later delete) one file.
+        var path = System.IO.Path.Combine(Storage.Dir("shelf"), $"Text {DateTime.Now:yyyy-MM-dd HHmmss}.txt");
+        for (var n = 2; File.Exists(path); n++)
+            path = System.IO.Path.Combine(Storage.Dir("shelf"), $"Text {DateTime.Now:yyyy-MM-dd HHmmss} ({n}).txt");
         File.WriteAllText(path, text);
         Items.Insert(0, new ShelfItem { Path = path, Owned = true });
         Save();

@@ -4,7 +4,8 @@
 #   wix extension add -g WixToolset.Util.wixext/5.0.2
 # Run from repo root:  pwsh packaging/Build-Msi.ps1 [-Version 1.2.3]
 # Silent install:      msiexec /i publish/OrixNotch.msi /qn LAUNCHAPP=0
-param([string]$Version, [string]$OutFile)
+# -Exe <path>: package an exe already built (and signed) by Build-Exe.ps1 instead of publishing it again (CI, releases).
+param([string]$Version, [string]$OutFile, [string]$Exe)
 
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/Common.ps1"
@@ -15,8 +16,15 @@ if (-not $OutFile) { $OutFile = Join-Path $RepoRoot "publish/OrixNotch.msi" }
 Write-Host "MSI $appVersion"
 
 # 1. Self-contained single-file publish (same exe as the portable download), signed if a cert is set up.
-Invoke-Publish -OutDir $stage -Version $appVersion -SingleFile
-Invoke-CodeSign (Join-Path $stage "OrixNotch.exe")
+if ($Exe) {
+    if (-not (Test-Path $Exe)) { throw "-Exe not found: $Exe" }
+    if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+    New-Item -ItemType Directory -Path $stage | Out-Null
+    Copy-Item $Exe (Join-Path $stage "OrixNotch.exe")
+} else {
+    Invoke-Publish -OutDir $stage -Version $appVersion -SingleFile
+    Invoke-CodeSign (Join-Path $stage "OrixNotch.exe")
+}
 
 # 2. File list for the AppBinaries component.
 $files = Get-ChildItem $stage -File | Sort-Object Name

@@ -62,7 +62,7 @@
                         Cursor="Hand" Focusable="False" Click="OnPlay">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Bd" CornerRadius="14" Background="{DynamicResource AccentBrush}">
+                            <Border x:Name="Bd" CornerRadius="{StaticResource RadiusL}" Background="{DynamicResource AccentBrush}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <ControlTemplate.Triggers>
@@ -100,13 +100,17 @@
                         ToolTip="Mirror text" Foreground="{DynamicResource SubTextBrush}" Click="OnMirror">
                     <hero:HeroIcon Kind="ArrowsLeftRight" Width="14" Height="14" />
                 </Button>
+                <Button x:Name="CaptureButton" Style="{StaticResource IconButton}" Width="28" Height="28" Margin="4,0,0,0"
+                        Click="OnCapture">
+                    <hero:HeroIcon Kind="EyeOff" Width="14" Height="14" />
+                </Button>
             </StackPanel>
         </Grid>
 
         <!-- Grab handle: drag to make the prompter taller or shorter -->
         <Border x:Name="Grip" Grid.Row="2" Width="120" Height="16" Background="Transparent" VerticalAlignment="Center"
                 Cursor="SizeNS" ToolTip="Drag to resize"
-                MouseLeftButtonDown="OnGripDown" MouseMove="OnGripMove" MouseLeftButtonUp="OnGripUp">
+               >
             <Border Width="44" Height="4" CornerRadius="2" Background="{DynamicResource TrackBrush}" VerticalAlignment="Center" />
         </Border>
     </Grid>

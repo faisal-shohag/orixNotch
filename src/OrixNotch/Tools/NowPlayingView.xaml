@@ -4,7 +4,7 @@
              xmlns:svc="clr-namespace:OrixNotch.Services"
              xmlns:hero="clr-namespace:OrixNotch.Shell"
              DataContext="{x:Static svc:NowPlayingService.Instance}">
-    <Border x:Name="Card" CornerRadius="12" Background="{DynamicResource SurfaceBrush}" Padding="12,10">
+    <Border x:Name="Card" CornerRadius="{StaticResource RadiusL}" Background="{DynamicResource SurfaceBrush}" Padding="12,10">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="104" />
@@ -13,7 +13,7 @@
 
             <!-- Art + track + mini progress -->
             <StackPanel VerticalAlignment="Center">
-                <Border Width="64" Height="64" CornerRadius="8" Background="{DynamicResource Surface2Brush}">
+                <Border Width="64" Height="64" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource Surface2Brush}">
                     <Border.Clip>
                         <RectangleGeometry Rect="0,0,64,64" RadiusX="8" RadiusY="8" />
                     </Border.Clip>

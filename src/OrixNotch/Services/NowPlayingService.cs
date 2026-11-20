@@ -95,14 +95,18 @@ public sealed partial class NowPlayingService : ObservableObject
     private void OnTimelineChanged(Session s, TimelinePropertiesChangedEventArgs e) =>
         _ui.BeginInvoke(RefreshTimeline);
 
+    private int _mediaVersion;
+
     private async Task RefreshMediaAsync()
     {
         var session = _session;
         if (session is null) return;
+        // Overlapping refreshes (quick track changes) can finish out of order: only the newest may write.
+        var version = ++_mediaVersion;
         try
         {
             var props = await session.TryGetMediaPropertiesAsync();
-            if (session != _session) return;
+            if (session != _session || version != _mediaVersion) return;
 
             Title = string.IsNullOrWhiteSpace(props.Title) ? "Unknown title" : props.Title;
             Artist = string.IsNullOrWhiteSpace(props.Artist) ? props.AlbumTitle ?? "" : props.Artist;
@@ -124,6 +128,7 @@ public sealed partial class NowPlayingService : ObservableObject
                 bmp.Freeze();
                 image = bmp;
             }
+            if (session != _session || version != _mediaVersion) return; // a newer track arrived while the art loaded
             Art = image;
             ArtTint = image is BitmapSource src ? AverageColor(src) : null;
         }

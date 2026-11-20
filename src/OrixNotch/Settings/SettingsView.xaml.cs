@@ -16,17 +16,70 @@ namespace OrixNotch.Settings;
 /// </summary>
 public partial class SettingsView : UserControl, IToolView
 {
-    private static readonly (string Id, string Name, AppIcon Icon, string? Section)[] Pages =
+    internal static readonly (string Id, string Name, AppIcon Icon, string? Section)[] Pages =
     [
         ("general", "General", AppIcon.Adjust, null),
         ("appearance", "Appearance", AppIcon.Palette, null),
-        ("display", "Display", AppIcon.Monitor, "NOTCH"),
+        ("display", "Notch", AppIcon.Monitor, "NOTCH"),
         ("tabs", "Tabs", AppIcon.Grid, null),
         ("keyboard", "Keyboard", AppIcon.Keyboard, null),
+        ("notifications", "Notifications", AppIcon.Bell, "ALERTS"),
+        ("quiet", "Quiet & focus", AppIcon.Moon, null),
+        ("calendar", "Calendar", AppIcon.CalendarDays, null),
+        ("automations", "Automations", AppIcon.Bolt, null),
         ("ai", "Ask AI", AppIcon.Sparkles, "TOOLS"),
         ("data", "Clipboard & Shelf", AppIcon.ClipboardList, null),
         ("about", "About", AppIcon.Info, ""),
     ];
+
+    /// <summary>
+    /// Settings added in this release, by page: each gets a "New" chip (and its page a dot in the sidebar) until
+    /// that page has been opened once. Update the list with each release; a page id alone ("automations") marks a new page.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> NewRows = new()
+    {
+        ["notifications"] = ["Screenshots", "Calendar reminders", "Focus sessions", "Timers", "Subscription renewals"],
+        ["quiet"] = ["Quiet hours", "Quiet while on a call", "Quiet during focus", "Focus events start a session", "Track screen time", "Evening summary", "Add a daily goal", "Rest your eyes", "Stand up", "Drink water"],
+        ["calendar"] = ["Pause music", "Join from the reminder"],
+        ["automations"] = ["Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief"],
+        ["appearance"] = ["Follow album art", "Tint from wallpaper", "Music bars follow the sound", "Share this look", "Celebrations", "Glow", "Reset theme"],
+        ["display"] = ["Position", "Shape", "Corner turn", "Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
+        ["keyboard"] = ["Command palette", "Explain selected text", "Start focus", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
+        ["about"] = ["Report a problem", "Request a tool"],
+    };
+
+    /// <summary>Sidebar icon colours, macOS System Settings style: fixed, so they read the same in every scheme.</summary>
+    private static readonly Dictionary<string, string> NavColors = new()
+    {
+        ["general"] = "#8E8E93", ["automations"] = "#FF9F0A", ["appearance"] = "#0A84FF", ["display"] = "#30B0C7",
+        ["tabs"] = "#5E5CE6", ["keyboard"] = "#636366", ["ai"] = "#BF5AF2", ["data"] = "#34C759", ["about"] = "#0B0E17",
+        ["notifications"] = "#FF453A", ["quiet"] = "#5856D6", ["calendar"] = "#FF6B3D",
+    };
+
+    /// <summary>A page's icon on a small coloured rounded tile (About: the OrixNotch mark on the brand's dark tile).</summary>
+    private static Border NavTile(string id, AppIcon icon)
+    {
+        var color = (Color)ColorConverter.ConvertFromString(NavColors.GetValueOrDefault(id, "#8E8E93"));
+        FrameworkElement glyph = id == "about"
+            ? new BrandMark { Variant = BrandVariant.Gradient, Width = 13, Height = 13 }
+            : new HeroIcon { Kind = icon, Width = 13, Height = 13, Foreground = Brushes.White };
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        return new Border
+        {
+            Width = 22, Height = 22, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center, Child = glyph,
+            Background = new LinearGradientBrush(ThemeService.Mix(color, Colors.White, 0.12), color, 90), // a hint of depth, like the Mac's tiles
+        };
+    }
+
+    private string _rendering = ""; // the page Row() is adding to, for its "New" chip
+
+    private static bool IsNew(string page, string title) =>
+        NewRows.TryGetValue(page, out var titles) && titles.Contains(title) && !App.Settings.SeenNew.Contains($"{page}|{title}");
+
+    private static bool HasNew(string page) => NewRows.TryGetValue(page, out var titles) && titles.Any(t => IsNew(page, t));
+
+    private readonly Dictionary<string, FrameworkElement> _navDots = new();
 
     private string _page = "general";
     private string? _recordingAction;
@@ -37,6 +90,7 @@ public partial class SettingsView : UserControl, IToolView
     {
         InitializeComponent();
         VersionText.Text = $"OrixNotch {typeof(App).Assembly.GetName().Version?.ToString(3)}";
+        if (SettingsService.FirstRun) MarkSeen(NewRows.Keys); // everything is new on a new install: no chips
 
         foreach (var (id, name, icon, section) in Pages)
         {
@@ -50,10 +104,16 @@ public partial class SettingsView : UserControl, IToolView
                 });
 
             var content = new StackPanel { Orientation = Orientation.Horizontal };
-            content.Children.Add(id == "about" // About is about OrixNotch itself: its own logo
-                ? new BrandMark { Variant = BrandVariant.Gradient, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center }
-                : new HeroIcon { Kind = icon, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(NavTile(id, icon));
             content.Children.Add(new TextBlock { Text = name, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            var dot = new System.Windows.Shapes.Ellipse
+            {
+                Width = 6, Height = 6, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+                Visibility = HasNew(id) ? Visibility.Visible : Visibility.Collapsed, ToolTip = "Something new here",
+            };
+            dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentBrush");
+            content.Children.Add(dot);
+            _navDots[id] = dot;
             var nav = new RadioButton
             {
                 Style = (Style)Resources["NavButton"],
@@ -67,8 +127,10 @@ public partial class SettingsView : UserControl, IToolView
             {
                 if (_page == pageId) return;
                 _page = pageId;
-                if (SearchBox.Text.Length > 0) SearchBox.Clear(); // re-renders, now on this page
-                else Render(resetScroll: true);
+                if (SearchBox.Text.Length > 0) SearchBox.Clear(); // search is debounced: render this page now
+                _searchDelay?.Stop();
+                _query = "";
+                Render(resetScroll: true);
             };
             Nav.Children.Add(nav);
         }
@@ -81,10 +143,12 @@ public partial class SettingsView : UserControl, IToolView
         // Show the calendar sync result once it lands (not mid-edit: re-rendering drops focus).
         CalendarFeedService.Instance.Updated += () =>
         {
-            if (_page == "general" && IsVisible && !IsKeyboardFocusWithin) Render();
+            if (_page == "calendar" && IsVisible && !IsKeyboardFocusWithin) Render(); // the feed rows live on Calendar
         };
-        Render();
+        // No Render() here: OnShown renders when the view is presented (it built every page twice on first open).
     }
+
+    private bool _waitingForAiTools;
 
     public void OnShown() => Render();
 
@@ -95,7 +159,13 @@ public partial class SettingsView : UserControl, IToolView
             if ((string?)nav.Tag == id) nav.IsChecked = true;
     }
 
-    public void OnHidden() => _recordingAction = null;
+    public void OnHidden()
+    {
+        _recordingAction = null;
+        if (IsLoaded) MarkSeen(_viewed); // only pages actually shown (the first render happens before Settings is on screen)
+    }
+
+    private readonly HashSet<string> _viewed = new();
 
     // ---------------------------------------------------------------- page rendering
 
@@ -108,17 +178,44 @@ public partial class SettingsView : UserControl, IToolView
         Page.Children.Clear();
         if (resetScroll) PageScroll.ScrollToTop();
         if (_query.Length > 0) RenderSearch();
-        else RenderPage(_page);
+        else
+        {
+            RenderPage(_page);
+            // Seen once Settings closes: chips stay while it's open, and the page's sidebar dot goes now.
+            _viewed.Add(_page);
+            if (_navDots.TryGetValue(_page, out var dot)) dot.Visibility = Visibility.Collapsed;
+        }
         if (!resetScroll && offset > 0)
             Dispatcher.BeginInvoke(() => PageScroll.ScrollToVerticalOffset(offset),
                 System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
+    private void MarkSeen(IEnumerable<string> pages)
+    {
+        var added = false;
+        foreach (var page in pages)
+        {
+            if (!NewRows.TryGetValue(page, out var titles)) continue;
+            foreach (var title in titles)
+                if (!S.SeenNew.Contains($"{page}|{title}"))
+                {
+                    S.SeenNew.Add($"{page}|{title}");
+                    added = true;
+                }
+        }
+        if (added) Save(false);
+    }
+
     private void RenderPage(string id)
     {
+        _rendering = id;
         switch (id)
         {
             case "general": RenderGeneral(); break;
+            case "notifications": RenderNotifications(); break;
+            case "quiet": RenderQuietFocus(); break;
+            case "calendar": RenderCalendar(); break;
+            case "automations": RenderAutomations(); break;
             case "appearance": RenderAppearance(); break;
             case "display": RenderDisplay(); break;
             case "tabs": RenderTabs(); break;
@@ -133,12 +230,25 @@ public partial class SettingsView : UserControl, IToolView
 
     private string _query = "";
 
+    private System.Windows.Threading.DispatcherTimer? _searchDelay;
+
+    // Search renders every page: wait for a pause in typing instead of rebuilding them all per keystroke.
     private void OnSearchChanged(object sender, TextChangedEventArgs e)
     {
-        var query = SearchBox.Text.Trim();
-        if (query == _query) return;
-        _query = query;
-        Render(resetScroll: true);
+        if (_searchDelay is null)
+        {
+            _searchDelay = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _searchDelay.Tick += (_, _) =>
+            {
+                _searchDelay.Stop();
+                var query = SearchBox.Text.Trim();
+                if (query == _query) return;
+                _query = query;
+                Render(resetScroll: true);
+            };
+        }
+        _searchDelay.Stop();
+        _searchDelay.Start();
     }
 
     /// <summary>
@@ -188,11 +298,13 @@ public partial class SettingsView : UserControl, IToolView
         for (var i = 0; i < rows.Children.Count; i++)
         {
             if (rows.Children[i] is not Grid row) continue;
+            // A Row's title and description sit in its first cell; a tool row starts with its icon, so read it all.
             var text = string.Join(" ", TextsIn(row.Children[0]));
+            if (text.Length == 0) text = string.Join(" ", TextsIn(row));
             var match = text.Contains(query, StringComparison.CurrentCultureIgnoreCase);
             row.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
-            // The divider above a row shows only when a shown row sits above it too.
-            if (i > 0) rows.Children[i - 1].Visibility = match && visible > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // The divider above a row shows only when a shown row sits above it too (lists without dividers: skip).
+            if (i > 0 && rows.Children[i - 1] is not Grid) rows.Children[i - 1].Visibility = match && visible > 0 ? Visibility.Visible : Visibility.Collapsed;
             if (match) visible++;
         }
         return visible;
@@ -207,7 +319,21 @@ public partial class SettingsView : UserControl, IToolView
     }
 
     /// <summary>Apps with an open window right now, for "Hide for these apps": (process name, friendly name).</summary>
+    private static List<(string Name, string Label)>? _runningApps;
+    private static long _runningAppsAt;
+
+    // Three pages list running apps, and every toggle (and search) re-renders: scan processes at most every few seconds.
     private static List<(string Name, string Label)> RunningApps()
+    {
+        if (_runningApps is null || Environment.TickCount64 - _runningAppsAt > 3000)
+        {
+            _runningApps = ScanRunningApps();
+            _runningAppsAt = Environment.TickCount64;
+        }
+        return _runningApps;
+    }
+
+    private static List<(string Name, string Label)> ScanRunningApps()
     {
         var apps = new Dictionary<string, string>();
         foreach (var process in Process.GetProcesses())
@@ -270,67 +396,15 @@ public partial class SettingsView : UserControl, IToolView
 
     private void RenderGeneral()
     {
-        Title("General", "How OrixNotch behaves on your PC.");
+        Title("General", "You, and how OrixNotch starts and opens.");
         Section("PROFILE");
         Row("Name", "Shown in the greeting on Home.",
             TextInput(App.Settings.DisplayName, Environment.UserName, ProfileService.SetName));
         Row("Picture", ProfileService.HasAvatar ? "Shown next to the greeting. Click Home's avatar to change it too." : "Pick a photo for Home; otherwise your initial is shown.",
             AvatarPicker());
 
-        Section("BEHAVIOR");
-        Row("Open notch", "Open when the pointer rests on the notch, or only when you click it.",
-            Combo(["On Hover", "On Click"], (int)S.OpenMode, i => { S.OpenMode = (OpenMode)i; Save(); }));
-        Row("Hover delay", "How long the pointer rests on the notch before it opens.",
-            Combo(["Instant", "Fast", "Normal", "Slow"], Array.IndexOf(new[] { 0, 80, 150, 400 }, S.HoverDelayMs) is var d and >= 0 ? d : 2,
-                i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(); }));
-        string[] visibility = ["Always", "WhenActive", "HoverOnly"];
-        Row("Show notch", "Always, only while music, a timer or a reminder is on, or only when the pointer touches the top edge of the screen.",
-            Combo(["Always", "When active", "On top-edge hover"], Math.Max(0, Array.IndexOf(visibility, S.NotchVisibility)),
-                i => { S.NotchVisibility = visibility[i]; Save(); }));
-        Row("Hide in full screen", "Stay out of the way of full-screen apps and videos; touch the top edge to bring it back. Games hide it completely.",
-            Toggle(S.HideInFullscreen, v => { S.HideInFullscreen = v; Save(); }));
-        Row("Hide from screenshots", "Leave the notch out of screenshots, recordings and screen sharing.",
-            Toggle(S.HideFromCapture, v => { S.HideFromCapture = v; Save(); }));
-        Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
-            Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); }));
 
-        Section("HIDE FOR THESE APPS");
-        foreach (var listed in S.HideForApps.ToList())
-        {
-            var name = listed;
-            Row(AppLabel(name), $"{name}.exe",
-                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
-                {
-                    S.HideForApps.Remove(name);
-                    Save();
-                    Render();
-                }));
-        }
-        var running = RunningApps().Where(a => !S.HideForApps.Contains(a.Name)).ToList();
-        var pick = Combo(running.Select(a => a.Label), running.Count > 0 ? 0 : -1, _ => { }, width: 200);
-        var addApp = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = running.Count > 0 };
-        addApp.Click += (_, _) =>
-        {
-            if (pick.SelectedIndex < 0) return;
-            S.HideForApps.Add(running[pick.SelectedIndex].Name);
-            Save();
-            Render();
-        };
-        var addAppRow = new StackPanel { Orientation = Orientation.Horizontal };
-        addAppRow.Children.Add(pick);
-        addAppRow.Children.Add(addApp);
-        Row("Add an app", "Hide the notch while it's in front, on any display.", addAppRow);
-        if (S.HideForApps.Count > 0)
-        {
-            Row("When one is in front", "Fade out (touch the top edge to bring it back), or hide completely.",
-                Combo(["Fade out", "Hide completely"], S.HideForAppsMode == "Hidden" ? 1 : 0,
-                    i => { S.HideForAppsMode = i == 1 ? "Hidden" : "Fade"; Save(); }, width: 170));
-            Row("Alerts", "Hold alerts until you switch away, or let them pop out anyway.",
-                Combo(["Wait until I switch away", "Show them anyway"], S.HideForAppsHoldAlerts ? 0 : 1,
-                    i => { S.HideForAppsHoldAlerts = i == 0; Save(); }, width: 200));
-        }
-
-        Section("SYSTEM");
+        Section("START & OPEN");
         Row("Open at login", StartupService.DisabledByUser
                 ? "Turned off in Task Manager → Startup apps. Turn it back on there."
                 : "Start OrixNotch when you sign in to Windows.",
@@ -338,37 +412,246 @@ public partial class SettingsView : UserControl, IToolView
             {
                 var on = await StartupService.ApplyAsync(v);
                 S.LaunchAtStartup = on;
-                Save();
+                Save(false);
                 if (on != v) Render(); // Windows refused (e.g. disabled in Task Manager): show why
             }));
 
-        Section("NOW PLAYING");
+        Row("Open notch", "Open when the pointer rests on the notch, or only when you click it.",
+            Combo(["On Hover", "On Click"], (int)S.OpenMode, i => { S.OpenMode = (OpenMode)i; Save(false); }) /* read live: no tab/layout rebuild */);
+        Row("Hover delay", "How long the pointer rests on the notch before it opens.",
+            Combo(["Instant", "Fast", "Normal", "Slow"], Array.IndexOf(new[] { 0, 80, 150, 400 }, S.HoverDelayMs) is var d and >= 0 ? d : 2,
+                i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(false); }));
+
+        Section("MUSIC");
         Row("Lyrics", "Show time-synced lyrics on Now Playing. Songs are looked up on LRCLIB, a free lyrics library.",
             Toggle(S.LyricsEnabled, v => { S.LyricsEnabled = v; Save(false); }));
+
+        Section("UNITS");
+        Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; SaveIdle(); }) /* the idle notch's weather refetches in the new unit */);
+    }
+
+    private void RenderNotifications()
+    {
+        Title("Notifications", "What pops out of the notch, and how it sounds.");
+        Section("WINDOWS NOTIFICATIONS");
+        var watcher = NotificationWatcher.Instance;
+        var source = watcher.Source == NotificationWatcher.SourceKind.Listener
+            ? "Uses Windows notification access."
+            : "Reads Windows' notification history on this PC (read-only).";
+        Row("Show on the notch", $"Windows notifications from other apps pop out of the closed notch. {source}",
+            Toggle(S.NotifyEnabled, async v =>
+            {
+                S.NotifyEnabled = v;
+                Save(false);
+                if (v) await watcher.RequestAccessAsync();
+                watcher.Reconfigure();
+                Render();
+            }));
+        if (S.NotifyEnabled)
+        {
+            if (watcher.Problem is { } problem)
+                Row("Not receiving notifications", problem, new Button { Content = "Open settings" }.Also(b =>
+                    b.Click += (_, _) => Launcher.Open(watcher.ProblemSettingsUri)));
+            Row("Show message text", "Off shows only the app name, for privacy when sharing your screen.",
+                Toggle(S.NotifyShowText, v => { S.NotifyShowText = v; Save(false); }));
+            Row("Keep history", "Save notifications on this PC to read later in the Notifications tool (last 30 days). Clear them there anytime.",
+                Toggle(S.NotifyKeepHistory, v => { S.NotifyKeepHistory = v; Save(false); }));
+            Row("Windows banners", "Windows still shows its own pop-up too. Turn banners off per app in Windows Settings if you only want the notch.",
+                new Button { Content = "Open settings" }.Also(b =>
+                    b.Click += (_, _) => Launcher.Open("ms-settings:notifications")));
+        }
+
+        if (S.NotifyEnabled && S.NotifySeenApps.Count > 0)
+        {
+            Section("SHOW NOTIFICATIONS FROM");
+            foreach (var entry in S.NotifySeenApps)
+            {
+                var parts = entry.Split('|', 2);
+                var appId = parts[0];
+                var name = parts.Length > 1 ? parts[1] : appId;
+                Row(name, "Recently sent a notification.",
+                    Toggle(!S.NotifyMutedApps.Contains(appId, StringComparer.OrdinalIgnoreCase), on =>
+                    {
+                        S.NotifyMutedApps.RemoveAll(a => a.Equals(appId, StringComparison.OrdinalIgnoreCase));
+                        if (!on) S.NotifyMutedApps.Add(appId);
+                        Save(false);
+                    }));
+            }
+        }
+
+        Section("DEVICE ALERTS");
+        Row("Battery alerts", "Show on the notch when the charger is plugged in or pulled, and when the battery drops to 20% and 10%.",
+            Toggle(S.PowerAlerts, v => { S.PowerAlerts = v; Save(false); }));
+        Row("Volume on the notch", "Show the volume level on the notch when it changes. Windows still shows its own volume pop-up too.",
+            Toggle(S.VolumeHud, v => { S.VolumeHud = v; Save(false); }));
+        Row("Bluetooth devices", "Show on the notch when paired headphones, a mouse or other Bluetooth device connects or disconnects.",
+            Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); NotchWindow.ApplyDeviceWatchers(); }));
+        Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
+            Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); NotchWindow.ApplyDeviceWatchers(); }));
+        Row("Screenshots", "Show a preview on the notch when you take a screenshot (Win + PrtScn, Snipping Tool). Click it to put it on the Shelf.",
+            Toggle(S.ScreenshotAlerts, v => { S.ScreenshotAlerts = v; Save(false); NotchWindow.ApplyDeviceWatchers(); }));
+
         Row("Announce new songs", "Pop the new song's art and title out of the notch for a moment when the track changes.",
             Toggle(S.TrackPeek, v => { S.TrackPeek = v; Save(false); }));
 
-        Section("CALENDAR REMINDERS");
-        Row("Event reminders", "Show upcoming calendar events on the closed notch.",
-            Toggle(S.RemindersEnabled, v => { S.RemindersEnabled = v; Save(false); EventReminderService.Instance.Recheck(); }));
-        var leads = new[] { 5, 10, 15, 30, 60 };
-        Row("Remind me", "How long before an event the reminder appears.",
-            Combo(["5 minutes before", "10 minutes before", "15 minutes before", "30 minutes before", "1 hour before"],
-                Math.Max(0, Array.IndexOf(leads, S.ReminderLeadMin)),
-                i => { S.ReminderLeadMin = leads[i]; Save(false); EventReminderService.Instance.Recheck(); }, width: 170));
-        var lingers = new[] { 1, 5, 10, 15 };
-        Row("Keep showing", "How long the reminder stays once the event has started.",
-            Combo(["1 minute", "5 minutes", "10 minutes", "15 minutes"],
-                Math.Max(0, Array.IndexOf(lingers, S.ReminderLingerMin)),
-                i => { S.ReminderLingerMin = lingers[i]; Save(false); EventReminderService.Instance.Recheck(); }));
-        Row("Sound", "Plays when a reminder appears and when the event starts.",
-            Combo(EventReminderService.SoundNames, Math.Max(0, Array.IndexOf(EventReminderService.SoundNames, S.ReminderSound)),
-                i =>
+
+        Section("HEADS-UPS");
+        Row("AI usage alerts", "A gentle heads-up on the notch when Claude Code, Codex, Cursor or another AI tool reaches 80% and 95% of its session or weekly limit.",
+            Toggle(S.AiLimitAlerts, v =>
+            {
+                S.AiLimitAlerts = v;
+                Save(false);
+                AiLimitWatcher.Instance.Reconfigure();
+            }));
+        Row("Subscription renewals", "An alert 2 days before something in the Subscriptions tool renews.",
+            Toggle(S.SubscriptionAlerts, v => { S.SubscriptionAlerts = v; Save(false); }));
+
+
+        Section("SOUNDS");
+        SoundRow("Calendar reminders", "Plays when a reminder appears and when the event starts.",
+            () => S.ReminderSound, v => S.ReminderSound = v);
+        SoundRow("Focus sessions", "Plays when a focus session or a break ends.",
+            () => S.PomodoroSound, v => { S.PomodoroSound = v; PomodoroService.Instance.RefreshSettings(); });
+        SoundRow("Timers", "Plays when a countdown finishes.",
+            () => S.TimerSound, v => S.TimerSound = v);
+
+    }
+
+    private void RenderQuietFocus()
+    {
+        Title("Quiet & focus", "Hold alerts when you need calm, focus sessions, and a healthy screen day.");
+        Section("QUIET HOURS");
+        var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();
+        int Slot(string t) => Math.Max(0, times.IndexOf(t));
+        Row("Quiet hours", "Hold alerts during these hours. When they end, one alert says how many you missed. The tray menu also has \"Quiet for 1 hour\".",
+            Toggle(S.QuietEnabled, v => { S.QuietEnabled = v; Save(false); Render(); }));
+        if (S.QuietEnabled)
+        {
+            Row("From", "Quiet starts at this time.",
+                Combo(times, Slot(S.QuietFrom), i => { S.QuietFrom = times[i]; Save(false); }, 100));
+            Row("Until", "Quiet ends at this time, the next morning if it's earlier than the start.",
+                Combo(times, Slot(S.QuietTo), i => { S.QuietTo = times[i]; Save(false); }, 100));
+            Row("Let calendar reminders through", "Meeting reminders still show during quiet hours.",
+                Toggle(S.QuietLetRemindersThrough, v => { S.QuietLetRemindersThrough = v; Save(false); }));
+        }
+
+        Section("QUIET AUTOMATICALLY");
+        Row("Quiet while on a call", "Holds alerts while any app (including your browser) is using the microphone or camera, then sums them up afterwards.",
+            Toggle(S.AutoQuietOnMic, v => { S.AutoQuietOnMic = v; Save(false); }));
+
+        Row("Quiet during focus", "Alerts wait while a focus session runs, then one alert sums them up. Reminders follow your quiet hours setting.",
+            Toggle(S.FocusQuiet, v => { S.FocusQuiet = v; Save(false); }));
+
+        Section("FOCUS");
+        Row("Focus events start a session", "A calendar event with \"Focus\" in its name starts a Pomodoro focus session when it begins.",
+            Toggle(S.AutoFocusEvents, v => { S.AutoFocusEvents = v; Save(false); }));
+
+
+        Section("SCREEN TIME");
+        Row("Track screen time", "Counts how long each app is in front while you use the PC, for the Screen Time tool. Kept only on this PC for 60 days.",
+            Toggle(S.ScreenTimeEnabled, v => { ScreenTimeService.Instance.SetEnabled(v); Render(); }));
+        if (S.ScreenTimeEnabled)
+        {
+            var hours = Enumerable.Range(17, 7).ToArray(); // 5 PM – 11 PM
+            Row("Evening summary", "One alert with the day's screen time and the app you used most.",
+                Toggle(S.ScreenTimeSummary, v => { S.ScreenTimeSummary = v; Save(false); }));
+            Row("Summary at", "When the evening summary shows.",
+                Combo(hours.Select(h => DateTime.Today.AddHours(h).ToString("t", System.Globalization.CultureInfo.CurrentCulture)),
+                    Math.Max(0, Array.IndexOf(hours, S.ScreenTimeSummaryHour)), i => { S.ScreenTimeSummaryHour = hours[i]; Save(false); }));
+        }
+
+        Section("DAILY GOALS");
+        var st = ScreenTimeService.Instance;
+        foreach (var (app, minutes) in S.ScreenTimeGoals.ToList())
+        {
+            var name = app;
+            Row(st.DisplayName(name), $"An alert after {CommandRegistry.FormatMinutes(minutes)} a day",
+                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
                 {
-                    S.ReminderSound = EventReminderService.SoundNames[i];
+                    S.ScreenTimeGoals.Remove(name);
                     Save(false);
-                    EventReminderService.PlaySound(S.ReminderSound); // preview
+                    Render();
                 }));
+        }
+        // Apps used recently or running now, most used first.
+        var goalApps = Enumerable.Range(0, 7).SelectMany(i => st.Day(DateTime.Today.AddDays(-i))).GroupBy(x => x.App)
+            .OrderByDescending(g => g.Sum(x => x.Seconds)).Select(g => g.Key)
+            .Concat(RunningApps().Select(a => a.Name)).Distinct().Where(a => !S.ScreenTimeGoals.ContainsKey(a)).ToList();
+        var goalPick = Combo(goalApps.Select(st.DisplayName), goalApps.Count > 0 ? 0 : -1, _ => { }, width: 170);
+        int[] goalMinutes = [15, 30, 45, 60, 90, 120, 180, 240];
+        var goalLength = Combo(goalMinutes.Select(CommandRegistry.FormatMinutes), 3, _ => { }, width: 100);
+        goalLength.Margin = new Thickness(6, 0, 0, 0);
+        var addGoal = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = goalApps.Count > 0 };
+        addGoal.Click += (_, _) =>
+        {
+            if (goalPick.SelectedIndex < 0) return;
+            S.ScreenTimeGoals[goalApps[goalPick.SelectedIndex]] = goalMinutes[goalLength.SelectedIndex];
+            if (!S.ScreenTimeEnabled) st.SetEnabled(true); // a goal needs tracking
+            Save(false);
+            Render();
+        };
+        var goalRow = new StackPanel { Orientation = Orientation.Horizontal };
+        goalRow.Children.Add(goalPick);
+        goalRow.Children.Add(goalLength);
+        goalRow.Children.Add(addGoal);
+        Row("Add a daily goal", "A gentle alert once a day when an app passes its time. Apps only; websites aren't counted separately.", goalRow);
+
+
+        Section("BREAKS");
+        foreach (var kind in BreakService.Kinds)
+        {
+            var id = kind.Id;
+            var (title, what) = id switch
+            {
+                "eyes" => ("Rest your eyes", "Every 20 minutes: look 20 feet (6 m) away for 20 seconds."),
+                "stand" => ("Stand up", "After an hour at the screen."),
+                _ => ("Drink water", "Every hour and a half."),
+            };
+            Row(title, what + " Only time you're using the PC counts, and a few minutes away resets it. Waits out full screen, quiet hours and focus.",
+                Toggle(BreakService.IsOn(id), v =>
+                {
+                    S.BreakReminders.Remove(id);
+                    if (v) S.BreakReminders.Add(id);
+                    Save(false);
+                    BreakService.Instance.Reconfigure();
+                }));
+        }
+
+    }
+
+    private void RenderCalendar()
+    {
+        Title("Calendar", "Reminders before events, help with meetings, and calendars you subscribe to.");
+        Section("REMINDERS");
+        Row("Event reminders", "Show upcoming calendar events on the closed notch.",
+            Toggle(S.RemindersEnabled, v => { S.RemindersEnabled = v; Save(false); EventReminderService.Instance.Recheck(); Render(); }));
+        if (S.RemindersEnabled)
+        {
+            var leads = new[] { 5, 10, 15, 30, 60 };
+            Row("Remind me", "How long before an event the reminder appears.",
+                Combo(["5 minutes before", "10 minutes before", "15 minutes before", "30 minutes before", "1 hour before"],
+                    Math.Max(0, Array.IndexOf(leads, S.ReminderLeadMin)),
+                    i => { S.ReminderLeadMin = leads[i]; Save(false); EventReminderService.Instance.Recheck(); }, width: 170));
+            var lingers = new[] { 1, 5, 10, 15 };
+            Row("Keep showing", "How long the reminder stays once the event has started.",
+                Combo(["1 minute", "5 minutes", "10 minutes", "15 minutes"],
+                    Math.Max(0, Array.IndexOf(lingers, S.ReminderLingerMin)),
+                    i => { S.ReminderLingerMin = lingers[i]; Save(false); EventReminderService.Instance.Recheck(); }));
+        }
+
+        Section("MEETINGS");
+        Row("Pause music", "Pauses what's playing shortly before a calendar event starts.",
+            Toggle(S.AutoPauseMusic, v => { S.AutoPauseMusic = v; Save(false); Render(); }));
+        if (S.AutoPauseMusic)
+        {
+            var pauseLeads = new[] { 0, 1, 2, 5 };
+            Row("Pause it", "How long before the event.",
+                Combo(["When it starts", "1 minute before", "2 minutes before", "5 minutes before"], Math.Max(0, Array.IndexOf(pauseLeads, S.AutoPauseLeadMin)),
+                    i => { S.AutoPauseLeadMin = pauseLeads[i]; Save(false); }, 170));
+        }
+        Row("Join from the reminder", "When a subscribed calendar's event has a Meet, Zoom, Teams or Webex link, clicking its reminder opens the meeting.",
+            Toggle(S.AutoJoinLink, v => { S.AutoJoinLink = v; Save(false); }));
+
 
         Section("SUBSCRIBED CALENDARS");
         var feeds = CalendarFeedService.Instance;
@@ -436,77 +719,106 @@ public partial class SettingsView : UserControl, IToolView
         Row("Add a calendar", feeds.Status.Length > 0 ? feeds.Status : "Google, Outlook or iCloud link.",
             addRow, footer: help);
 
-        Section("NOTIFICATIONS");
-        var watcher = NotificationWatcher.Instance;
-        var source = watcher.Source == NotificationWatcher.SourceKind.Listener
-            ? "Uses Windows notification access."
-            : "Reads Windows' notification history on this PC (read-only).";
-        Row("Show on the notch", $"Windows notifications from other apps pop out of the closed notch. {source}",
-            Toggle(S.NotifyEnabled, async v =>
-            {
-                S.NotifyEnabled = v;
-                Save(false);
-                if (v) await watcher.RequestAccessAsync();
-                watcher.Reconfigure();
-                Render();
-            }));
-        if (watcher.Problem is { } problem)
-            Row("Not receiving notifications", problem, new Button { Content = "Open settings" }.Also(b =>
-                b.Click += (_, _) => Process.Start(new ProcessStartInfo(watcher.ProblemSettingsUri) { UseShellExecute = true })));
-        Row("Show message text", "Off shows only the app name, for privacy when sharing your screen.",
-            Toggle(S.NotifyShowText, v => { S.NotifyShowText = v; Save(false); }));
-        Row("Keep history", "Save notifications on this PC to read later in the Notifications tool (last 30 days). Clear them there anytime.",
-            Toggle(S.NotifyKeepHistory, v => { S.NotifyKeepHistory = v; Save(false); }));
-        Row("Windows banners", "Windows still shows its own pop-up too. Turn banners off per app in Windows Settings if you only want the notch.",
-            new Button { Content = "Open settings" }.Also(b =>
-                b.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true })));
-        Row("AI usage alerts", "A gentle heads-up on the notch when Claude Code, Codex, Cursor or another AI tool reaches 80% and 95% of its session or weekly limit.",
-            Toggle(S.AiLimitAlerts, v =>
-            {
-                S.AiLimitAlerts = v;
-                Save(false);
-                AiLimitWatcher.Instance.Reconfigure();
-            }));
-        Row("Battery alerts", "Show on the notch when the charger is plugged in or pulled, and when the battery drops to 20% and 10%.",
-            Toggle(S.PowerAlerts, v => { S.PowerAlerts = v; Save(false); }));
-        Row("Volume on the notch", "Show the volume level on the notch when it changes. Windows still shows its own volume pop-up too.",
-            Toggle(S.VolumeHud, v => { S.VolumeHud = v; Save(false); }));
-        Row("Bluetooth devices", "Show on the notch when paired headphones, a mouse or other Bluetooth device connects or disconnects.",
-            Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); }));
-        Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
-            Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); }));
+    }
 
-        if (S.NotifySeenApps.Count > 0)
+    private void RenderAutomations()
+    {
+        Title("Automations", "Small things OrixNotch does for you, each with its own switch.");
+
+        Section("MORNING");
+        Row("Morning brief", "When you first unlock your PC each day, the notch opens for a few seconds on the weather, your next event, open to-dos, AI usage and a stock. Not during quiet hours.",
+            Toggle(S.MorningBrief, v => { S.MorningBrief = v; Save(false); }));
+
+        Section("OPEN THE RIGHT TOOL");
+        Row("Match the app in front", "Opening the notch shows the tool you picked for the app you're using, like AI Usage in your code editor.",
+            Toggle(S.ContextTools, v => { S.ContextTools = v; Save(false); Render(); }));
+        if (S.ContextTools)
         {
-            Section("SHOW NOTIFICATIONS FROM");
-            foreach (var entry in S.NotifySeenApps)
+            foreach (var (app, toolId) in S.AppTools.ToList())
             {
-                var parts = entry.Split('|', 2);
-                var appId = parts[0];
-                var name = parts.Length > 1 ? parts[1] : appId;
-                Row(name, "Recently sent a notification.",
-                    Toggle(!S.NotifyMutedApps.Contains(appId, StringComparer.OrdinalIgnoreCase), on =>
+                var name = app;
+                var tool = ToolRegistry.All.FirstOrDefault(t => t.Id == toolId);
+                Row(AppLabel(name), $"Opens {tool?.Name ?? toolId}",
+                    new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
                     {
-                        S.NotifyMutedApps.RemoveAll(a => a.Equals(appId, StringComparison.OrdinalIgnoreCase));
-                        if (!on) S.NotifyMutedApps.Add(appId);
+                        S.AppTools.Remove(name);
                         Save(false);
+                        Render();
                     }));
             }
+            var apps = RunningApps().Where(a => !S.AppTools.ContainsKey(a.Name)).ToList();
+            var appPick = Combo(apps.Select(a => a.Label), apps.Count > 0 ? 0 : -1, _ => { }, width: 150);
+            var tools = ToolRegistry.All.Where(t => t.Id != "home").ToList();
+            var toolPick = Combo(tools.Select(t => t.Name), 0, _ => { }, width: 130);
+            toolPick.Margin = new Thickness(6, 0, 0, 0);
+            var add = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = apps.Count > 0 };
+            add.Click += (_, _) =>
+            {
+                if (appPick.SelectedIndex < 0) return;
+                S.AppTools[apps[appPick.SelectedIndex].Name] = tools[toolPick.SelectedIndex].Id;
+                Save(false);
+                Render();
+            };
+            var addRow = new StackPanel { Orientation = Orientation.Horizontal };
+            addRow.Children.Add(appPick);
+            addRow.Children.Add(toolPick);
+            addRow.Children.Add(add);
+            Row("Add an app", "Pick a running app and the tool to show for it.", addRow);
         }
+
+        Section("FOR SCRIPTS");
+        var api = PeekApiService.Instance;
+        Row("Alerts from scripts", "Lets builds, CI or a coding agent show an alert on the notch through a local web address. Only this PC can reach it, and only with your token.",
+            Toggle(S.PeekApiEnabled, async v => { S.PeekApiEnabled = v; Save(false); await api.SyncAsync(); Render(); }),
+            footer: S.PeekApiEnabled ? Hint(api.Error ?? $"POST http://127.0.0.1:{S.PeekApiPort}/peek with {{\"title\": \"…\", \"sub\": \"…\"}}", bad: api.Error is not null) : null);
+        if (S.PeekApiEnabled)
+        {
+            var tokenButtons = new StackPanel { Orientation = Orientation.Horizontal };
+            tokenButtons.Children.Add(IconButton(AppIcon.Copy, "Copy an example curl command", true, () => ClipboardService.Instance.CopyQuiet(api.CurlExample)));
+            tokenButtons.Children.Add(IconButton(AppIcon.Refresh, "New token (scripts using the old one stop working)", true, () => { api.NewToken(); ClipboardService.Instance.CopyQuiet(api.CurlExample); }));
+            Row("Token", "Copy a ready curl command with your token. Keep the token private, like a password.", tokenButtons);
+            var ports = new[] { 53340, 53341, 53342, 53343 };
+            Row("Port", "Change it if another app already uses this one.",
+                Combo(ports.Select(p => p.ToString()), Math.Max(0, Array.IndexOf(ports, S.PeekApiPort)),
+                    async i => { S.PeekApiPort = ports[i]; Save(false); await api.SyncAsync(); Render(); }, 110));
+        }
+        Row("orixnotch:// links", "Links that open a tool or show an alert, from a script, a shortcut or the Run box: orixnotch://open/timer, orixnotch://timer?min=10, orixnotch://peek?text=Hello",
+            IconButton(AppIcon.Copy, "Copy an example link", true, () => ClipboardService.Instance.CopyQuiet("orixnotch://peek?text=Hello%20from%20a%20link")));
+    }
+
+    /// <summary>A sound picker that previews on change, plus a play button to hear it again.</summary>
+    private void SoundRow(string title, string description, Func<string> get, Action<string> set)
+    {
+        var controls = new StackPanel { Orientation = Orientation.Horizontal };
+        controls.Children.Add(Combo(SoundService.Names, SoundService.IndexOf(get()), i =>
+        {
+            set(SoundService.Names[i]);
+            Save(false);
+            SoundService.Play(get());
+        }));
+        controls.Children.Add(IconButton(AppIcon.Play, "Play", true, () => SoundService.Play(get())));
+        Row(title, description, controls);
     }
 
     private void RenderAppearance()
     {
-        Title("Appearance", "Color scheme and accent. Changes apply instantly.");
-        Section("COLOR SCHEME");
-        var schemes = new WrapPanel();
-        foreach (var scheme in ThemeService.Schemes.Where(s => !s.IsGradient)) schemes.Children.Add(SchemeCard(scheme));
-        Page.Children.Add(schemes);
+        Title("Appearance", "Colours, accent, glass and effects. Changes apply instantly.");
+        Section("LOOKS");
+        var looks = new System.Windows.Controls.Primitives.UniformGrid { Columns = ThemeService.Looks.Length, Margin = new Thickness(-4, 0, -4, 12) }; // room before "Share this look"
+        for (var i = 0; i < ThemeService.Looks.Length; i++) looks.Children.Add(LookCard(i));
+        Page.Children.Add(looks);
+        Row("Reset theme", "Back to the default: System colours (Coral, light or dark with Windows), its own accent, no glass. The closed notch shows its items in their own colours again.",
+            new Button { Content = "Reset", Height = RowControlHeight }.Also(b => b.Click += (_, _) => NotchWindow.Instance?.ResetTheme()));
+        Row("Share this look", "Copies a link with your colours, glass and size. Anyone with OrixNotch can open it to try it, with Undo.",
+            IconButton(AppIcon.Copy, "Copy link", true, () => ClipboardService.Instance.CopyQuiet(ThemeService.ShareLink())));
 
-        Section("GRADIENT SCHEMES");
-        var gradientSchemes = new WrapPanel();
-        foreach (var scheme in ThemeService.Schemes.Where(s => s.IsGradient)) gradientSchemes.Children.Add(SchemeCard(scheme));
-        Page.Children.Add(gradientSchemes);
+        Section("COLORS");
+        var schemes = new WrapPanel();
+        schemes.Children.Add(SchemeCard(ThemeService.Schemes.First(s => s.Id == (SystemToggles.DarkMode ? "coral" : "coral-light")),
+            ThemeService.SystemScheme, "System"));
+        // Solid schemes, then the gradient ones (their previews show the fade), in one grid.
+        foreach (var scheme in ThemeService.Schemes.OrderBy(s => s.IsGradient)) schemes.Children.Add(SchemeCard(scheme));
+        Page.Children.Add(schemes);
 
         Section("ACCENT");
         Page.Children.Add(new TextBlock
@@ -517,12 +829,22 @@ public partial class SettingsView : UserControl, IToolView
         var accents = new WrapPanel();
         accents.Children.Add(AutoAccentSwatch());
         foreach (var accent in ThemeService.Accents.Where(a => !a.IsGradient)) accents.Children.Add(AccentSwatch(accent));
+        // A thin divider, then the gradient accents, in the same row.
+        var divider = new Border { Width = 1, Height = 18, Margin = new Thickness(6, 5, 8, 9), VerticalAlignment = VerticalAlignment.Top };
+        divider.SetResourceReference(Border.BackgroundProperty, "StrokeBrush");
+        accents.Children.Add(divider);
+        foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) accents.Children.Add(AccentSwatch(accent));
+        accents.Margin = new Thickness(0, 0, 0, 8); // room before "Follow album art"
         Page.Children.Add(accents);
-
-        Section("GRADIENT ACCENTS");
-        var gradientAccents = new WrapPanel();
-        foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) gradientAccents.Children.Add(AccentSwatch(accent));
-        Page.Children.Add(gradientAccents);
+        Row("Follow album art", "While music plays, the accent takes the colour of the cover. The accent above comes back when it stops.",
+            Toggle(S.AlbumAccent, v => { S.AlbumAccent = v; Save(false); ThemeService.Apply(); }));
+        Section("EFFECTS");
+        Row("Celebrations", "Confetti when you finish your last to-do, a cheer at focus streaks (3, 7, 14, 30 days…), and birthdays from your calendar.",
+            Toggle(S.Celebrations, v => { S.Celebrations = v; Save(false); }));
+        Row("Glow", "A soft glow around the closed notch: the album's colour while music plays, your accent during a focus session, red while you're on a call.",
+            Toggle(S.NotchGlow, v => { S.NotchGlow = v; Save(false); NotchWindow.Instance?.RefreshGlow(); }));
+        Row("Music bars follow the sound", "The bars on the closed notch move with what's playing. Off, or on battery saver, they sway on their own.",
+            Toggle(S.ReactivePill, v => { S.ReactivePill = v; Save(false); }));
 
         Section("GLASS");
         var strength = new Slider { Minimum = 0, Maximum = 1, Value = S.GlassStrength, Width = 170, VerticalAlignment = VerticalAlignment.Center, IsEnabled = S.Glass };
@@ -549,17 +871,65 @@ public partial class SettingsView : UserControl, IToolView
             saveLater.Start();
         };
         Row("Glass", "See-through notch tinted by the color scheme.",
-            Toggle(S.Glass, v => { S.Glass = v; Save(false); ThemeService.Apply(); }));
-        Row("Tint", "Lower shows more of the background; higher keeps text easier to read.", strength);
+            Toggle(S.Glass, v => { S.Glass = v; Save(false); ThemeService.Apply(); Render(); }));
+        if (S.Glass) // the tint only matters with glass on
+        {
+            Row("Tint", "Lower shows more of the background; higher keeps text easier to read.", strength);
+            Row("Tint from wallpaper", "The glass takes on the colour of your wallpaper behind the notch, and follows it when the wallpaper changes.",
+                Toggle(S.GlassWallpaperTint, v => { S.GlassWallpaperTint = v; Save(false); ThemeService.Apply(); }));
+        }
 
-        Section("UNITS");
-        Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; Save(false); }));
+    }
+
+    /// <summary>A one-click look: a small notch preview in its colours, and its name.</summary>
+    private FrameworkElement LookCard(int index)
+    {
+        var look = ThemeService.Looks[index];
+        var scheme = ThemeService.Schemes.First(s => s.Id == look.Scheme);
+        var accent = ThemeService.Accents.FirstOrDefault(a => a.Id == scheme.Accent) ?? ThemeService.Accents[0];
+        // A tiny desktop: a colourful wallpaper strip with the notch hanging from the top, so glass reads as glass.
+        var notch = new Border
+        {
+            Width = 74, Height = 20, CornerRadius = new CornerRadius(0, 0, 10, 10), HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top, Background = scheme.PillBrush(), Opacity = look.Glass ? 0.6 + 0.3 * look.Strength : 1,
+            BorderThickness = new Thickness(1, 0, 1, 1),
+        };
+        notch.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+        var inside = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        inside.Children.Add(new Border { Width = 6, Height = 6, CornerRadius = new CornerRadius(3), Background = accent.Brush() });
+        inside.Children.Add(new Border
+        {
+            Width = 22, Height = 3, CornerRadius = new CornerRadius(1.5), Margin = new Thickness(6, 0, 0, 0),
+            Background = new SolidColorBrush(scheme.IsLight ? Color.FromArgb(0x70, 0, 0, 0) : Color.FromArgb(0x90, 0xFF, 0xFF, 0xFF)),
+        });
+        notch.Child = inside;
+        var wallpaper = new LinearGradientBrush(new GradientStopCollection
+        {
+            new(Color.FromRgb(0x1D, 0x2B, 0x64), 0), new(Color.FromRgb(0x6A, 0x3D, 0x9A), 0.55), new(Color.FromRgb(0xF0, 0x7B, 0x5A), 1),
+        }, 20);
+        var preview = new Border
+        {
+            Height = 46, CornerRadius = Radii.M, Background = wallpaper, BorderThickness = new Thickness(1), ClipToBounds = true,
+            Child = notch,
+        };
+        preview.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+        var stack = new StackPanel();
+        stack.Children.Add(preview);
+        stack.Children.Add(new TextBlock { Text = look.Name, FontSize = 12.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 7, 0, 0) });
+        stack.Children.Add(new TextBlock
+        {
+            Text = look.Glass ? (look.WallpaperTint ? "Glass, wallpaper tint" : "Glass") : scheme.IsGradient ? "Gradient" : "Solid",
+            Style = (Style)FindResource("SubText"), FontWeight = FontWeights.Normal, FontSize = 11,
+        });
+        var button = new Button { Style = (Style)FindResource("RowButton"), Content = stack, Padding = new Thickness(10), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        button.Click += (_, _) => ThemeService.ApplyLook(index); // Changed re-renders this page
+        return new Border { Style = (Style)FindResource("Card"), Padding = new Thickness(0), Margin = new Thickness(4, 0, 4, 0), Child = button };
     }
 
     private void RenderDisplay()
     {
-        Title("Display", "Where the notch appears, and how big it is.");
-        Section("LOCATION");
+        Title("Notch", "Where it sits, its shape and size, when it shows, and what it shows when closed.");
+        Section("POSITION & SHAPE");
         var screens = Forms.Screen.AllScreens;
         // Combo items: primary (-1), follow the pointer (-2), then each display by index.
         var names = new List<string> { "Primary display", "Follow the pointer" };
@@ -569,13 +939,78 @@ public partial class SettingsView : UserControl, IToolView
         Row("Show notch on", "Which monitor hosts the notch. Follow the pointer moves it to whichever display you're using.",
             Combo(names, selected, i => { S.MonitorIndex = i switch { 0 => -1, 1 => -2, _ => i - 2 }; Save(); }, 210));
 
-        Section("SIZE");
+        string[] edges = ["Top", "Bottom", "Left", "Right"];
+        Row("Position", "Which screen edge the notch sits on. At the bottom it stays above the taskbar. On the left or right it is a slim tab of icons; alerts and the panel open sideways.",
+            Combo(["Top", "Bottom", "Left", "Right"], Math.Max(0, Array.IndexOf(edges, S.NotchEdge)),
+                i => { S.NotchEdge = edges[i]; Save(); }, 160));
+
+        string[] shapes = ["Notch", "Tab", "Island", "Pill"];
+        Row("Shape", "Notch: curves into the screen edge like a MacBook. Tab: attached, square to the edge. Island: a floating capsule like the iPhone's. Pill: a slimmer, quieter island.",
+            Combo(["Notch", "Tab", "Island", "Pill (minimal)"], Math.Max(0, Array.IndexOf(shapes, S.NotchShape)),
+                i => { S.NotchShape = shapes[i]; Save(); }, 160));
+
         var sizes = new[] { "Small", "Default", "Large", "ExtraLarge" };
         Row("Notch size", "Size of the closed notch. Larger is easier to hit on big monitors.",
             Combo(["Small", "Default", "Large", "Extra Large"], Math.Max(0, Array.IndexOf(sizes, S.NotchSize)),
                 i => { S.NotchSize = sizes[i]; Save(); }));
 
-        Section("IDLE NOTCH");
+        Section("WHEN IT SHOWS");
+        string[] visibility = ["Always", "WhenActive", "HoverOnly"];
+        Row("Show notch", "Always, only while music, a timer or a reminder is on, or only when the pointer touches the top edge of the screen.",
+            Combo(["Always", "When active", "On top-edge hover"], Math.Max(0, Array.IndexOf(visibility, S.NotchVisibility)),
+                i => { S.NotchVisibility = visibility[i]; Save(); }));
+        Row("Hide in full screen", "Stay out of the way of full-screen apps and videos; touch the top edge to bring it back. Games hide it completely.",
+            Toggle(S.HideInFullscreen, v => { S.HideInFullscreen = v; Save(); }));
+        Row("Hide from screenshots", "Leave the notch out of screenshots, recordings and screen sharing.",
+            Toggle(S.HideFromCapture, v => { S.HideFromCapture = v; Save(); }));
+        Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
+            Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); Render(); }));
+        if (S.RepelCursor)
+        {
+            string[] corners = ["Tuck", "Bend"];
+            Row("Corner turn", "Chased into a screen corner, the notch moves onto the next edge. Tuck: it folds into the corner, then out along the next edge. Bend: it wraps both edges as an L while it passes.",
+                Combo(["Tuck", "Bend"], Math.Max(0, Array.IndexOf(corners, S.CornerStyle)), i => { S.CornerStyle = corners[i]; Save(false); }, 120));
+        }
+
+
+        Section("HIDE FOR THESE APPS");
+        foreach (var listed in S.HideForApps.ToList())
+        {
+            var name = listed;
+            Row(AppLabel(name), $"{name}.exe",
+                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                {
+                    S.HideForApps.Remove(name);
+                    Save();
+                    Render();
+                }));
+        }
+        var running = RunningApps().Where(a => !S.HideForApps.Contains(a.Name)).ToList();
+        var pick = Combo(running.Select(a => a.Label), running.Count > 0 ? 0 : -1, _ => { }, width: 200);
+        var addApp = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = running.Count > 0 };
+        addApp.Click += (_, _) =>
+        {
+            if (pick.SelectedIndex < 0) return;
+            S.HideForApps.Add(running[pick.SelectedIndex].Name);
+            Save();
+            Render();
+        };
+        var addAppRow = new StackPanel { Orientation = Orientation.Horizontal };
+        addAppRow.Children.Add(pick);
+        addAppRow.Children.Add(addApp);
+        Row("Add an app", "Hide the notch while it's in front, on any display.", addAppRow);
+        if (S.HideForApps.Count > 0)
+        {
+            Row("When one is in front", "Fade out (touch the top edge to bring it back), or hide completely.",
+                Combo(["Fade out", "Hide completely"], S.HideForAppsMode == "Hidden" ? 1 : 0,
+                    i => { S.HideForAppsMode = i == 1 ? "Hidden" : "Fade"; Save(); }, width: 170));
+            Row("Alerts", "Hold alerts until you switch away, or let them pop out anyway.",
+                Combo(["Wait until I switch away", "Show them anyway"], S.HideForAppsHoldAlerts ? 0 : 1,
+                    i => { S.HideForAppsHoldAlerts = i == 0; Save(); }, width: 200));
+        }
+
+
+        Section("CLOSED NOTCH");
         Row("Layout", "How several items share the closed notch when nothing is playing.",
             Combo(["Rotate one at a time", "Left and right", "All in a row"], Math.Max(0, Array.IndexOf(IdleInfoService.Layouts, S.IdleLayout)),
                 i => { S.IdleLayout = IdleInfoService.Layouts[i]; SaveIdle(); }, 180));
@@ -599,7 +1034,23 @@ public partial class SettingsView : UserControl, IToolView
                     if (itemId == "aiUsage") Render(); // show / hide the AI tool choices below
                 }));
             if (id == "aiUsage" && S.IdleItems.Contains("aiUsage")) AiToolChoices();
+            if (id == "clock2" && S.IdleItems.Contains("clock2")) SecondClockChoice();
+            if (id == "clock" && S.IdleItems.Contains("clock"))
+            {
+                string[] styles = ["Plain", "Flip"];
+                Row("Clock style", "Flip shows the time on a small split tile that flips over each minute.",
+                    Combo(styles, Math.Max(0, Array.IndexOf(styles, S.ClockStyle)), i => { S.ClockStyle = styles[i]; SaveIdle(); }));
+            }
         }
+    }
+
+    private void SecondClockChoice()
+    {
+        var zones = TimeZoneInfo.GetSystemTimeZones();
+        var index = zones.Select(z => z.Id).ToList().IndexOf(S.SecondClockZone);
+        // Not picked yet (-1): the item stays hidden until it is.
+        Row("Time zone", "The second clock shows this time zone, named after its main city.",
+            Combo(zones.Select(z => z.DisplayName), index, i => { S.SecondClockZone = zones[i].Id; SaveIdle(); }, 300));
     }
 
     /// <summary>Under "AI usage": Auto (closest to limit) or a checklist of the detected tools.</summary>
@@ -620,12 +1071,18 @@ public partial class SettingsView : UserControl, IToolView
         {
             Page.Children.Add(Hint("Looking for AI tools…"));
             // Detection runs in the background; show the list as soon as it lands.
-            void Detected()
+            // One listener however often the page renders meanwhile (each render used to add another).
+            if (!_waitingForAiTools)
             {
-                IdleInfoService.Instance.AiToolsChanged -= Detected;
-                if (_page == "display") Render();
+                _waitingForAiTools = true;
+                void Detected()
+                {
+                    IdleInfoService.Instance.AiToolsChanged -= Detected;
+                    _waitingForAiTools = false;
+                    if (_page == "display") Render();
+                }
+                IdleInfoService.Instance.AiToolsChanged += Detected;
             }
-            IdleInfoService.Instance.AiToolsChanged += Detected;
             return;
         }
         foreach (var (toolId, toolName, logo) in tools)
@@ -647,7 +1104,13 @@ public partial class SettingsView : UserControl, IToolView
     private static readonly Dictionary<string, string> IdleDescriptions = new()
     {
         ["clock"] = "Current time.",
+        ["clock2"] = "The time somewhere else, such as a teammate's city. Pick the time zone below.",
         ["date"] = "Weekday and date.",
+        ["sun"] = "The next sunrise or sunset in your Weather city.",
+        ["timeline"] = "Today on one line: the time gone by, your events and now.",
+        ["call"] = "Shows in red while any app uses your microphone or camera.",
+        ["mic"] = "Shows only while your microphone is muted.",
+        ["awake"] = "Shows only while Keep awake is on.",
         ["weather"] = "Temperature for your Weather city. Updates every 10 minutes.",
         ["nextEvent"] = "Today's next calendar event and its time.",
         ["todos"] = "How many to-dos are still open.",
@@ -656,9 +1119,11 @@ public partial class SettingsView : UserControl, IToolView
         ["network"] = "Download speed.",
         ["stock"] = "Your Stocks tickers, one after another, with today's change.",
         ["aiUsage"] = "Plan usage from the AI Usage tool, or today's tokens for OpenCode.",
+        ["unread"] = "Notifications that arrived since you last opened the Notifications tool. Hidden when there are none.",
         ["clipboard"] = "Number of items in clipboard history.",
         ["shelf"] = "Files waiting on the Shelf. Hidden when empty.",
         ["streak"] = "Pomodoro focus sessions finished today.",
+        ["screentime"] = "Time on screen today, from Screen Time (when it's on).",
         ["avatar"] = "Your profile picture and name.",
     };
 
@@ -673,13 +1138,20 @@ public partial class SettingsView : UserControl, IToolView
         Title(SettingsService.FirstRun ? "Welcome! Pick your tools" : "Tabs",
             SettingsService.FirstRun
                 ? "A few tools start switched off: turn on any you want, and move the rest into order with the arrows. "
-                    + "Notifications shown on the notch are kept on this PC for 30 days (Settings → General to turn that off)."
+                    + "Notifications shown on the notch are kept on this PC for 30 days (Settings → Notifications to turn that off)."
                 : "The tools in the notch's bottom bar, and their order.");
+
+        Section("QUICK START");
+        var presets = new System.Windows.Controls.Primitives.UniformGrid { Columns = Presets.Length, Margin = new Thickness(-4, 0, -4, 0) };
+        foreach (var preset in Presets) presets.Children.Add(PresetCard(preset));
+        Page.Children.Add(presets);
+        Page.Children.Add(Hint("Sets your tabs and what the closed notch shows. Fine-tune everything below afterwards."));
+
         Section("IN THE NOTCH");
         var visible = ToolRegistry.Ordered();
         var list = new StackPanel();
         for (var i = 0; i < visible.Count; i++) list.Children.Add(ToolRow(visible[i], true, i, visible.Count));
-        Page.Children.Add(Group(list));
+        Page.Children.Add(Searchable(Group(list))); // a tool's name finds its show/hide switch
         Page.Children.Add(Hint("Use the arrows, or press and hold a tab in the notch and drag it. Settings always stays at the end of the bar."));
 
         var hidden = ToolRegistry.Ordered(includeHidden: true).Where(t => S.HiddenTools.Contains(t.Id)).ToList();
@@ -688,7 +1160,7 @@ public partial class SettingsView : UserControl, IToolView
             Section("MORE TOOLS");
             var more = new StackPanel();
             foreach (var tool in hidden) more.Children.Add(ToolRow(tool, false, -1, 0));
-            Page.Children.Add(Group(more));
+            Page.Children.Add(Searchable(Group(more)));
         }
 
         var restore = new Button { Content = "Restore defaults", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
@@ -702,6 +1174,53 @@ public partial class SettingsView : UserControl, IToolView
         Page.Children.Add(restore);
     }
 
+    /// <summary>Starting points for the tab bar and idle notch. Null tools = every tool, in the default order.</summary>
+    private sealed record Preset(string Name, string Blurb, AppIcon Icon, string[]? Tools, string[] Idle);
+
+    private static readonly Preset[] Presets =
+    [
+        new("Developer", "AI, clipboard, shortcuts, system", AppIcon.Terminal,
+            ["home", "ask", "aiusage", "clipboard", "shortcuts", "notifications", "todos", "timer", "calendar", "controls", "system", "nowplaying"],
+            ["clock", "aiUsage", "nextEvent"]),
+        new("Creator", "Teleprompter, phone, shelf, music", AppIcon.Teleprompter,
+            ["home", "nowplaying", "teleprompter", "phone", "shelf", "note", "calendar", "todos", "controls", "emoji"],
+            ["clock", "nextEvent"]),
+        new("Student", "To-dos, focus timer, calendar, notes", AppIcon.BookOpen,
+            ["home", "todos", "timer", "calendar", "note", "ask", "converter", "weather", "screentime", "nowplaying"],
+            ["clock", "nextEvent", "streak"]),
+        new("Everything", "Every tool, in the usual order", AppIcon.Grid, null, ["clock"]),
+    ];
+
+    private FrameworkElement PresetCard(Preset preset)
+    {
+        var stack = new StackPanel { Margin = new Thickness(2) };
+        var icon = new Border { Width = 28, Height = 28, CornerRadius = Radii.M, HorizontalAlignment = HorizontalAlignment.Left };
+        icon.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
+        var glyph = new HeroIcon { Kind = preset.Icon, Width = 15, Height = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
+        icon.Child = glyph;
+        stack.Children.Add(icon);
+        stack.Children.Add(new TextBlock { Text = preset.Name, FontSize = 13.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 1) });
+        // Same height on every card (up to three lines), so the cards line up.
+        stack.Children.Add(new TextBlock { Text = preset.Blurb, Style = (Style)FindResource("SubText"), FontWeight = FontWeights.Normal, FontSize = 11, TextWrapping = TextWrapping.Wrap, Height = 42 });
+        var button = new Button { Style = (Style)FindResource("RowButton"), Content = stack, Padding = new Thickness(10),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Top };
+        button.Click += (_, _) => ApplyPreset(preset);
+        var card = new Border { Style = (Style)FindResource("Card"), Padding = new Thickness(0), Margin = new Thickness(4, 0, 4, 0), Child = button };
+        return card;
+    }
+
+    private void ApplyPreset(Preset preset)
+    {
+        var all = ToolRegistry.All.Select(t => t.Id).ToList();
+        S.ToolOrder = preset.Tools?.Where(all.Contains).ToList() ?? [];
+        S.HiddenTools = preset.Tools is null ? [] : all.Where(id => !preset.Tools.Contains(id)).ToList();
+        S.IdleItems = IdleInfoService.Catalog.Select(c => c.Id).Where(preset.Idle.Contains).ToList();
+        Save();
+        IdleInfoService.Instance.Reconfigure();
+        Render();
+    }
+
     private FrameworkElement ToolRow(ToolDef tool, bool shown, int index, int count)
     {
         var row = new Grid { Height = 40 };
@@ -712,7 +1231,7 @@ public partial class SettingsView : UserControl, IToolView
 
         var icon = new Border
         {
-            Width = 24, Height = 24, CornerRadius = new CornerRadius(6),
+            Width = 24, Height = 24, CornerRadius = Radii.S,
             Child = new HeroIcon { Kind = tool.Icon, Width = 13, Height = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
         };
         icon.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
@@ -810,7 +1329,10 @@ public partial class SettingsView : UserControl, IToolView
             return;
         }
         var gesture = HotkeyService.FromKeyEvent(e);
-        if (gesture is null) return; // still holding modifiers
+        if (gesture is null) return; // still holding modifiers (or only Shift)
+        // One combination, one action: taking it from another action beats "Another app already uses" (it's us).
+        foreach (var other in S.Hotkeys.Where(h => h.Key != _recordingAction && string.Equals(h.Value, gesture, StringComparison.OrdinalIgnoreCase)).Select(h => h.Key).ToList())
+            S.Hotkeys[other] = "";
         S.Hotkeys[_recordingAction] = gesture;
         _recordingAction = null;
         SaveHotkeys();
@@ -992,9 +1514,22 @@ public partial class SettingsView : UserControl, IToolView
         info.Children.Add(links);
         Grid.SetColumn(info, 1);
         hero.Children.Add(info);
-        var heroCard = new Border { CornerRadius = new CornerRadius(14), Padding = new Thickness(18), Child = hero, Margin = new Thickness(0, 16, 0, 0) };
+        var heroCard = new Border { CornerRadius = Radii.L, Padding = new Thickness(18), Child = hero, Margin = new Thickness(0, 16, 0, 0) };
         heroCard.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         Page.Children.Add(heroCard);
+
+        Section("HELP");
+        var report = new StackPanel { Orientation = Orientation.Horizontal };
+        report.Children.Add(new Button { Content = "Copy details", Height = RowControlHeight, Margin = new Thickness(0, 0, 6, 0) }
+            .Also(b => b.Click += (_, _) => ClipboardService.Instance.CopyQuiet(Diagnostics())));
+        report.Children.Add(new Button { Content = "Report", Style = (Style)FindResource("AccentButton"), Height = RowControlHeight }
+            .Also(b => b.Click += (_, _) => Launcher.Open(RepoUrl + "/issues/new?labels=bug&title=" + Uri.EscapeDataString("Problem: ")
+                + "&body=" + Uri.EscapeDataString("**What happened?**\n\n\n**What did you expect?**\n\n\n" + Diagnostics()))));
+        Row("Report a problem", "Opens a GitHub issue with your version, Windows and the app's recent errors filled in. You see everything before you send it; nothing is sent on its own.", report);
+        Row("Request a tool", "Missing something on the notch? Tell us what you'd use it for.",
+            new Button { Content = "Request", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                Launcher.Open(RepoUrl + "/issues/new?labels=tool-request&title=" + Uri.EscapeDataString("Tool request: ")
+                    + "&body=" + Uri.EscapeDataString("**What should it do?**\n\n\n**When would you use it?**\n\n"))));
 
         Section("DETAILS");
         var details = new StackPanel();
@@ -1014,7 +1549,7 @@ public partial class SettingsView : UserControl, IToolView
             details.Children.Add(Divider());
             details.Children.Add(InfoRow("Error log", "Useful when reporting an issue", OpenButton(log)));
         }
-        Page.Children.Add(Group(details));
+        Page.Children.Add(Searchable(Group(details))); // Updates, Data folder, Error log turn up in search
 
         Section("PRIVACY");
         var privacy = new StackPanel { Margin = new Thickness(0, 12, 0, 12) };
@@ -1078,10 +1613,46 @@ public partial class SettingsView : UserControl, IToolView
     private static Border Chip(string text, bool accent = false)
     {
         var label = new TextBlock { Text = text, FontSize = 11, FontWeight = FontWeights.SemiBold };
-        var chip = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 4), Child = label };
+        var chip = new Border { CornerRadius = Radii.M, Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 4), Child = label };
         chip.SetResourceReference(Border.BackgroundProperty, accent ? "AccentSoftBrush" : "Surface2Brush");
         label.SetResourceReference(TextBlock.ForegroundProperty, accent ? "AccentBrush" : "SubTextBrush");
         return chip;
+    }
+
+    /// <summary>
+    /// What a bug report needs: version, Windows, how it was installed, and the last errors from error.log with the
+    /// user's folder replaced by %USERPROFILE% (paths there often contain their name).
+    /// </summary>
+    private static string Diagnostics()
+    {
+        var lines = new List<string>
+        {
+            "**Details**",
+            $"- OrixNotch {UpdateService.CurrentVersion} ({(StartupService.IsPackaged ? "Microsoft Store" : "desktop")}, {(Environment.Is64BitProcess ? "x64" : "x86")})",
+            $"- Windows {Environment.OSVersion.Version}",
+        };
+        try
+        {
+            var log = Storage.PathOf("error.log");
+            if (System.IO.File.Exists(log))
+            {
+                var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                // Short enough to fit in a GitHub "new issue" link.
+                var tail = System.IO.File.ReadLines(log).Where(l => l.Trim().Length > 0).TakeLast(12)
+                    .Select(l => l.Replace(profile, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase))
+                    .Select(l => l.Length > 160 ? l[..160] + "…" : l);
+                lines.Add("");
+                lines.Add("**Recent errors**");
+                lines.Add("```");
+                lines.AddRange(tail);
+                lines.Add("```");
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            // The log is optional.
+        }
+        return string.Join("\n", lines);
     }
 
     private static Button LinkButton(string text, AppIcon icon, string url, bool primary = false)
@@ -1091,7 +1662,7 @@ public partial class SettingsView : UserControl, IToolView
         content.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
         var button = new Button { Content = content, Margin = new Thickness(0, 4, 8, 0), ToolTip = url };
         if (primary) button.SetResourceReference(StyleProperty, "AccentButton");
-        button.Click += (_, _) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        button.Click += (_, _) => Launcher.Open(url);
         return button;
     }
 
@@ -1126,7 +1697,8 @@ public partial class SettingsView : UserControl, IToolView
         }
 
         void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(Show);
-        updates.PropertyChanged += OnChanged;
+        // Subscribe on Loaded: search builds this page and drops it unshown, and then Unloaded never fires.
+        button.Loaded += (_, _) => { updates.PropertyChanged -= OnChanged; updates.PropertyChanged += OnChanged; Show(); };
         button.Unloaded += (_, _) => updates.PropertyChanged -= OnChanged;
         button.Click += (_, _) =>
         {
@@ -1140,7 +1712,7 @@ public partial class SettingsView : UserControl, IToolView
     private static Button OpenButton(string path)
     {
         var button = new Button { Content = "Open", ToolTip = path };
-        button.Click += (_, _) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        button.Click += (_, _) => Launcher.Open(path);
         return button;
     }
 
@@ -1185,7 +1757,7 @@ public partial class SettingsView : UserControl, IToolView
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var glyph = new HeroIcon { Kind = icon, Width = 12, Height = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
-        var tile = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(7), Child = glyph, Margin = new Thickness(0, 0, 10, 0) };
+        var tile = new Border { Width = 24, Height = 24, CornerRadius = Radii.S, Child = glyph, Margin = new Thickness(0, 0, 10, 0) };
         tile.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         row.Children.Add(tile);
         var name = new TextBlock { Text = tool, FontSize = 12.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
@@ -1212,9 +1784,16 @@ public partial class SettingsView : UserControl, IToolView
     private void Section(string text) =>
         Page.Children.Add(new TextBlock { Text = text, Style = (Style)FindResource("Caps"), FontSize = 11, Margin = new Thickness(4, 20, 0, 8) });
 
+    /// <summary>Lets search filter a card built from row grids other than <see cref="Row"/> (it looks for this tag).</summary>
+    private static Border Searchable(Border card)
+    {
+        card.Tag = "rows";
+        return card;
+    }
+
     private static Border Group(UIElement child)
     {
-        var border = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(14, 2, 14, 2), Child = child };
+        var border = new Border { CornerRadius = Radii.L, Padding = new Thickness(14, 2, 14, 2), Child = child };
         border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         return border;
     }
@@ -1244,7 +1823,7 @@ public partial class SettingsView : UserControl, IToolView
             Grid.SetColumnSpan(footer, 2);
         }
         var text = new StackPanel { Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(titleContent ?? new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
+        text.Children.Add(titleContent ?? (IsNew(_rendering, title) ? TitleWithNewChip(title) : new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold }));
         text.Children.Add(new TextBlock { Text = description, Style = (Style)FindResource("SubText"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) });
         control.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(control, 1);
@@ -1266,6 +1845,18 @@ public partial class SettingsView : UserControl, IToolView
         var card = Group(stack);
         card.Tag = "rows";
         Page.Children.Add(card);
+    }
+
+    private static FrameworkElement TitleWithNewChip(string title)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
+        var label = new TextBlock { Text = "NEW", FontSize = 9, FontWeight = FontWeights.Bold };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        var chip = new Border { CornerRadius = Radii.S, Padding = new Thickness(5, 1, 5, 1), Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = label };
+        chip.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
+        panel.Children.Add(chip);
+        return panel;
     }
 
     private static CheckBox Toggle(bool value, Action<bool> changed)
@@ -1445,7 +2036,7 @@ public partial class SettingsView : UserControl, IToolView
 
     private Border Badge(string text)
     {
-        var badge = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(8, 3, 8, 3), Child = new TextBlock { Text = text, FontSize = 10.5, FontWeight = FontWeights.Medium } };
+        var badge = new Border { CornerRadius = Radii.S, Padding = new Thickness(8, 3, 8, 3), Child = new TextBlock { Text = text, FontSize = 10.5, FontWeight = FontWeights.Medium } };
         badge.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         return badge;
     }
@@ -1466,11 +2057,13 @@ public partial class SettingsView : UserControl, IToolView
         return button;
     }
 
-    private FrameworkElement SchemeCard(ColorScheme scheme)
+    /// <param name="id">The setting this card picks; "system" shows the scheme Windows' mode picks right now.</param>
+    private FrameworkElement SchemeCard(ColorScheme scheme, string? id = null, string? name = null)
     {
-        var selected = scheme.Id == ThemeService.CurrentScheme.Id;
+        id ??= scheme.Id;
+        var selected = S.ThemeScheme == ThemeService.SystemScheme ? id == ThemeService.SystemScheme : id == ThemeService.CurrentScheme.Id;
         var preview = new Grid { Height = 58, Width = 104 };
-        preview.Children.Add(new Border { Background = scheme.PreviewBrush(), CornerRadius = new CornerRadius(6) });
+        preview.Children.Add(new Border { Background = scheme.PreviewBrush(), CornerRadius = Radii.S });
         preview.Children.Add(new System.Windows.Shapes.Path
         {
             Data = Geometry.Parse("M0,0 A3,3 0 0 1 3,3 L3,8 A6,6 0 0 0 9,14 L35,14 A6,6 0 0 0 41,8 L41,3 A3,3 0 0 1 44,0 Z"),
@@ -1485,14 +2078,14 @@ public partial class SettingsView : UserControl, IToolView
         lines.Children.Add(new Border { Height = 4, Width = 24, CornerRadius = new CornerRadius(2), Background = ThemeService.AccentFor(scheme).Brush(), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 3, 0, 0) });
         preview.Children.Add(lines);
 
-        var frame = new Border { Child = preview, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2), Padding = new Thickness(1) };
+        var frame = new Border { Child = preview, CornerRadius = Radii.M, BorderThickness = new Thickness(2), Padding = new Thickness(1) };
         if (selected) frame.SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
         else frame.BorderBrush = Brushes.Transparent;
 
         var card = new StackPanel { Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand, Background = Brushes.Transparent };
         card.Children.Add(frame);
-        card.Children.Add(new TextBlock { Text = scheme.Name, FontSize = 10.5, FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) });
-        card.MouseLeftButtonUp += (_, _) => ThemeService.SetScheme(scheme.Id);
+        card.Children.Add(new TextBlock { Text = name ?? scheme.Name, FontSize = 10.5, FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) });
+        card.MouseLeftButtonUp += (_, _) => ThemeService.SetScheme(id);
         return card;
     }
 

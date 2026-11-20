@@ -2,6 +2,7 @@ using System.IO;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.StaticFiles;
@@ -27,27 +28,15 @@ public sealed partial class PhoneTransferService
     /// <summary>The saved key, or a new one (saved) when there's none yet.</summary>
     private void LoadOrCreateWebKey()
     {
-        var path = Storage.PathOf(KeyFile);
-        try
+        if (Storage.LoadSecret(KeyFile, KeyEntropy) is { Length: >= 12 } key)
         {
-            if (File.Exists(path))
-            {
-                var key = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), KeyEntropy, DataProtectionScope.CurrentUser));
-                if (key.Length >= 12)
-                {
-                    _webKey = key;
-                    return;
-                }
-            }
-        }
-        catch (Exception ex) when (ex is CryptographicException or IOException)
-        {
-            App.Log(ex);
+            _webKey = key;
+            return;
         }
         _webKey = RandomId();
         try
         {
-            File.WriteAllBytes(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(_webKey), KeyEntropy, DataProtectionScope.CurrentUser));
+            Storage.SaveSecret(KeyFile, _webKey, KeyEntropy);
         }
         catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {
@@ -82,9 +71,9 @@ public sealed partial class PhoneTransferService
         app.MapGet("/", (HttpContext ctx) => Allowed(ctx)
             ? Results.Content(Page(), "text/html; charset=utf-8")
             : Results.Content(Denied, "text/html; charset=utf-8", statusCode: 403));
-        app.MapGet("/web/files", (HttpContext ctx) => Allowed(ctx) ? Results.Json(ShelfFiles().Select((f, i) => new
+        app.MapGet("/web/files", (HttpContext ctx) => Allowed(ctx) ? Results.Json(ShelfFiles().Select(f => new
         {
-            id = i,
+            id = FileId(f),
             name = Path.GetFileName(f),
             size = new FileInfo(f).Length,
             image = Shell.DropPayload.IsImagePath(f),
@@ -103,9 +92,10 @@ public sealed partial class PhoneTransferService
         app.MapGet("/web/file", (HttpContext ctx) =>
         {
             if (!Allowed(ctx)) return Results.StatusCode(403);
-            var files = ShelfFiles();
-            if (!int.TryParse(ctx.Request.Query["id"], out var id) || id < 0 || id >= files.Count) return Results.NotFound();
-            return Results.File(files[id], ContentTypeOf(files[id]), Path.GetFileName(files[id]), enableRangeProcessing: true);
+            var id = ctx.Request.Query["id"].ToString();
+            var file = ShelfFiles().FirstOrDefault(f => FileId(f) == id);
+            if (file is null) return Results.NotFound(); // gone or changed since the page loaded: never another file
+            return Results.File(file, ContentTypeOf(file), Path.GetFileName(file), enableRangeProcessing: true);
         });
         app.MapPost("/web/upload", Handler(WebUploadAsync));
         app.MapPost("/web/text", Handler(WebTextAsync));
@@ -116,7 +106,19 @@ public sealed partial class PhoneTransferService
         _webKey.Length > 0 && CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(ctx.Request.Query["k"].ToString()), Encoding.UTF8.GetBytes(_webKey));
 
-    /// <summary>Shelf files (folders are skipped), read on the UI thread; ids index this list.</summary>
+    /// <summary>
+    /// Stable id of a Shelf file for the phone page: the same file keeps its id while the Shelf changes around it,
+    /// and an edited or different file gets a new one. (Ids used to be list positions, so a new photo could reuse an
+    /// old one's URL and the phone showed the cached old photo.)
+    /// </summary>
+    internal static string FileId(string path)
+    {
+        var info = new FileInfo(path);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}"));
+        return Convert.ToHexString(hash, 0, 8).ToLowerInvariant();
+    }
+
+    /// <summary>Shelf files (folders are skipped), read on the UI thread.</summary>
     private static List<string> ShelfFiles() =>
         OnUi(() => ShelfService.Instance.Items.Where(i => File.Exists(i.Path)).Select(i => i.Path).ToList());
 
@@ -147,9 +149,11 @@ public sealed partial class PhoneTransferService
             });
             return Results.Ok();
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException)
+        // UnauthorizedAccess: a receive folder that can't be written must still end the transfer (or it spins forever).
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException)
         {
-            OnUi(() => transfer.Finish(transfer.Cts.IsCancellationRequested ? "Canceled" : "Stopped", failed: true));
+            var state = transfer.Cts.IsCancellationRequested ? "Canceled" : ex is UnauthorizedAccessException ? "Can't write to the receive folder" : "Stopped";
+            OnUi(() => transfer.Finish(state, failed: true));
             return Results.StatusCode(500);
         }
     }
@@ -159,7 +163,11 @@ public sealed partial class PhoneTransferService
         if (!Allowed(ctx)) return Results.StatusCode(403);
         if (ctx.Request.ContentLength > MaxWebText) return Results.StatusCode(413);
         using var reader = new StreamReader(ctx.Request.Body, Encoding.UTF8);
-        var text = await reader.ReadToEndAsync(ctx.RequestAborted);
+        // A chunked body has no Content-Length: read at most the limit (+1 to tell it was over) instead of to the end.
+        var buffer = new char[MaxWebText + 1];
+        var length = await reader.ReadBlockAsync(buffer.AsMemory(), ctx.RequestAborted);
+        if (length > MaxWebText) return Results.StatusCode(413);
+        var text = new string(buffer, 0, length);
         if (string.IsNullOrWhiteSpace(text)) return Results.BadRequest();
         var peer = PeerName(ctx);
         var firstLine = text.Trim().Split('\n')[0].Trim();
@@ -181,12 +189,44 @@ public sealed partial class PhoneTransferService
     {
         if (_page is null)
         {
-            using var stream = typeof(PhoneTransferService).Assembly.GetManifestResourceStream("OrixNotch.Resources.phone.html")!;
-            using var reader = new StreamReader(stream);
-            _page = reader.ReadToEnd();
+            _page = Resource("phone.html")
+                .Replace("{{MARK}}", SvgUri(BrandMarkSvg(tile: false)))
+                .Replace("{{FAVICON}}", SvgUri(BrandMarkSvg(tile: true)))
+                .Replace("{{TOUCH_ICON}}", "data:image/png;base64," + Convert.ToBase64String(ResourceBytes("logo-512.png")));
         }
-        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(PcName)).Replace("{{ACCENT}}", AccentHex());
+        // NAME_JS first: the default JSON encoder escapes < > & ' so the name can't close the script or the string.
+        return _page.Replace("{{NAME_JS}}", System.Text.Json.JsonSerializer.Serialize(PcName)).Replace("{{NAME}}", WebUtility.HtmlEncode(PcName)).Replace("{{ACCENT}}", AccentHex());
     }
+
+    /// <summary>
+    /// The OrixNotch mark from Assets/Brand/mark.svg (white paths, each with its own transform) as a standalone SVG in
+    /// the logo's colours: one pink → orange sweep across the whole mark, like Shell/BrandMark.cs draws it. The paths are
+    /// a mask over one gradient rect, because a gradient on each path would restart on each piece. With
+    /// <paramref name="tile"/>: on the brand's dark rounded tile (the favicon).
+    /// </summary>
+    private static string BrandMarkSvg(bool tile)
+    {
+        var paths = string.Concat(Regex.Matches(Resource("mark.svg"), @"<path\b[^>]*/>").Select(m => m.Value));
+        // x 212..1020 is the mark's extent in its 1254 viewBox (measured from the path data).
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1254 1254\"><defs>"
+            + "<linearGradient id=\"g\" gradientUnits=\"userSpaceOnUse\" x1=\"212\" y1=\"0\" x2=\"1020\" y2=\"0\">"
+            + "<stop offset=\"0\" stop-color=\"#FD0388\"/><stop offset=\"1\" stop-color=\"#FC6F18\"/></linearGradient>"
+            + $"<mask id=\"m\">{paths}</mask></defs>"
+            + (tile ? "<rect width=\"1254\" height=\"1254\" rx=\"280\" fill=\"#0B0E17\"/>" : "")
+            + "<rect width=\"1254\" height=\"1254\" fill=\"url(#g)\" mask=\"url(#m)\"/></svg>";
+    }
+
+    private static string SvgUri(string svg) => "data:image/svg+xml," + Uri.EscapeDataString(svg);
+
+    private static byte[] ResourceBytes(string name)
+    {
+        using var stream = typeof(PhoneTransferService).Assembly.GetManifestResourceStream("OrixNotch.Resources." + name)!;
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
+    }
+
+    private static string Resource(string name) => Encoding.UTF8.GetString(ResourceBytes(name)).TrimStart('﻿');
 
     /// <summary>How the page names this PC (ORIXNOTCH_PC_NAME overrides it, for screenshots).</summary>
     private static string PcName => Environment.GetEnvironmentVariable("ORIXNOTCH_PC_NAME") is { Length: > 0 } name ? name : Environment.MachineName;

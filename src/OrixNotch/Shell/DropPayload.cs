@@ -120,7 +120,12 @@ public sealed partial class DropPayload
         // A dragged link comes as an Internet shortcut: keep that as text (the URL) instead.
         if (Path.GetExtension(name).ToLowerInvariant() is ".url" or ".lnk" or ".webloc") return null;
 
-        var bytes = VirtualFileContents(data, 0);
+        // FD_FILESIZE (0x40) in dwFlags: nFileSizeHigh/Low at 64/68 hold the real size. An HGLOBAL can be bigger
+        // than its contents (GlobalSize rounds up), and the padding would end up in the saved file.
+        long? declared = (BitConverter.ToUInt32(raw, 4) & 0x40) != 0
+            ? ((long)BitConverter.ToUInt32(raw, 4 + 64) << 32) | BitConverter.ToUInt32(raw, 4 + 68)
+            : null;
+        var bytes = VirtualFileContents(data, 0, declared);
         return bytes is { Length: > 0 } ? (name.Length > 0 ? name : "image", bytes) : null;
     }
 
@@ -128,7 +133,7 @@ public sealed partial class DropPayload
     /// FileContents for one file of the group. WPF asks with lindex -1, which Chromium-based browsers
     /// refuse, so ask the OLE data object directly with the file's index (HGLOBAL or IStream).
     /// </summary>
-    private static byte[]? VirtualFileContents(IDataObject data, int index)
+    private static byte[]? VirtualFileContents(IDataObject data, int index, long? declaredSize = null)
     {
         if (data is not ComTypes.IDataObject com)
             return data.GetData(Contents) is MemoryStream stream ? stream.ToArray() : null;
@@ -145,8 +150,9 @@ public sealed partial class DropPayload
         {
             if (medium.tymed == ComTypes.TYMED.TYMED_HGLOBAL)
             {
-                var size = (int)GlobalSize(medium.unionmember);
+                var size = (int)Math.Min((long)GlobalSize(medium.unionmember).ToUInt64(), declaredSize ?? long.MaxValue);
                 var source = GlobalLock(medium.unionmember);
+                if (source == IntPtr.Zero) return null;
                 try
                 {
                     var bytes = new byte[size];

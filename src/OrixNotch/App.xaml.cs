@@ -32,6 +32,7 @@ public partial class App : Application
         if (!created)
         {
             _mutex = null;
+            ExternalCommands.SendToRunning(e.Args); // links and --open reach the running copy
             Shutdown();
             return;
         }
@@ -42,6 +43,16 @@ public partial class App : Application
         {
             Log(args.Exception);
             args.Handled = true;
+        };
+        // Fire-and-forget tasks and background threads (Kestrel, watchers) fail outside the dispatcher.
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log(args.Exception);
+            args.SetObserved();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex) Log(ex);
         };
 
         // Before any UI measures text.
@@ -57,15 +68,13 @@ public partial class App : Application
         UpdateService.Instance.Start(); // first look a couple of minutes in, then daily
         CalendarFeedService.Instance.Start(); // subscribed calendars, every 30 minutes
 
-        // `OrixNotch.exe --open weather` starts with the panel open on a tool.
-        var openAt = Array.IndexOf(e.Args, "--open");
-        if (openAt >= 0)
-        {
-            window.Expand(activate: true);
-            if (openAt + 1 < e.Args.Length) window.ShowTool(e.Args[openAt + 1]);
-        }
-        if (e.Args.Contains("--settings")) window.OpenTool(NotchWindow.SettingsId);
-        else if (SettingsService.FirstRun && openAt < 0) window.OpenSettings("tabs"); // welcome: pick your tools
+        _ = PeekApiService.Instance.SyncAsync(); // localhost alerts for scripts, only when turned on
+        ExternalCommands.RegisterLinks();
+        ExternalCommands.Listen();
+
+        // `OrixNotch.exe --open weather` starts with the panel open on a tool; an orixnotch:// link runs.
+        if (e.Args.Length > 0) ExternalCommands.Run(e.Args);
+        else if (SettingsService.FirstRun) window.OpenSettings("tabs"); // welcome: pick your tools
         if (NotchWindow.ShotsDir is not null) window.RunShots(); // Store screenshots (dev only)
     }
 
@@ -73,16 +82,31 @@ public partial class App : Application
     {
         _tray?.Dispose();
         ShelfService.Instance.Save();
+        ScreenTimeService.Instance.Save();
+        ClipboardService.Instance.Flush();
+        SettingsService.Flush();
+        VolumeService.Instance.Stop();
         _ = PhoneTransferService.Instance.StopAsync(); // sockets close with the process anyway
+        _ = PeekApiService.Instance.StopAsync();
         _mutex?.ReleaseMutex();
         base.OnExit(e);
     }
 
+    private const long MaxLogBytes = 1 << 20;
+    private static readonly object LogLock = new();
+
+    /// <summary>Appends to error.log; past 1 MB the old log becomes error.old.log, so it never grows without end.</summary>
     public static void Log(Exception ex)
     {
         try
         {
-            File.AppendAllText(Storage.PathOf("error.log"), $"[{DateTime.Now:u}] {ex}\n\n");
+            lock (LogLock) // services log from several threads at once
+            {
+                var path = Storage.PathOf("error.log");
+                if (new FileInfo(path) is { Exists: true, Length: > MaxLogBytes })
+                    File.Move(path, Storage.PathOf("error.old.log"), overwrite: true);
+                File.AppendAllText(path, $"[{DateTime.Now:u}] {ex}\n\n");
+            }
         }
         catch
         {

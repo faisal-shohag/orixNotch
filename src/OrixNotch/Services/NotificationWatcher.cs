@@ -43,6 +43,7 @@ public sealed class NotificationWatcher
     private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly Dictionary<string, (string Name, ImageSource? Icon)> _apps = new(StringComparer.OrdinalIgnoreCase);
     private bool _busy;
+    private string? _lastError;
 
     // Listener state
     private readonly HashSet<uint> _seenIds = new();
@@ -68,7 +69,11 @@ public sealed class NotificationWatcher
     public void Reconfigure()
     {
         if (App.Settings.NotifyEnabled) _poll.Start();
-        else _poll.Stop();
+        else
+        {
+            _poll.Stop();
+            _listenerPrimed = false; // toasts that arrive while off must not replay as new when turned back on
+        }
     }
 
     /// <summary>Asks Windows for notification access (listener mode only). Returns true when allowed.</summary>
@@ -104,10 +109,13 @@ public sealed class NotificationWatcher
             }
             else ProblemSettingsUri = "ms-settings:privacy-notifications";
             foreach (var n in found) Publish(n);
+            _lastError = null;
         }
         catch (Exception ex)
         {
-            App.Log(ex);
+            // A failure that repeats every poll is logged once, not every 2 s.
+            if (ex.Message != _lastError) App.Log(ex);
+            _lastError = ex.Message;
         }
         finally
         {
@@ -132,6 +140,8 @@ public sealed class NotificationWatcher
         foreach (var n in list)
         {
             if (!_seenIds.Add(n.Id) || !_listenerPrimed) continue;
+            // Like the database's 30 s rule: nothing old (missed while off or asleep) shows as a new alert.
+            if (DateTimeOffset.Now - n.CreationTime > TimeSpan.FromSeconds(30)) continue;
             var binding = n.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
             var texts = binding?.GetTextElements().Select(t => t.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList() ?? [];
             ImageSource? icon = null;
@@ -154,6 +164,7 @@ public sealed class NotificationWatcher
             result.Add((n.AppInfo.AppUserModelId, n.AppInfo.DisplayInfo.DisplayName, icon,
                 texts.FirstOrDefault() ?? "", string.Join(" ", texts.Skip(1))));
         }
+        _seenIds.IntersectWith(list.Select(n => n.Id)); // forget toasts gone from Action Center, or this grows forever
         _listenerPrimed = true; // the first pass only records what was already there
         return result;
     }
@@ -172,8 +183,7 @@ public sealed class NotificationWatcher
         using var db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = DbPath,
-            Mode = SqliteOpenMode.ReadOnly,
-            Cache = SqliteCacheMode.Shared,
+            Mode = SqliteOpenMode.ReadOnly, // pooled (the default), so the 2 s poll reuses one open handle
         }.ToString());
         try
         {
@@ -181,8 +191,9 @@ public sealed class NotificationWatcher
         }
         catch (SqliteException ex)
         {
-            Problem = "Couldn't open Windows notification history.";
-            App.Log(ex);
+            const string problem = "Couldn't open Windows notification history.";
+            if (Problem != problem) App.Log(ex); // once, not every 2 s for as long as it fails
+            Problem = problem;
             return result;
         }
         Problem = null;
@@ -245,6 +256,7 @@ public sealed class NotificationWatcher
         if (!App.Settings.NotifyEnabled) return;
         if (string.IsNullOrWhiteSpace(n.Title) && string.IsNullOrWhiteSpace(n.Body)) return;
         if (n.AppId.Contains("OrixNotch", StringComparison.OrdinalIgnoreCase)) return; // our own toasts
+        if (TrayService.SentRecently(n.Title)) return; // and our own tray balloons
 
         var (name, icon) = AppInfo(n.AppId, n.AppName, n.Icon);
         if (name.Equals("OrixNotch", StringComparison.OrdinalIgnoreCase)) return;

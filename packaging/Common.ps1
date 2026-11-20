@@ -26,6 +26,8 @@ function Invoke-Publish([string]$OutDir, [string]$Version, [switch]$SingleFile) 
     if ($SingleFile) {
         $publishArgs += "-p:PublishSingleFile=true", "-p:IncludeNativeLibrariesForSelfExtract=true", "-p:EnableCompressionInSingleFile=true"
     }
+    # No PublishReadyToRun: measured on the compressed single-file exe it was slower to first window (~1.0 s vs
+    # ~0.78 s median of 6) and 40 MB bigger (125 vs 85 MB). Re-measure before turning it on.
     & dotnet @publishArgs
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
     Get-ChildItem $OutDir -Filter *.pdb -Recurse | Remove-Item -Force

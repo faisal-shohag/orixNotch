@@ -14,12 +14,14 @@ namespace OrixNotch.Tools;
 public partial class NotificationsView : UserControl, IToolView
 {
     private const int CollapsedBodyLines = 3;
+    private const int Page = 50; // up to 300 are kept; the first screenfuls are what gets read
+    private int _shown = Page;
     private readonly HashSet<string> _expanded = new();
-
 
     public NotificationsView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.NotificationsHeight, v => App.Settings.NotificationsHeight = v, MinListHeight, MaxListHeight, DefaultHeight);
         NotificationHistory.Instance.Changed += () =>
         {
             if (IsVisible) Render();
@@ -28,9 +30,11 @@ public partial class NotificationsView : UserControl, IToolView
 
     public void OnShown()
     {
-        ApplyHeight();
+        _grip.Apply();
+        _shown = Page;
         // Relative times ("5m") go stale while hidden, so redraw on every open.
         Render();
+        NotificationHistory.Instance.MarkRead();
     }
 
     public void OnHidden()
@@ -52,7 +56,7 @@ public partial class NotificationsView : UserControl, IToolView
 
         List.Children.Clear();
         DateTime? day = null;
-        foreach (var n in items)
+        foreach (var n in items.Take(_shown))
         {
             if (n.At.Date != day)
             {
@@ -60,6 +64,16 @@ public partial class NotificationsView : UserControl, IToolView
                 List.Children.Add(DayHeader(n.At.Date));
             }
             List.Children.Add(Card(n));
+        }
+        if (items.Count > _shown)
+        {
+            var more = new Button { Content = $"Show {Math.Min(Page, items.Count - _shown)} more", Margin = new Thickness(0, 6, 0, 4), HorizontalAlignment = HorizontalAlignment.Center };
+            more.Click += (_, _) =>
+            {
+                _shown += Page;
+                Render();
+            };
+            List.Children.Add(more);
         }
     }
 
@@ -156,7 +170,7 @@ public partial class NotificationsView : UserControl, IToolView
 
         var card = new Border
         {
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = Radii.M,
             Padding = new Thickness(12, 9, 12, 10),
             Margin = new Thickness(0, 0, 0, 6),
             Child = grid,
@@ -188,7 +202,7 @@ public partial class NotificationsView : UserControl, IToolView
     /// <summary>The app's own icon, the OrixNotch alert's chart glyph, or the app's first letter on a tile.</summary>
     private static FrameworkElement AppIcon(StoredNotification n)
     {
-        var frame = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(8) };
+        var frame = new Border { Width = 30, Height = 30, CornerRadius = Radii.M };
         frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         if (n.Source == "orixnotch")
         {
@@ -217,49 +231,10 @@ public partial class NotificationsView : UserControl, IToolView
 
     // ---------------------------------------------------------------- resize (same handle as Ask AI / Quick Note)
 
+    private readonly ResizeGrip _grip;
     private const double DefaultHeight = 220;
     private const double MinListHeight = 200;
     private const double MaxListHeight = 520;
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
-
-    private static void ApplyHeight() =>
-        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.NotificationsHeight, MinListHeight, MaxListHeight));
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            App.Settings.NotificationsHeight = DefaultHeight;
-            ApplyHeight();
-            SettingsService.Save(notify: false);
-            e.Handled = true;
-            return;
-        }
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinListHeight, MaxListHeight);
-        App.Settings.NotificationsHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
-    }
 
     /// <summary>"now", "5m", "2h" today; the time for older ones (the day header carries the date).</summary>
     private static string Time(DateTime at)

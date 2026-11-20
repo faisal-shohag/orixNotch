@@ -46,6 +46,7 @@ public static partial class LyricsService
             App.Log(ex);
         }
 
+        if (Cache.Count >= 50) Cache.Clear(); // shortcut: drops all, not the oldest; fine for a session's worth of songs
         Cache[key] = result;
         return result;
     }

@@ -16,6 +16,7 @@ public sealed partial class TodoItem : ObservableObject
     [ObservableProperty] private bool _done;
     [ObservableProperty] private bool _starred;
     public DateTime Created { get; set; } = DateTime.Now;
+    public DateTime? DoneAt { get; set; } // set when ticked in the list (for the end-of-day wrap); older items have none
 }
 
 public partial class TodosView : UserControl, IToolView
@@ -47,6 +48,12 @@ public partial class TodosView : UserControl, IToolView
 
     private void OnItemChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(TodoItem.Done) && sender is TodoItem item)
+        {
+            item.DoneAt = item.Done ? DateTime.Now : null;
+            // The last open one just ticked: a small celebration.
+            if (item.Done && App.Settings.Celebrations && _items.All(i => i.Done)) Confetti.Burst(Fx, new Point(Fx.ActualWidth / 2, Fx.ActualHeight / 2));
+        }
         Save();
         Refresh();
     }
@@ -86,6 +93,9 @@ public partial class TodosView : UserControl, IToolView
 
     private void Save() => Storage.Save(FileName, _items.ToList());
 
+    /// <summary>To-dos ticked today (read from the saved list, which every change writes).</summary>
+    public static int DoneToday() => Storage.Load<List<TodoItem>>(FileName).Count(i => i.Done && i.DoneAt?.Date == DateTime.Today);
+
     private void OnInputKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) Add();
@@ -93,14 +103,20 @@ public partial class TodosView : UserControl, IToolView
 
     private void Add()
     {
-        var text = Input.Text.Trim();
+        AddText(Input.Text);
+        Input.Clear();
+    }
+
+    /// <summary>Adds a to-do (Enter in the box, or the command palette).</summary>
+    public void AddText(string raw)
+    {
+        var text = raw.Trim();
         if (text.Length == 0) return;
         // A new item wouldn't show under the Starred / Done filters; jump back to All so it's visible.
         if (FilterStarred.IsChecked == true || FilterDone.IsChecked == true) FilterAll.IsChecked = true;
         var item = new TodoItem { Text = text };
         item.PropertyChanged += OnItemChanged;
         _items.Add(item);
-        Input.Clear();
         Save();
     }
 

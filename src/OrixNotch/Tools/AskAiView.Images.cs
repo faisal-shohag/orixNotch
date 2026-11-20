@@ -115,7 +115,14 @@ public partial class AskAiView
     {
         if (!DropPayload.HasImage(e.Data)) return;
         e.Handled = true;
-        if (DropPayload.Read(e.Data) is { } payload) await AcceptDrop(payload);
+        try
+        {
+            if (DropPayload.Read(e.Data) is { } payload) await AcceptDrop(payload);
+        }
+        catch (Exception ex) // async void: an unreadable drop is logged, not thrown at the dispatcher
+        {
+            App.Log(ex);
+        }
     }
 
     /// <summary>Takes a drop: images are attached, text goes into the message box.</summary>
@@ -227,6 +234,7 @@ public partial class AskAiView
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;
+        image.DecodePixelHeight = 192; // previews show at most 96 px tall: don't hold the full 1568 px image per bubble
         image.StreamSource = new MemoryStream(bytes);
         image.EndInit();
         image.Freeze();
@@ -273,7 +281,7 @@ public partial class AskAiView
         {
             Width = w,
             Height = size,
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = Radii.M,
             Background = new ImageBrush(source) { Stretch = Stretch.UniformToFill },
         };
     }

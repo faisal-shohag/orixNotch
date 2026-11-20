@@ -24,7 +24,6 @@ internal static class Win32
     public const uint MOD_WIN = 0x0008;
     public const uint MOD_NOREPEAT = 0x4000;
 
-    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
     // QUERY_USER_NOTIFICATION_STATE values that mean "something is fullscreen"
     public const int QUNS_BUSY = 2;
@@ -32,6 +31,21 @@ internal static class Win32
     public const int QUNS_PRESENTATION_MODE = 4;
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
+
+    /// <summary>Lets another process bring its window to the front; a second launch passes this on to the running copy.</summary>
+    [DllImport("user32.dll")]
+    public static extern bool AllowSetForegroundWindow(uint processId);
+
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+
+    public const uint KEYEVENTF_KEYUP = 0x2;
+
+    [DllImport("user32.dll")]
+    public static extern uint GetClipboardSequenceNumber();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
@@ -66,13 +80,32 @@ internal static class Win32
     public static extern int SHQueryUserNotificationState(out int state);
 
     [DllImport("kernel32.dll")]
+    public static extern uint SetThreadExecutionState(uint flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+    /// <summary>How long since the last keyboard or mouse input.</summary>
+    public static TimeSpan IdleTime()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        return GetLastInputInfo(ref info) ? TimeSpan.FromMilliseconds((uint)Environment.TickCount - info.dwTime) : TimeSpan.Zero;
+    }
+
+    public const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x1, ES_DISPLAY_REQUIRED = 0x2;
+
+    [DllImport("kernel32.dll")]
     public static extern bool GetSystemTimes(out long idleTime, out long kernelTime, out long userTime);
 
     [DllImport("kernel32.dll")]
     public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
-
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT
@@ -128,11 +161,5 @@ internal static class Win32
             QUNS_BUSY or QUNS_PRESENTATION_MODE => 1,
             _ => 0,
         };
-    }
-
-    public static void UseDarkTitleBar(IntPtr hwnd, bool dark = true)
-    {
-        var on = dark ? 1 : 0;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
     }
 }

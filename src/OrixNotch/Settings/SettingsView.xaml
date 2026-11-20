@@ -14,7 +14,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="10,0">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusM}" Padding="10,0">
                             <ContentPresenter VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -43,10 +43,12 @@
             <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Tag="Search settings" shell:Field.Icon="Magnifier" shell:Field.Clearable="True"
                      Margin="0,0,0,8" TextChanged="OnSearchChanged" AutomationProperties.Name="Search settings" />
             <TextBlock x:Name="VersionText" DockPanel.Dock="Bottom" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="9.5" Margin="8,0,0,2" />
-            <StackPanel x:Name="Nav" />
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+                <StackPanel x:Name="Nav" />
+            </ScrollViewer>
         </DockPanel>
 
-        <Border Grid.Column="1" Margin="12,0,0,0" CornerRadius="10" Background="Transparent">
+        <Border Grid.Column="1" Margin="12,0,0,0" CornerRadius="{StaticResource RadiusM}" Background="Transparent">
             <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" Padding="0,0,4,0"
                           shell:SmoothScroll.IsEnabled="True">
                 <StackPanel x:Name="Page" Margin="10,4,14,20" />

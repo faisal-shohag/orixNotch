@@ -42,7 +42,7 @@ public sealed partial class NoteEntry : ObservableObject
 
     [JsonIgnore]
     public string When =>
-        Updated.Date == DateTime.Today ? Updated.ToString("h:mm tt")
+        Updated.Date == DateTime.Today ? Updated.ToString("t") /* the user's 12/24-hour clock */
         : Updated.Year == DateTime.Today.Year ? Updated.ToString("MMM d")
         : Updated.ToString("MMM d, yyyy");
 
@@ -65,6 +65,7 @@ public partial class QuickNoteView : UserControl, IToolView
     public QuickNoteView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.NoteHeight, v => App.Settings.NoteHeight = v, MinNoteHeight, MaxNoteHeight, DefaultHeight);
         _saveTimer.Tick += (_, _) => Save();
         PreviewKeyDown += OnPreviewKeyDown;
 
@@ -94,7 +95,7 @@ public partial class QuickNoteView : UserControl, IToolView
         return [];
     }
 
-    public void OnShown() => ApplyHeight();
+    public void OnShown() => _grip.Apply();
 
     public void OnHidden()
     {
@@ -154,6 +155,26 @@ public partial class QuickNoteView : UserControl, IToolView
             Select(_notes[Math.Min(index, _notes.Count - 1)]);
         }
         Save();
+        OfferUndo(note, index);
+    }
+
+    /// <summary>A note is gone in one click: the status line offers it back until the next edit replaces the line.</summary>
+    private void OfferUndo(NoteEntry note, int index)
+    {
+        var undo = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run("Undo")) { TextDecorations = null, Cursor = Cursors.Hand };
+        undo.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "AccentBrush");
+        undo.Click += (_, _) =>
+        {
+            if (_notes.Contains(note)) return;
+            _notes.Insert(Math.Min(index, _notes.Count), note);
+            _dirty = true;
+            Select(note); // also drops the empty note left in its place
+            Save();
+            Editor.Focus();
+        };
+        Status.Inlines.Clear();
+        Status.Inlines.Add(new System.Windows.Documents.Run("Note deleted · "));
+        Status.Inlines.Add(undo);
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)
@@ -213,47 +234,8 @@ public partial class QuickNoteView : UserControl, IToolView
 
     // ---------------------------------------------------------------- resize (same handle as Ask AI)
 
+    private readonly ResizeGrip _grip;
     private const double DefaultHeight = 220;
     private const double MinNoteHeight = 200;
     private const double MaxNoteHeight = 520;
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
-
-    private static void ApplyHeight() =>
-        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.NoteHeight, MinNoteHeight, MaxNoteHeight));
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            App.Settings.NoteHeight = DefaultHeight;
-            ApplyHeight();
-            SettingsService.Save(notify: false);
-            e.Handled = true;
-            return;
-        }
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinNoteHeight, MaxNoteHeight);
-        App.Settings.NoteHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
-    }
 }

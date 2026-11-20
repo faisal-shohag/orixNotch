@@ -15,7 +15,26 @@ namespace OrixNotch.Services;
 /// </remarks>
 public static class IcsParser
 {
-    public sealed record Occurrence(DateTime Start, bool AllDay, string Title);
+    /// <param name="Link">The online meeting link (Meet, Zoom, Teams, Webex) found in the event, if any.</param>
+    public sealed record Occurrence(DateTime Start, bool AllDay, string Title, string? Link = null);
+
+    private static readonly System.Text.RegularExpressions.Regex MeetingLink = new(
+        @"https://(meet\.google\.com|[\w.-]*zoom\.us|teams\.microsoft\.com|teams\.live\.com|[\w.-]*webex\.com)/[^\s""<>\\]+",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>The first meeting link in the places calendars put it: URL, LOCATION, the conference fields, DESCRIPTION.</summary>
+    internal static string? FindMeetingLink(IEnumerable<string> values) =>
+        values.Select(v => MeetingLink.Match(v.Replace("\\n", " ").Replace("\\,", ",").Replace("\\;", ";"))).FirstOrDefault(m => m.Success)?.Value;
+
+#if DEBUG
+    static IcsParser()
+    {
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["Join: https://meet.google.com/abc-defg-hij\\nor dial in"]) == "https://meet.google.com/abc-defg-hij");
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["Room 4", "https://us02web.zoom.us/j/123?pwd=x"]) == "https://us02web.zoom.us/j/123?pwd=x");
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["<https://teams.microsoft.com/l/meetup-join/19%3a>"]) == "https://teams.microsoft.com/l/meetup-join/19%3a");
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["https://example.com/meet", "Office"]) is null);
+    }
+#endif
 
     private sealed record Prop(string Name, Dictionary<string, string> Params, string Value);
 
@@ -44,23 +63,28 @@ public static class IcsParser
             var title = Unescape(Get(e, "SUMMARY")?.Value ?? "");
             if (title.Length == 0) title = "(No title)";
             var uid = Get(e, "UID")?.Value ?? "";
+            var link = FindMeetingLink(new[] { "URL", "LOCATION", "X-GOOGLE-CONFERENCE", "X-MICROSOFT-SKYPETEAMSMEETINGURL", "DESCRIPTION" }
+                .Select(n => Get(e, n)?.Value).OfType<string>());
 
             IEnumerable<DateTime> walls = [start.Wall];
             if (Get(e, "RECURRENCE-ID") is null && Get(e, "RRULE") is { } rrule)
             {
-                var excluded = e.Where(p => p.Name == "EXDATE")
+                var exdates = e.Where(p => p.Name == "EXDATE")
                     .SelectMany(p => p.Value.Split(',').Select(v => ParseStamp(p with { Value = v })))
                     .OfType<Stamp>()
-                    .Select(ToUtc)
-                    .ToHashSet();
+                    .ToList();
+                var excluded = exdates.Where(x => !x.AllDay).Select(ToUtc).ToHashSet();
+                // A date-only EXDATE (VALUE=DATE) on a timed series removes that day's occurrence: compare by date.
+                var excludedDays = exdates.Where(x => x.AllDay).Select(x => x.Wall.Date).ToHashSet();
                 walls = Expand(start, rrule.Value, ToWall(from.Date.AddDays(-1), start.Zone), ToWall(to.Date.AddDays(1), start.Zone))
-                    .Where(w => !excluded.Contains(ToUtc(start with { Wall = w })) && !overridden.Contains((uid, ToUtc(start with { Wall = w }))));
+                    .Where(w => !excluded.Contains(ToUtc(start with { Wall = w })) && !excludedDays.Contains(w.Date)
+                                && !overridden.Contains((uid, ToUtc(start with { Wall = w }))));
             }
 
             foreach (var wall in walls)
             {
                 var local = start.AllDay ? wall.Date : ToLocal(start with { Wall = wall });
-                if (local.Date >= from.Date && local.Date <= to.Date) result.Add(new Occurrence(local, start.AllDay, title));
+                if (local.Date >= from.Date && local.Date <= to.Date) result.Add(new Occurrence(local, start.AllDay, title, link));
             }
         }
         result.Sort((a, b) => a.Start.CompareTo(b.Start));
@@ -75,12 +99,14 @@ public static class IcsParser
         var parts = rrule.Split(';', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Split('=', 2))
             .Where(p => p.Length == 2)
-            .ToDictionary(p => p[0].ToUpperInvariant(), p => p[1], StringComparer.OrdinalIgnoreCase);
+            .GroupBy(p => p[0].ToUpperInvariant()) // a repeated part (malformed) mustn't throw and drop the whole feed: last wins
+            .ToDictionary(g => g.Key, g => g.Last()[1], StringComparer.OrdinalIgnoreCase);
         var freq = parts.GetValueOrDefault("FREQ", "").ToUpperInvariant();
         var interval = int.TryParse(parts.GetValueOrDefault("INTERVAL"), out var n) && n > 0 ? n : 1;
         int? count = int.TryParse(parts.GetValueOrDefault("COUNT"), out var c) ? c : null;
         DateTime? until = parts.GetValueOrDefault("UNTIL") is { } u && ParseStamp(new Prop("UNTIL", new(), u)) is { } us
-            ? (us.Zone == TimeZoneInfo.Utc && start.Zone != TimeZoneInfo.Utc ? ToWall(ToUtc(us), start.Zone, utc: true) : us.Wall)
+            ? (us.AllDay && !start.AllDay ? us.Wall.Date.AddDays(1).AddTicks(-1) // date-only UNTIL: the whole of that day counts
+                : us.Zone == TimeZoneInfo.Utc && start.Zone != TimeZoneInfo.Utc ? ToWall(ToUtc(us), start.Zone, utc: true) : us.Wall)
             : null;
         var byDay = parts.GetValueOrDefault("BYDAY")?.Split(',').Select(ParseByDay).Where(b => b.HasValue).Select(b => b!.Value).ToList() ?? [];
         var byMonthDay = parts.GetValueOrDefault("BYMONTHDAY")?.Split(',').Select(s => int.TryParse(s, out var d) ? d : 0).Where(d => d != 0).ToList() ?? [];
@@ -150,18 +176,21 @@ public static class IcsParser
     {
         var month = FirstOfMonth(first).AddMonths(months);
         var days = DateTime.DaysInMonth(month.Year, month.Month);
-        var list = new List<DateTime>();
+        var monthDays = new List<DateTime>();
         foreach (var md in byMonthDay)
         {
             var day = md > 0 ? md : days + md + 1;
-            if (day >= 1 && day <= days) list.Add(month.AddDays(day - 1));
+            if (day >= 1 && day <= days) monthDays.Add(month.AddDays(day - 1));
         }
+        var weekDays = new List<DateTime>();
         foreach (var (nth, dow) in byDay)
         {
             var matches = Enumerable.Range(0, days).Select(i => month.AddDays(i)).Where(d => d.DayOfWeek == dow).ToList();
-            if (nth == 0) list.AddRange(matches);
-            else if (Math.Abs(nth) <= matches.Count) list.Add(nth > 0 ? matches[nth - 1] : matches[^-nth]);
+            if (nth == 0) weekDays.AddRange(matches);
+            else if (Math.Abs(nth) <= matches.Count) weekDays.Add(nth > 0 ? matches[nth - 1] : matches[^-nth]);
         }
+        // Both given narrow each other (RFC 5545): BYDAY=FR;BYMONTHDAY=13 is Friday the 13th, not every Friday and every 13th.
+        var list = byMonthDay.Count > 0 && byDay.Count > 0 ? monthDays.Intersect(weekDays).ToList() : [.. monthDays, .. weekDays];
         if (byMonthDay.Count == 0 && byDay.Count == 0 && first.Day <= days) list.Add(month.AddDays(first.Day - 1)); // 31st: skips short months
         return list.Select(d => d.Date + first.TimeOfDay).ToList();
     }
@@ -208,18 +237,20 @@ public static class IcsParser
         return new Stamp(DateTime.SpecifyKind(wall, DateTimeKind.Unspecified), zone, false);
     }
 
-    private static TimeZoneInfo FindZone(string tzid)
+    // Looked up for every stamp of every event; an unknown id (Outlook's "Customized Time Zone") throws each time.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, TimeZoneInfo> Zones = new();
+
+    private static TimeZoneInfo FindZone(string tzid) => Zones.GetOrAdd(tzid.Trim('"'), static id =>
     {
-        tzid = tzid.Trim('"');
         try
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(tzid); // Windows names (Outlook) and IANA ids (Google, iCloud)
+            return TimeZoneInfo.FindSystemTimeZoneById(id); // Windows names (Outlook) and IANA ids (Google, iCloud)
         }
         catch (Exception)
         {
             return TimeZoneInfo.Local;
         }
-    }
+    });
 
     private static DateTime ToUtc(Stamp s)
     {
@@ -272,19 +303,21 @@ public static class IcsParser
     /// <summary>Joins folded lines (a continuation starts with a space or tab).</summary>
     private static IEnumerable<string> Unfold(string ics)
     {
-        string? pending = null;
+        var pending = new System.Text.StringBuilder(); // a long DESCRIPTION folds into hundreds of pieces
+        var has = false;
         foreach (var raw in ics.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
-            if (line.Length > 0 && line[0] is ' ' or '\t' && pending is not null)
+            if (line.Length > 0 && line[0] is ' ' or '\t' && has)
             {
-                pending += line[1..];
+                pending.Append(line, 1, line.Length - 1);
                 continue;
             }
-            if (pending is not null) yield return pending;
-            pending = line;
+            if (has) yield return pending.ToString();
+            pending.Clear().Append(line);
+            has = true;
         }
-        if (pending is not null) yield return pending;
+        if (has) yield return pending.ToString();
     }
 
     /// <summary>NAME;PARAM=x;PARAM="y:z":value → name, params, value (the first ':' outside quotes splits).</summary>
@@ -312,6 +345,22 @@ public static class IcsParser
         return new Prop(head[0].ToUpperInvariant(), ps, line[(colon + 1)..]);
     }
 
-    private static string Unescape(string s) =>
-        s.Replace("\\n", " ").Replace("\\N", " ").Replace("\\,", ",").Replace("\\;", ";").Replace("\\\\", "\\").Trim();
+    /// <summary>One pass, left to right: an escaped backslash followed by "n" ("\\n") stays a backslash and an n.</summary>
+    private static string Unescape(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        for (var i = 0; i < s.Length; i++)
+        {
+            if (s[i] != '\\' || i + 1 == s.Length)
+            {
+                sb.Append(s[i]);
+                continue;
+            }
+            var next = s[++i];
+            if (next is 'n' or 'N') sb.Append(' ');
+            else if (next is ',' or ';' or '\\') sb.Append(next);
+            else sb.Append('\\').Append(next); // not an iCal escape: keep it as written
+        }
+        return sb.ToString().Trim();
+    }
 }

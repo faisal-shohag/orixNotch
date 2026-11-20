@@ -67,6 +67,14 @@
         <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="OrixNotch"
                        Value="&quot;[INSTALLFOLDER]OrixNotch.exe&quot;" Type="string" KeyPath="yes" />
       </Component>
+
+      <!-- orixnotch:// links (the app also writes this at startup; here so uninstall removes it). -->
+      <Component Id="LinkScheme" Directory="INSTALLFOLDER" Bitness="always64">
+        <RegistryValue Root="HKCU" Key="Software\Classes\orixnotch" Value="URL:OrixNotch" Type="string" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\orixnotch" Name="URL Protocol" Value="" Type="string" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\orixnotch\shell\open\command"
+                       Value="&quot;[INSTALLFOLDER]OrixNotch.exe&quot; &quot;%1&quot;" Type="string" />
+      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>

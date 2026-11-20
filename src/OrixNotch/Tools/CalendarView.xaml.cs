@@ -17,13 +17,50 @@ public sealed class CalendarEvent
     public string Title { get; set; } = "";
     /// <summary>Which subscribed calendar this came from (an id, not the secret link; read-only); null for events added here.</summary>
     public string? Feed { get; set; }
+    /// <summary>Online meeting link from a subscribed calendar (Meet, Zoom, Teams, Webex), for the reminder's Join.</summary>
+    public string? Link { get; set; }
 
     [JsonIgnore] public string TimeLabel => string.IsNullOrEmpty(Time) ? "All day" : Time;
     [JsonIgnore] public bool IsSubscribed => Feed is not null;
 
-    /// <summary>Events added here plus those from subscribed calendars.</summary>
-    public static List<CalendarEvent> LoadAll() =>
-        [.. Storage.Load<List<CalendarEvent>>("events.json"), .. Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName)];
+    /// <summary>Events added here plus those from subscribed calendars and AI limit resets.</summary>
+    /// <remarks>Read every few seconds (idle notch, reminders, automations): the files are re-parsed only after they change.
+    /// The events are shared between callers, so treat them as read-only.</remarks>
+    public static List<CalendarEvent> LoadAll() => [.. Cached(FileName, ref _own), .. Cached(CalendarFeedService.FileName, ref _feedCache), .. Generated()];
+
+    private const string FileName = "events.json";
+    private static (DateTime Stamp, List<CalendarEvent> Events)? _own, _feedCache;
+
+    private static List<CalendarEvent> Cached(string name, ref (DateTime Stamp, List<CalendarEvent> Events)? cache)
+    {
+        var stamp = System.IO.File.GetLastWriteTimeUtc(Storage.PathOf(name)); // Storage.Save replaces the file, so a save always moves this
+        if (cache is not { } c || c.Stamp != stamp) cache = (stamp, Storage.Load<List<CalendarEvent>>(name));
+        return cache.Value.Events;
+    }
+
+    /// <summary>Read-only events made from other tools: AI limit resets and subscription renewals.</summary>
+    public static IEnumerable<CalendarEvent> Generated() => AiResets().Concat(SubscriptionService.Instance.Events());
+
+    /// <summary><see cref="Feed"/> of the AI limit resets: read-only, and they never fire a reminder.</summary>
+    public const string AiFeed = "ai";
+
+    /// <summary><see cref="Feed"/> of subscription renewals (all-day, read-only).</summary>
+    public const string SubscriptionFeed = "subs";
+
+    /// <summary>
+    /// When each AI tool's weekly limit resets, from the last usage read (none until the AI limit watcher has read
+    /// usage). Session resets are left out: several a day would bury real events.
+    /// </summary>
+    public static IEnumerable<CalendarEvent> AiResets() =>
+        (AiLimitWatcher.Instance.Latest?.Usage ?? [])
+        .Where(u => u.WeeklyResets > DateTime.Now)
+        .Select(u => new CalendarEvent
+        {
+            Date = u.WeeklyResets!.Value.Date,
+            Time = $"{u.WeeklyResets.Value.Hour:00}:{u.WeeklyResets.Value.Minute:00}",
+            Title = $"{u.Name} weekly limit resets",
+            Feed = AiFeed,
+        });
 }
 
 public partial class CalendarView : UserControl, IToolView, IEscapeHandler
@@ -31,7 +68,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
     private const string FileName = "events.json";
     private readonly List<CalendarEvent> _events = Storage.Load<List<CalendarEvent>>(FileName); // the user's own (editable)
     private List<CalendarEvent> _feed = Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName); // subscribed (read-only)
-    private IEnumerable<CalendarEvent> All => _events.Concat(_feed);
+    private IEnumerable<CalendarEvent> All => _events.Concat(_feed).Concat(CalendarEvent.Generated());
     private DateTime _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime _selected = DateTime.Today;
 
@@ -74,8 +111,8 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             _month = new DateTime(_selected.Year, _selected.Month, 1);
         }
         Render();
-        Rise(MonthCard, 0);
-        Rise(DayPanel, 70);
+        Motion.Rise(MonthCard, 0);
+        Motion.Rise(DayPanel, 70);
     }
 
     public void OnHidden()
@@ -92,7 +129,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             var dow = (DayOfWeek)((first + i) % 7);
             WeekdayRow.Children.Add(new TextBlock
             {
-                Text = culture.AbbreviatedDayNames[(int)dow][..2].ToUpper(CultureInfo.CurrentCulture),
+                Text = culture.ShortestDayNames[(int)dow].ToUpper(CultureInfo.CurrentCulture),
                 Style = (Style)FindResource("SubText"),
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
@@ -118,6 +155,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
         var text = ThemeService.Get("TextBrush");
         var hover = ThemeService.Get("HoverBrush");
         var accentColor = ThemeService.CurrentAccent.Mean;
+        var perDay = All.GroupBy(e => e.Date.Date).ToDictionary(g => g.Key, g => g.Count()); // once, not per cell
 
         for (var i = 0; i < 42; i++)
         {
@@ -126,7 +164,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             var isToday = day.Date == DateTime.Today;
             var inMonth = day.Month == _month.Month;
             var weekend = day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-            var count = All.Count(e => e.Date.Date == day.Date);
+            var count = perDay.GetValueOrDefault(day.Date);
 
             var label = new TextBlock
             {
@@ -146,7 +184,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             {
                 Width = 26,
                 Height = 26,
-                CornerRadius = new CornerRadius(13),
+                CornerRadius = Radii.L,
                 Background = isSelected ? accent : Brushes.Transparent,
                 BorderBrush = isToday && !isSelected ? accent : null,
                 BorderThickness = new Thickness(isToday && !isSelected ? 1.5 : 0),
@@ -253,25 +291,13 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
     /// <summary>New month glides in from the side it comes from.</summary>
     private void SlideMonth(int direction)
     {
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var duration = TimeSpan.FromMilliseconds(240);
+        var ease = Motion.Out;
+        var duration = Motion.Base;
         DaysShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(14 * direction, 0, duration) { EasingFunction = ease });
         DaysHost.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
     }
 
     /// <summary>Fade in and rise a few pixels (same entrance as Home's cards).</summary>
-    private static void Rise(UIElement element, int delayMs)
-    {
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var begin = TimeSpan.FromMilliseconds(delayMs);
-        var duration = TimeSpan.FromMilliseconds(320);
-        element.Opacity = 0;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { BeginTime = begin, EasingFunction = ease });
-        var shift = new TranslateTransform(0, 8);
-        element.RenderTransform = shift;
-        shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, duration) { BeginTime = begin, EasingFunction = ease });
-    }
-
     private void OnInputKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) Add();
@@ -525,7 +551,18 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             time = TimeSpan.FromHours(hour);
             return true;
         }
-        return TimeSpan.TryParse(raw, out time) && time >= TimeSpan.Zero && time < TimeSpan.FromDays(1);
+        if (TimeSpan.TryParse(raw, out time) && time >= TimeSpan.Zero && time < TimeSpan.FromDays(1)) return true;
+        // The list shows 12-hour times on a 12-hour PC: accept them back ("9pm", "9:30 PM").
+        if (DateTime.TryParseExact(raw.Trim(), ["h:mmtt", "h:mm tt", "htt", "h tt"], System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AllowWhiteSpaces, out var at)
+            || DateTime.TryParse(raw, System.Globalization.CultureInfo.CurrentCulture, System.Globalization.DateTimeStyles.NoCurrentDateDefault, out at)
+               && at.Date == DateTime.MinValue.Date) // a time only, not a date that happens to parse
+        {
+            time = at.TimeOfDay;
+            return true;
+        }
+        time = default;
+        return false;
     }
 
     /// <summary>Event markers under the day number: one dot per event, up to three.</summary>

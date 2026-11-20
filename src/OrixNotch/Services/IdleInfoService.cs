@@ -12,7 +12,10 @@ namespace OrixNotch.Services;
 
 /// <summary>One piece of idle-notch information: a glyph (or the avatar) and a short value.</summary>
 /// <param name="Logo">A brand mark drawn instead of <paramref name="Glyph"/> (AI usage).</param>
-public sealed record IdleItem(string Id, AppIcon? Glyph, string Value, string ValueBrush = "TextBrush", bool Avatar = false, BrandLogo? Logo = null);
+/// <param name="Short">A very short value for the side tab (left/right edge): "23°", "4:12", "2.1M", "3". Null: icon only.</param>
+/// <param name="Percent">0–1 for items that are a level (AI usage, battery, CPU): the side tab draws a ring.</param>
+public sealed record IdleItem(string Id, AppIcon? Glyph, string Value, string ValueBrush = "TextBrush", bool Avatar = false, BrandLogo? Logo = null,
+    string? Short = null, double? Percent = null);
 
 /// <summary>
 /// Supplies the closed notch with the items the user picked in Settings → Display → Idle notch,
@@ -24,19 +27,27 @@ public sealed class IdleInfoService
     public static readonly (string Id, string Name)[] Catalog =
     [
         ("clock", "Clock"),
+        ("clock2", "Second clock"),
         ("date", "Date"),
         ("weather", "Weather"),
+        ("sun", "Sunrise & sunset"),
         ("nextEvent", "Next event"),
+        ("timeline", "Day timeline"),
         ("todos", "Open to-dos"),
         ("battery", "Battery"),
         ("cpu", "CPU & memory"),
         ("network", "Network speed"),
         ("stock", "Stock ticker"),
         ("aiUsage", "AI usage"),
+        ("unread", "Unread notifications"),
         ("clipboard", "Clipboard"),
         ("shelf", "Shelf"),
         ("streak", "Focus sessions today"),
+        ("screentime", "Screen time today"),
         ("avatar", "Profile picture"),
+        ("call", "On a call"),
+        ("mic", "Microphone muted"),
+        ("awake", "Keep awake"),
     ];
 
     public static readonly string[] Layouts = ["Rotate", "Split", "Row"];
@@ -58,12 +69,15 @@ public sealed class IdleInfoService
     private long _lastIdle, _lastKernel, _lastUser;
     private double _cpu;
     private long _lastRx = -1;
+    private NetworkInterface[]? _nics;
     private DateTime _lastRxAt;
     private double _rxPerSec;
     private int _openTodos;
     private CalendarEvent? _nextEvent;
     private TimeSpan _nextAt;
     private (AppIcon Icon, string Temp)? _weather;
+    /// <summary>Today's and tomorrow's sunrise / sunset in the Weather city's local time, and its UTC offset.</summary>
+    private (TimeSpan Offset, List<(DateTime At, bool Rise)> Events)? _sun;
     private readonly Dictionary<string, (double Price, double ChangePct)> _quotes = new();
     private int _tickerIndex;
     /// <summary>AI tools that report a usage percentage or local token counts, in AI Usage order.</summary>
@@ -78,14 +92,19 @@ public sealed class IdleInfoService
     private IdleInfoService()
     {
         _tick.Tick += (_, _) => Update();
+        // An adapter came or went: list them again, and restart the rate so the change in total isn't a spike.
+        NetworkChange.NetworkAddressChanged += (_, _) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => (_nics, _lastRx) = (null, -1));
         Reconfigure();
     }
 
-    private static HashSet<string> Selected => App.Settings.IdleItems.ToHashSet();
+    private HashSet<string> _selected = new();
+    private bool _forceChanged;
 
     /// <summary>Call after the selection changes in Settings.</summary>
     public void Reconfigure()
     {
+        _selected = App.Settings.IdleItems.ToHashSet();
+        _forceChanged = true; // layout / format settings change the drawing even when the items don't
         _lastFiles = _lastWeb = _lastAi = DateTime.MinValue; // refetch what's newly selected
         if (App.Settings.IdleItems.Count > 0) _tick.Start();
         else _tick.Stop();
@@ -94,20 +113,20 @@ public sealed class IdleInfoService
 
     private void Update()
     {
-        var sel = Selected;
+        var sel = _selected;
         var now = DateTime.Now;
 
         if (sel.Contains("cpu")) SampleCpu();
         if (sel.Contains("network")) SampleNetwork();
-        if ((sel.Contains("todos") || sel.Contains("nextEvent")) && now - _lastFiles > TimeSpan.FromSeconds(30))
+        if ((sel.Contains("todos") || sel.Contains("nextEvent") || sel.Contains("timeline")) && now - _lastFiles > TimeSpan.FromSeconds(30))
         {
             _lastFiles = now;
             LoadFiles();
         }
-        if ((sel.Contains("weather") || sel.Contains("stock")) && now - _lastWeb > TimeSpan.FromMinutes(10))
+        if ((sel.Contains("weather") || sel.Contains("sun") || sel.Contains("stock")) && now - _lastWeb > TimeSpan.FromMinutes(10))
         {
             _lastWeb = now;
-            if (sel.Contains("weather")) _ = FetchWeatherAsync();
+            if (sel.Contains("weather") || sel.Contains("sun")) _ = FetchWeatherAsync();
             if (sel.Contains("stock")) _ = FetchStocksAsync();
         }
         if (sel.Contains("aiUsage") && now - _lastAi > TimeSpan.FromMinutes(5))
@@ -117,15 +136,31 @@ public sealed class IdleInfoService
         }
         if (sel.Contains("stock") && now.Second % 6 == 0) _tickerIndex++; // cycle tickers
 
-        Items = Catalog.Select(c => c.Id).Where(sel.Contains)
+        var items = Catalog.Select(c => c.Id).Where(sel.Contains)
             .SelectMany(id => id == "aiUsage" ? BuildAi() : [Build(id)])
             .OfType<IdleItem>()
             .ToList();
+        // Most seconds nothing changed: don't make the notch rebuild its idle row for nothing.
+        if (!_forceChanged && items.SequenceEqual(Items)) return;
+        _forceChanged = false;
+        Items = items;
         Changed?.Invoke();
     }
 
-    /// <summary>Forces a refresh of the file-backed items (to-dos / events) on the next tick.</summary>
-    public void InvalidateFiles() => _lastFiles = DateTime.MinValue;
+    /// <summary>
+    /// These items fetched now, whether or not the idle notch shows them (the morning brief). Network data that
+    /// doesn't arrive within a few seconds is left out.
+    /// </summary>
+    public async Task<List<IdleItem>> SnapshotAsync(params string[] ids)
+    {
+        LoadFiles();
+        var fetches = new List<Task>();
+        if (ids.Contains("weather")) fetches.Add(FetchWeatherAsync());
+        if (ids.Contains("stock")) fetches.Add(FetchStocksAsync());
+        if (ids.Contains("aiUsage")) fetches.Add(FetchAiAsync());
+        await Task.WhenAny(Task.WhenAll(fetches), Task.Delay(TimeSpan.FromSeconds(6)));
+        return ids.SelectMany(id => id == "aiUsage" ? BuildAi() : [Build(id)]).OfType<IdleItem>().ToList();
+    }
 
     private IdleItem? Build(string id)
     {
@@ -134,18 +169,47 @@ public sealed class IdleInfoService
         switch (id)
         {
             case "clock":
-                return new IdleItem(id, AppIcon.Clock, now.ToString("t", culture));
+                return new IdleItem(id, AppIcon.Clock, now.ToString("t", culture), Short: ShortTime(now, culture));
+            case "clock2":
+            {
+                if (App.Settings.SecondClockZone.Length == 0) return null;
+                TimeZoneInfo zone;
+                try
+                {
+                    zone = TimeZoneInfo.FindSystemTimeZoneById(App.Settings.SecondClockZone);
+                }
+                catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+                {
+                    return null;
+                }
+                var city = SettingsService.CityFromTimeZone(zone.Id, RegionInfo.CurrentRegion.TwoLetterISORegionName) ?? zone.StandardName;
+                var there = TimeZoneInfo.ConvertTime(now, zone);
+                return new IdleItem(id, AppIcon.Globe, $"{city} {there.ToString("t", culture)}", Short: ShortTime(there, culture));
+            }
+            case "sun":
+            {
+                if (_sun is not { } sun) return null;
+                var cityNow = DateTime.UtcNow + sun.Offset; // the times are the Weather city's own local times
+                var next = sun.Events.Where(e => e.At > cityNow).OrderBy(e => e.At).FirstOrDefault();
+                return next.At == default ? null
+                    : new IdleItem(id, next.Rise ? AppIcon.Sun : AppIcon.Moon, $"{(next.Rise ? "Sunrise" : "Sunset")} {next.At.ToString("t", culture)}",
+                        Short: ShortTime(next.At, culture));
+            }
             case "date":
-                return new IdleItem(id, AppIcon.CalendarDays, now.ToString("ddd, MMM d", culture));
+                return new IdleItem(id, AppIcon.CalendarDays, now.ToString("ddd, MMM d", culture), Short: now.Day.ToString(culture));
             case "weather":
-                return _weather is { } w ? new IdleItem(id, w.Icon, w.Temp) : null;
+                return _weather is { } w ? new IdleItem(id, w.Icon, w.Temp, Short: w.Temp) : null;
             case "nextEvent":
                 return _nextEvent is { } e
-                    ? new IdleItem(id, AppIcon.CalendarDays, $"{e.Title} {(DateTime.Today + _nextAt).ToString("t", culture)}")
+                    ? new IdleItem(id, AppIcon.CalendarDays, $"{e.Title} {(DateTime.Today + _nextAt).ToString("t", culture)}",
+                        Short: ShortTime(DateTime.Today + _nextAt, culture))
                     : new IdleItem(id, AppIcon.CalendarDays, "No more events", "SubTextBrush");
+            case "timeline":
+                // Drawn by NotchWindow (DayTimeline); the value only sizes the notch.
+                return new IdleItem(id, AppIcon.Sun, "");
             case "todos":
-                return new IdleItem(id, AppIcon.ListBullet, _openTodos == 0 ? "All done" : $"{_openTodos} open",
-                    _openTodos == 0 ? "SubTextBrush" : "TextBrush");
+                return new IdleItem(id, AppIcon.ListBullet, _openTodos == 0 ? "All done" : $"{_openTodos} open", Short: _openTodos.ToString(culture),
+                    ValueBrush: _openTodos == 0 ? "SubTextBrush" : "TextBrush");
             case "battery":
             {
                 var ps = Forms.SystemInformation.PowerStatus;
@@ -153,16 +217,16 @@ public sealed class IdleInfoService
                 var pct = (int)Math.Round(ps.BatteryLifePercent * 100);
                 var charging = ps.PowerLineStatus == Forms.PowerLineStatus.Online;
                 return new IdleItem(id, charging ? AppIcon.Bolt : AppIcon.BatteryFull, $"{pct}%",
-                    charging ? "GoodBrush" : pct < 20 ? "AccentBrush" : "TextBrush");
+                    charging ? "GoodBrush" : pct < 20 ? "BadBrush" : "TextBrush", Short: $"{pct}", Percent: pct / 100.0);
             }
             case "cpu":
             {
                 var mem = new Win32.MEMORYSTATUSEX { dwLength = (uint)System.Runtime.InteropServices.Marshal.SizeOf<Win32.MEMORYSTATUSEX>() };
                 var ram = Win32.GlobalMemoryStatusEx(ref mem) ? mem.dwMemoryLoad : 0;
-                return new IdleItem(id, AppIcon.Cpu, $"{_cpu:0}% · {ram}%");
+                return new IdleItem(id, AppIcon.Cpu, $"{_cpu:0}% · {ram}%", Short: $"{_cpu:0}", Percent: _cpu / 100);
             }
             case "network":
-                return new IdleItem(id, AppIcon.ArrowDown, Rate(_rxPerSec));
+                return new IdleItem(id, AppIcon.ArrowDown, Rate(_rxPerSec), Short: ShortRate(_rxPerSec));
             case "stock":
             {
                 var tickers = App.Settings.StockTickers.Where(_quotes.ContainsKey).ToList();
@@ -172,19 +236,34 @@ public sealed class IdleInfoService
                 var arrow = change >= 0 ? "▲" : "▼";
                 return new IdleItem(id, AppIcon.ChartBar,
                     $"{t} {price.ToString(price >= 1000 ? "0" : "0.00", culture)} {arrow}{Math.Abs(change):0.0}%",
-                    change >= 0 ? "GoodBrush" : "BadBrush");
+                    change >= 0 ? "GoodBrush" : "BadBrush", Short: $"{arrow}{Math.Abs(change):0.0}");
             }
+            case "screentime":
+                if (!ScreenTimeService.Instance.Enabled) return null;
+                var screen = ScreenTimeService.Instance.Total(DateTime.Today);
+                return new IdleItem(id, AppIcon.Hourglass, ScreenTimeService.Format(screen), Short: ShortDuration(screen));
+            case "unread":
+                var unread = NotificationHistory.Instance.Unread;
+                return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new", Short: unread.ToString(culture));
             case "clipboard":
                 var clips = ClipboardService.Instance.Items.Count;
-                return new IdleItem(id, AppIcon.ClipboardList, clips == 1 ? "1 clip" : $"{clips} clips");
+                return new IdleItem(id, AppIcon.ClipboardList, clips == 1 ? "1 clip" : $"{clips} clips", Short: clips.ToString(culture));
             case "shelf":
                 var files = ShelfService.Instance.Items.Count;
-                return files == 0 ? null : new IdleItem(id, AppIcon.ArchiveBox, files == 1 ? "1 file" : $"{files} files");
+                return files == 0 ? null : new IdleItem(id, AppIcon.ArchiveBox, files == 1 ? "1 file" : $"{files} files", Short: files.ToString(culture));
             case "streak":
+                PomodoroService.Instance.SyncDay();
                 var done = PomodoroService.Instance.Completed;
-                return new IdleItem(id, AppIcon.Fire, done == 1 ? "1 today" : $"{done} today");
+                return new IdleItem(id, AppIcon.Fire, done == 1 ? "1 today" : $"{done} today", Short: done.ToString(culture));
             case "avatar":
                 return new IdleItem(id, null, ProfileService.FirstName, Avatar: true);
+            // Shown only while on, so the closed notch says when you're muted or kept awake.
+            case "call":
+                return NotchWindow.InCall ? new IdleItem(id, AppIcon.Microphone, "On a call", "BadBrush") : null;
+            case "mic":
+                return VolumeService.Instance.MicMuted ? new IdleItem(id, AppIcon.MicrophoneOff, "Muted", "BadBrush") : null;
+            case "awake":
+                return KeepAwakeService.On ? new IdleItem(id, AppIcon.Coffee, "Awake") : null;
         }
         return null;
     }
@@ -200,7 +279,8 @@ public sealed class IdleInfoService
         // (OpenCode) show today's tokens instead of "N%".
         static IdleItem Item(string id, (string Id, string Name, BrandLogo Logo, double? Percent, long TodayTokens) t) =>
             new(id, AppIcon.Sparkles, t.Percent is { } p ? $"{p:0}%" : CompactTokens(t.TodayTokens),
-                t.Percent >= 80 ? "AccentBrush" : "TextBrush", Logo: t.Logo);
+                t.Percent >= 80 ? "BadBrush" : "TextBrush", Logo: t.Logo,
+                Short: t.Percent is { } sp ? $"{sp:0}" : CompactTokens(t.TodayTokens), Percent: t.Percent / 100);
 
         if (_ai.Count == 0) return [];
         if (App.Settings.IdleAiMode != "Choose")
@@ -222,7 +302,23 @@ public sealed class IdleInfoService
         _ => $"{n}",
     };
 
-    private static string Rate(double bytesPerSec) => bytesPerSec switch
+    /// <summary>A time without AM/PM, for the narrow side tab: "4:12".</summary>
+    private static string ShortTime(DateTime time, CultureInfo culture) =>
+        time.ToString(culture.DateTimeFormat.ShortTimePattern.Replace("tt", "").Replace("t", "").Trim(), culture);
+
+    /// <summary>"2.1M", "512K", "0K": a download speed in four characters.</summary>
+    private static string ShortRate(double bytesPerSec) => bytesPerSec switch
+    {
+        >= 10 * 1024 * 1024 => $"{bytesPerSec / 1024 / 1024:0}M",
+        >= 1000 * 1024 => $"{bytesPerSec / 1024 / 1024:0.0}M",
+        _ => $"{bytesPerSec / 1024:0}K",
+    };
+
+    /// <summary>"2h", "45m": a day's screen time in three characters.</summary>
+    private static string ShortDuration(int seconds) => seconds >= 3600 ? $"{seconds / 3600}h" : $"{seconds / 60}m";
+
+    /// <summary>"340 KB/s", "2.4 MB/s": the idle notch and the System tool.</summary>
+    internal static string Rate(double bytesPerSec) => bytesPerSec switch
     {
         >= 100 * 1024 * 1024 => $"{bytesPerSec / 1024 / 1024:0} MB/s",
         >= 1000 * 1024 => $"{bytesPerSec / 1024 / 1024:0.0} MB/s",
@@ -247,10 +343,12 @@ public sealed class IdleInfoService
         long rx = 0;
         try
         {
-            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            // Listing the adapters each second is costly; only re-list after Windows reports an address change.
+            _nics ??= NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)).ToArray();
+            foreach (var nic in _nics)
             {
-                if (nic.OperationalStatus != OperationalStatus.Up ||
-                    nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel) continue;
+                if (nic.OperationalStatus != OperationalStatus.Up) continue;
                 rx += nic.GetIPv4Statistics().BytesReceived;
             }
         }
@@ -273,35 +371,41 @@ public sealed class IdleInfoService
         _openTodos = Storage.Load<List<TodoItem>>("todos.json").Count(t => !t.Done);
         var now = DateTime.Now.TimeOfDay;
         _nextEvent = null;
-        foreach (var e in CalendarEvent.LoadAll()
-                     .Where(e => e.Date.Date == DateTime.Today)
-                     .OrderBy(e => e.Time))
+        var times = new List<TimeSpan>();
+        foreach (var e in CalendarEvent.LoadAll().Where(e => e.Date.Date == DateTime.Today))
         {
-            if (CalendarView.TryParseTime(e.Time, out var t) && t >= now)
+            if (!CalendarView.TryParseTime(e.Time, out var t)) continue; // all-day events have no place on the line
+            times.Add(t);
+            if (t >= now && (_nextEvent is null || t < _nextAt))
             {
                 _nextEvent = e;
                 _nextAt = t;
-                break;
             }
         }
+        TodayEvents = times;
     }
+
+    /// <summary>Start times of today's timed events (Day timeline).</summary>
+    public IReadOnlyList<TimeSpan> TodayEvents { get; private set; } = [];
 
     private async Task FetchWeatherAsync()
     {
         try
         {
-            var city = App.Settings.WeatherCity;
-            using var geo = JsonDocument.Parse(await Http.Client.GetStringAsync(
-                $"https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name={Uri.EscapeDataString(city)}"));
-            if (!geo.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0) return;
-            var lat = results[0].GetProperty("latitude").GetDouble();
-            var lon = results[0].GetProperty("longitude").GetDouble();
+            if (await OpenMeteo.FindAsync(App.Settings.WeatherCity) is not { } place) return;
+            var (lat, lon) = (place.Lat, place.Lon);
             var unit = App.Settings.UseFahrenheit ? "&temperature_unit=fahrenheit" : "";
             using var doc = JsonDocument.Parse(await Http.Client.GetStringAsync(FormattableString.Invariant(
-                $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,is_day&timezone=auto{unit}")));
+                $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&forecast_days=2&timezone=auto{unit}")));
             var cur = doc.RootElement.GetProperty("current");
             _weather = (WeatherIcon(cur.GetProperty("weather_code").GetInt32(), cur.GetProperty("is_day").GetInt32() == 1),
                 $"{Math.Round(cur.GetProperty("temperature_2m").GetDouble()):0}°");
+            var daily = doc.RootElement.GetProperty("daily");
+            var events = new List<(DateTime At, bool Rise)>();
+            foreach (var (key, rise) in new[] { ("sunrise", true), ("sunset", false) })
+                foreach (var t in daily.GetProperty(key).EnumerateArray())
+                    if (DateTime.TryParse(t.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)) events.Add((at, rise));
+            _sun = (TimeSpan.FromSeconds(doc.RootElement.GetProperty("utc_offset_seconds").GetInt32()), events);
         }
         catch
         {

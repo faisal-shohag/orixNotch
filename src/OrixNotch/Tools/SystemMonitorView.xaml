@@ -3,103 +3,135 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:hero="clr-namespace:OrixNotch.Shell">
     <UserControl.Resources>
-        <Style x:Key="Big" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="20" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,4,0,1" />
-            <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+        <!-- A card: tinted icon tile + caps label (+ a quiet detail on the right), a middle line, a glowing bar. -->
+        <Style x:Key="MiniCard" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="11,9,11,10" />
+            <Setter Property="Margin" Value="3" />
         </Style>
-        <Style x:Key="LabelIcon" TargetType="hero:HeroIcon">
+        <Style x:Key="Tile" TargetType="Border">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Margin" Value="0,0,7,0" />
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="TileIcon" TargetType="hero:HeroIcon">
             <Setter Property="Width" Value="12" />
             <Setter Property="Height" Value="12" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
-            <Setter Property="Margin" Value="0,0,5,0" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
         </Style>
-        <Style x:Key="MiniCard" TargetType="Border" BasedOn="{StaticResource Card}">
-            <Setter Property="Padding" Value="10,8" />
-            <Setter Property="Margin" Value="3" />
+        <Style x:Key="Detail" TargetType="TextBlock" BasedOn="{StaticResource SubText}">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+        <Style x:Key="Mid" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
     </UserControl.Resources>
 
     <UniformGrid Columns="3" Rows="2" Margin="-3">
+        <!-- CPU: load history as a line, the current load on the bar -->
         <Border Style="{StaticResource MiniCard}">
-            <Grid>
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <hero:HeroIcon Kind="Cpu" Style="{StaticResource LabelIcon}" />
-                        <TextBlock Text="CPU" Style="{StaticResource Caps}" />
-                    </StackPanel>
-                    <TextBlock x:Name="CpuText" Style="{StaticResource Big}" Text="–" />
-                    <TextBlock x:Name="CpuSub" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" />
-                </StackPanel>
-                <Polyline x:Name="CpuGraph" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.4"
-                          VerticalAlignment="Bottom" Height="26" StrokeLineJoin="Round" Opacity="0.9" />
-            </Grid>
+            <DockPanel LastChildFill="True">
+                <Grid DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Tile}"><hero:HeroIcon Kind="Cpu" Style="{StaticResource TileIcon}" /></Border>
+                    <TextBlock Grid.Column="1" Text="CPU" Style="{StaticResource Caps}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="CpuSub" Grid.Column="2" Style="{StaticResource Detail}" />
+                </Grid>
+                <hero:GlowBar x:Name="CpuBar" DockPanel.Dock="Bottom" Margin="0,4,0,0" />
+                <hero:LineChart x:Name="CpuGraph" Stroke="{DynamicResource AccentBrush}" Maximum="100" Capacity="60" Margin="0,6,0,2" />
+            </DockPanel>
         </Border>
 
         <Border Style="{StaticResource MiniCard}">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <hero:HeroIcon Kind="Memory" Style="{StaticResource LabelIcon}" />
-                    <TextBlock Text="MEMORY" Style="{StaticResource Caps}" />
+            <DockPanel>
+                <Grid DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Tile}"><hero:HeroIcon Kind="Memory" Style="{StaticResource TileIcon}" /></Border>
+                    <TextBlock Grid.Column="1" Text="MEMORY" Style="{StaticResource Caps}" VerticalAlignment="Center" />
+                </Grid>
+                <hero:GlowBar x:Name="MemBar" DockPanel.Dock="Bottom" Margin="0,4,0,0" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="MemText" Style="{StaticResource Mid}" Text="–" />
+                    <TextBlock x:Name="MemSub" Style="{StaticResource SubText}" FontSize="11" FontWeight="Normal" Text="in use" />
                 </StackPanel>
-                <TextBlock x:Name="MemText" Style="{StaticResource Big}" Text="–" />
-                <TextBlock x:Name="MemSub" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" />
-                <ProgressBar x:Name="MemBar" Maximum="100" Margin="0,8,0,0" />
-            </StackPanel>
+            </DockPanel>
         </Border>
 
         <Border Style="{StaticResource MiniCard}">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <hero:HeroIcon Kind="Drive" Style="{StaticResource LabelIcon}" />
-                    <TextBlock x:Name="DiskLabel" Text="DISK" Style="{StaticResource Caps}" />
+            <DockPanel>
+                <Grid DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Tile}"><hero:HeroIcon Kind="Drive" Style="{StaticResource TileIcon}" /></Border>
+                    <TextBlock x:Name="DiskLabel" Grid.Column="1" Text="DISK" Style="{StaticResource Caps}" VerticalAlignment="Center" />
+                </Grid>
+                <hero:GlowBar x:Name="DiskBar" DockPanel.Dock="Bottom" Margin="0,4,0,0" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="DiskText" Style="{StaticResource Mid}" Text="–" />
+                    <TextBlock x:Name="DiskSub" Style="{StaticResource SubText}" FontSize="11" FontWeight="Normal" />
                 </StackPanel>
-                <TextBlock x:Name="DiskText" Style="{StaticResource Big}" Text="–" />
-                <TextBlock x:Name="DiskSub" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" />
-                <ProgressBar x:Name="DiskBar" Maximum="100" Margin="0,8,0,0" />
-            </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Network: down and up, each with its last half-minute as a line -->
+        <Border Style="{StaticResource MiniCard}">
+            <DockPanel>
+                <Grid DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Tile}"><hero:HeroIcon Kind="Wifi" Style="{StaticResource TileIcon}" /></Border>
+                    <TextBlock Grid.Column="1" Text="NETWORK" Style="{StaticResource Caps}" VerticalAlignment="Center" />
+                </Grid>
+                <Grid Margin="0,6,0,0" VerticalAlignment="Center">
+                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="78" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <hero:HeroIcon Kind="ArrowDown" Width="12" Height="12" Foreground="{DynamicResource GoodBrush}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="DownText" Grid.Column="1" FontSize="13" FontWeight="SemiBold" Margin="5,0,0,0" Text="–" Typography.NumeralAlignment="Tabular" VerticalAlignment="Center" />
+                    <hero:LineChart x:Name="DownGraph" Grid.Column="2" Height="18" Capacity="30" Stroke="{DynamicResource GoodBrush}" Margin="4,2,0,2" />
+                    <hero:HeroIcon Grid.Row="1" Kind="ArrowUp" Width="12" Height="12" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="UpText" Grid.Row="1" Grid.Column="1" FontSize="13" FontWeight="SemiBold" Margin="5,0,0,0" Text="–" Typography.NumeralAlignment="Tabular" VerticalAlignment="Center" />
+                    <hero:LineChart x:Name="UpGraph" Grid.Row="1" Grid.Column="2" Height="18" Capacity="30" Stroke="{DynamicResource AccentBrush}" Margin="4,2,0,2" />
+                </Grid>
+            </DockPanel>
         </Border>
 
         <Border Style="{StaticResource MiniCard}">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <hero:HeroIcon Kind="Wifi" Style="{StaticResource LabelIcon}" />
-                    <TextBlock Text="NETWORK" Style="{StaticResource Caps}" />
+            <DockPanel>
+                <Grid DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Border x:Name="BatteryTile" Style="{StaticResource Tile}"><hero:HeroIcon x:Name="BatteryIcon" Kind="BatteryFull" Style="{StaticResource TileIcon}" /></Border>
+                    <TextBlock Grid.Column="1" Text="BATTERY" Style="{StaticResource Caps}" VerticalAlignment="Center" />
+                </Grid>
+                <hero:GlowBar x:Name="BatteryBar" DockPanel.Dock="Bottom" Margin="0,4,0,0" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="BatteryText" Style="{StaticResource Mid}" Text="–" />
+                    <TextBlock x:Name="BatterySub" Style="{StaticResource SubText}" FontSize="11" FontWeight="Normal" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                    <hero:HeroIcon Kind="ArrowDown" Width="13" Height="13" Foreground="{DynamicResource GoodBrush}" VerticalAlignment="Center" />
-                    <TextBlock x:Name="DownText" FontSize="14" FontWeight="SemiBold" Margin="5,0,0,0" Text="–" Typography.NumeralAlignment="Tabular" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                    <hero:HeroIcon Kind="ArrowUp" Width="13" Height="13" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
-                    <TextBlock x:Name="UpText" FontSize="14" FontWeight="SemiBold" Margin="5,0,0,0" Text="–" Typography.NumeralAlignment="Tabular" />
-                </StackPanel>
-            </StackPanel>
+            </DockPanel>
         </Border>
 
+        <!-- The busiest apps by CPU; click one to end it (asks first). -->
         <Border Style="{StaticResource MiniCard}">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <hero:HeroIcon x:Name="BatteryIcon" Kind="BatteryFull" Style="{StaticResource LabelIcon}" />
-                    <TextBlock Text="BATTERY" Style="{StaticResource Caps}" />
-                </StackPanel>
-                <TextBlock x:Name="BatteryText" Style="{StaticResource Big}" Text="–" />
-                <TextBlock x:Name="BatterySub" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" />
-                <ProgressBar x:Name="BatteryBar" Maximum="100" Margin="0,8,0,0" Foreground="{DynamicResource AccentBrush}" />
-            </StackPanel>
-        </Border>
-
-        <Border Style="{StaticResource MiniCard}">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <hero:HeroIcon Kind="Clock" Style="{StaticResource LabelIcon}" />
-                    <TextBlock Text="UPTIME" Style="{StaticResource Caps}" />
-                </StackPanel>
-                <TextBlock x:Name="UptimeText" Style="{StaticResource Big}" Text="–" />
-                <TextBlock x:Name="MachineText" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" TextTrimming="CharacterEllipsis" />
-            </StackPanel>
+            <DockPanel>
+                <Grid DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Tile}"><hero:HeroIcon Kind="Fire" Style="{StaticResource TileIcon}" /></Border>
+                    <TextBlock Grid.Column="1" Text="TOP APPS" Style="{StaticResource Caps}" VerticalAlignment="Center" />
+                </Grid>
+                <!-- Rows are placed by code and glide between positions (fixed height: three rows). -->
+                <Grid x:Name="TopApps" Margin="0,5,0,0" Height="66" VerticalAlignment="Center" ClipToBounds="True" />
+            </DockPanel>
         </Border>
     </UniformGrid>
 </UserControl>

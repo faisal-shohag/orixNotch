@@ -31,6 +31,7 @@ public sealed class AppSettings
     public bool VolumeHud { get; set; }            // off: Windows shows its own volume flyout too
     public bool BluetoothAlerts { get; set; } = true;
     public bool DownloadAlerts { get; set; } = true;
+    public bool ScreenshotAlerts { get; set; } = true;
     public bool TrackPeek { get; set; }            // a short alert with the new song when the track changes
     /// <summary>The closed notch dodges a pointer coming from its sides (it can be caught from below).</summary>
     public bool RepelCursor { get; set; } = true;
@@ -70,6 +71,43 @@ public sealed class AppSettings
     public List<string> NotifyMutedApps { get; set; } = new();  // app ids (AUMIDs)
     public List<string> NotifySeenApps { get; set; } = new();   // "aumid|display name", newest first
     public bool NotifyKeepHistory { get; set; } = true;         // save them for the Notifications tool
+    public DateTime NotifyReadAt { get; set; } = DateTime.Now;  // newer ones are "unread" (tab badge, idle item)
+
+    // Automations (Settings › Automations)
+    public bool AutoPauseMusic { get; set; }
+    public int AutoPauseLeadMin { get; set; } = 1;
+    public bool AutoJoinLink { get; set; } = true;       // a meeting reminder with a link opens the meeting on click
+    public bool AutoQuietOnMic { get; set; }             // quiet while the microphone is in use (calls)
+    public List<string> BreakReminders { get; set; } = new(); // BreakService kinds switched on: "eyes", "stand", "water"
+    public bool FocusQuiet { get; set; } = true;        // alerts wait (then one summary) while a focus session runs
+    public bool AutoFocusEvents { get; set; }            // an event called "Focus" starts a focus session
+    public bool SubscriptionAlerts { get; set; } = true; // 2 days before a subscription renews
+    public bool MorningBrief { get; set; }               // the first unlock of the day opens a short brief
+    public string? BriefShown { get; set; }              // yyyy-MM-dd of the last brief
+    public bool ContextTools { get; set; }               // opening the notch shows the tool matched to the app in front
+    public Dictionary<string, string> AppTools { get; set; } = new() // process name (lowercase, no .exe) → tool id
+    {
+        ["code"] = "aiusage",
+        ["obs64"] = "teleprompter",
+        ["spotify"] = "nowplaying",
+    };
+    public bool PeekApiEnabled { get; set; }             // POST 127.0.0.1:PeekApiPort/peek (PeekApiService)
+    public int PeekApiPort { get; set; } = 53340;
+
+    // Screen Time: off until turned on in the tool; kept only on this PC
+    public bool ScreenTimeEnabled { get; set; }
+    public bool ScreenTimeSummary { get; set; } = true;  // an evening alert with the day's total
+    public int ScreenTimeSummaryHour { get; set; } = 21;
+    public string? ScreenTimeSummaryShown { get; set; }   // yyyy-MM-dd of the last summary alert
+    public Dictionary<string, int> ScreenTimeGoals { get; set; } = new(); // app (process name) → daily minutes
+    public List<string> ScreenTimeGoalsHit { get; set; } = new();         // "yyyy-MM-dd|app" already alerted
+
+    // Quiet hours: alerts are counted instead of shown, then summed up in one alert when quiet ends
+    public bool QuietEnabled { get; set; }
+    public string QuietFrom { get; set; } = "22:00";
+    public string QuietTo { get; set; } = "07:00";
+    public bool QuietLetRemindersThrough { get; set; } = true;
+    public DateTime? QuietUntil { get; set; }        // tray "Quiet for 1 hour"
 
     // AI tools nearing their session / weekly limit peek out of the closed notch
     public bool AiLimitAlerts { get; set; } = true;
@@ -77,22 +115,41 @@ public sealed class AppSettings
 
     // Idle closed notch: what to show when nothing is live
     public List<string> IdleItems { get; set; } = new() { "clock" };
-    public string IdleLayout { get; set; } = "Rotate"; // Rotate | Split | Row
+    public string IdleLayout { get; set; } = "Row"; // Rotate | Split | Row
     public int IdleRotateSec { get; set; } = 8;
     /// <summary>"Auto" = the AI tool closest to its limit; "Choose" = the tools in <see cref="IdleAiTools"/>.</summary>
     public string IdleAiMode { get; set; } = "Auto";
     public List<string> IdleAiTools { get; set; } = new();
+    public string ClockStyle { get; set; } = "Plain";   // "Plain" | "Flip" (idle Clock item)
+    public string SecondClockZone { get; set; } = "";   // Windows time zone id for the "Second clock" idle item
 
     public string LastTool { get; set; } = "home";
 
     /// <summary>Look for a newer version (Microsoft Store or GitHub releases) and say so once per version.</summary>
     public bool CheckForUpdates { get; set; } = true;
     public string? UpdateNotified { get; set; }
+    public string? LastSeenVersion { get; set; }    // the "Updated to …" alert shows once per version
+    public List<string> SeenNew { get; set; } = new(); // "page|row title" whose "New" chip has been seen
 
-    public string ThemeScheme { get; set; } = "midnight";
+    public string ThemeScheme { get; set; } = "system"; // new installs follow Windows (Coral / Coral Light); saved values win
     public string ThemeAccent { get; set; } = "auto"; // "auto" = the scheme's own accent
+    public bool Celebrations { get; set; } = true;  // confetti on an empty to-do list, focus streaks, birthdays
+    public List<string> Celebrated { get; set; } = new(); // "yyyy-MM-dd|what" already celebrated
+    public bool NotchGlow { get; set; } = true;     // a soft glow around the closed notch: music, focus, calls
+    public bool ReactivePill { get; set; } = true;   // the closed notch's music bars follow the sound (not on battery saver)
+    public bool AlbumAccent { get; set; }             // while music plays, the accent follows the cover
     public bool Glass { get; set; }                    // see-through, tinted notch with a glass sheen
     public double GlassStrength { get; set; } = 0.6;   // 0 = nearly clear, 1 = nearly opaque tint
+    public bool GlassWallpaperTint { get; set; }       // the glass takes on the wallpaper's colour
+
+    /// <summary>"Notch" (ears into the edge), "Tab" (attached, no ears), "Island" (floating capsule), "Pill" (slim floating capsule).</summary>
+    public string NotchShape { get; set; } = "Island";
+
+    /// <summary>"Top", "Bottom", "Left" or "Right": the screen edge the notch sits on.</summary>
+    public string NotchEdge { get; set; } = "Top";
+
+    /// <summary>How a chased notch turns a screen corner: "Tuck" (into a corner piece) or "Bend" (an L around it).</summary>
+    public string CornerStyle { get; set; } = "Tuck";
 
     /// <summary>Small, Default, Large or ExtraLarge — size of the closed notch.</summary>
     public string NotchSize { get; set; } = "Default";
@@ -183,7 +240,28 @@ public static class SettingsService
 
     public static void Save(bool notify = true)
     {
+        _saveDelay?.Stop(); // covers a pending SaveSoon
         Storage.Save(FileName, Current);
         if (notify) Changed?.Invoke();
+    }
+
+    private static System.Windows.Threading.DispatcherTimer? _saveDelay;
+
+    /// <summary>For values that change continuously (a slider being dragged): one write once it settles. <see cref="Flush"/> at exit.</summary>
+    public static void SaveSoon()
+    {
+        if (_saveDelay is null)
+        {
+            _saveDelay = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+            _saveDelay.Tick += (_, _) => Save(notify: false);
+        }
+        _saveDelay.Stop();
+        _saveDelay.Start();
+    }
+
+    /// <summary>Writes a pending <see cref="SaveSoon"/> now.</summary>
+    public static void Flush()
+    {
+        if (_saveDelay is { IsEnabled: true }) Save(notify: false);
     }
 }

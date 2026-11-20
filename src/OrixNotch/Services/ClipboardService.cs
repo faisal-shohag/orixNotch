@@ -109,6 +109,7 @@ public sealed class ClipItem
 public sealed class ClipboardService
 {
     private const string FileName = "clipboard.json";
+    private const int MaxText = 1_000_000;
 
     // Formats password managers and other apps set to opt out of clipboard monitoring.
     private const string ExcludeFormat = "ExcludeClipboardContentFromMonitorProcessing";
@@ -124,6 +125,27 @@ public sealed class ClipboardService
     private ClipboardService()
     {
         Items = new ObservableCollection<ClipItem>(Storage.Load<List<ClipItem>>(FileName));
+        DeleteOrphanImages();
+    }
+
+    /// <summary>
+    /// Images saved just before a crash (or whose item was trimmed while the save failed) aren't in the history:
+    /// remove them. Skipped when the history is empty, which is also what an unreadable history file loads as.
+    /// </summary>
+    private void DeleteOrphanImages()
+    {
+        if (Items.Count == 0) return;
+        try
+        {
+            // By file name: a data folder that was moved keeps the old absolute paths in the history.
+            var kept = Items.Where(i => i.ImagePath is not null).Select(i => Path.GetFileName(i.ImagePath!)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in Directory.EnumerateFiles(Storage.Dir("clipboard"), "*.png"))
+                if (!kept.Contains(Path.GetFileName(file))) File.Delete(file);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            App.Log(ex);
+        }
     }
 
     public void Attach(IntPtr hwnd) => Win32.AddClipboardFormatListener(hwnd);
@@ -170,6 +192,8 @@ public sealed class ClipboardService
         else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
+            // A copied log or dump would sit in memory and be rewritten to disk on every later copy.
+            if (text.Length > MaxText) return;
             var trimmed = text.Trim();
             var isLink = !trimmed.Contains(' ') && Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
                          (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
@@ -180,12 +204,7 @@ public sealed class ClipboardService
             var image = Clipboard.GetImage();
             if (image is null) return;
             var path = Path.Combine(Storage.Dir("clipboard"), $"{Guid.NewGuid():N}.png");
-            using (var fs = File.Create(path))
-            {
-                var encoder = new PngBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(image));
-                encoder.Save(fs);
-            }
+            Storage.SavePng(image, path);
             item = new ClipItem { Kind = ClipKind.Image, ImagePath = path };
         }
 
@@ -198,6 +217,28 @@ public sealed class ClipboardService
 
         Items.Insert(0, item);
         Trim();
+        SaveSoon();
+    }
+
+    private DispatcherTimer? _saveDelay;
+
+    /// <summary>Copies come in bursts: write the history once things settle, not on every copy. <see cref="Flush"/> at exit.</summary>
+    private void SaveSoon()
+    {
+        if (_saveDelay is null)
+        {
+            _saveDelay = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _saveDelay.Tick += (_, _) => Flush();
+        }
+        _saveDelay.Stop();
+        _saveDelay.Start();
+    }
+
+    /// <summary>Writes a pending history save now.</summary>
+    public void Flush()
+    {
+        if (_saveDelay is not { IsEnabled: true }) return;
+        _saveDelay.Stop();
         Save();
     }
 
@@ -261,6 +302,9 @@ public sealed class ClipboardService
         Save();
     }
 
+    /// <summary>Skips history for a moment: a copy OrixNotch makes on your behalf (Explain selected text).</summary>
+    public void IgnoreFor(TimeSpan time) => _ignoreUntil = DateTime.Now + time;
+
     /// <summary>Copies text without recording it in history (used by Emoji, Converter, …).</summary>
     public void CopyQuiet(string text)
     {
@@ -312,5 +356,9 @@ public sealed class ClipboardService
         }
     }
 
-    private void Save() => Storage.Save(FileName, Items.ToList());
+    private void Save()
+    {
+        _saveDelay?.Stop(); // this save covers any pending one
+        Storage.Save(FileName, Items.ToList());
+    }
 }

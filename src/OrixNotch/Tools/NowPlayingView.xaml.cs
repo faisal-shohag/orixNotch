@@ -24,6 +24,7 @@ public partial class NowPlayingView : UserControl, IToolView
         InitializeComponent();
         _timer.Tick += (_, _) => Tick();
         Service.PropertyChanged += OnServiceChanged;
+        ThemeService.Changed += UpdateTint; // the tint is mixed with the theme's surface: redo it for a new theme
         UpdatePlayGlyph();
     }
 
@@ -117,7 +118,7 @@ public partial class NowPlayingView : UserControl, IToolView
         {
             var tb = (TextBlock)LyricsLines.Children[i];
             var target = i == index ? 1.0 : Math.Abs(i - index) == 1 ? 0.5 : 0.3;
-            tb.BeginAnimation(OpacityProperty, new DoubleAnimation(target, TimeSpan.FromMilliseconds(250)));
+            tb.BeginAnimation(OpacityProperty, new DoubleAnimation(target, Motion.Base));
         }
         if (index < 0) return;
 
@@ -128,19 +129,26 @@ public partial class NowPlayingView : UserControl, IToolView
         AnimateScroll(offset);
     }
 
+    // One glide at a time: a new line restarts it from where the scroll is now (a timer per line made them fight).
+    private readonly DispatcherTimer _glide = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    private double _glideFrom, _glideTo;
+    private long _glideStart;
+
     private void AnimateScroll(double to)
     {
-        var from = LyricsScroll.VerticalOffset;
-        var start = DateTime.Now;
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        timer.Tick += (_, _) =>
-        {
-            var t = Math.Min(1, (DateTime.Now - start).TotalMilliseconds / 320);
-            var eased = 1 - Math.Pow(1 - t, 3);
-            LyricsScroll.ScrollToVerticalOffset(from + (to - from) * eased);
-            if (t >= 1) timer.Stop();
-        };
-        timer.Start();
+        (_glideFrom, _glideTo, _glideStart) = (LyricsScroll.VerticalOffset, to, Environment.TickCount64);
+        if (_glide.IsEnabled) return;
+        _glide.Tick -= GlideTick;
+        _glide.Tick += GlideTick;
+        _glide.Start();
+    }
+
+    private void GlideTick(object? sender, EventArgs e)
+    {
+        var t = Math.Min(1, (Environment.TickCount64 - _glideStart) / 320.0);
+        var eased = 1 - Math.Pow(1 - t, 3);
+        LyricsScroll.ScrollToVerticalOffset(_glideFrom + (_glideTo - _glideFrom) * eased);
+        if (t >= 1) _glide.Stop();
     }
 
     private void UpdatePlayGlyph() =>
@@ -166,6 +174,13 @@ public partial class NowPlayingView : UserControl, IToolView
     {
         if (Service.Duration <= 0 || Progress.ActualWidth <= 0) return;
         var fraction = e.GetPosition(Progress).X / Progress.ActualWidth;
-        await Service.SeekAsync(Math.Clamp(fraction, 0, 1) * Service.Duration);
+        try
+        {
+            await Service.SeekAsync(Math.Clamp(fraction, 0, 1) * Service.Duration);
+        }
+        catch (Exception ex) // the player may refuse or have closed
+        {
+            App.Log(ex);
+        }
     }
 }

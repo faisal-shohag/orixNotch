@@ -8,14 +8,20 @@
         Topmost="True" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
         Width="860" Height="600" UseLayoutRounding="True"
         Foreground="{DynamicResource TextBrush}" FontFamily="{DynamicResource UiFont}" FontSize="14"
-        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType"
+        Typography.NumeralAlignment="Tabular">
+    <!-- Tabular digits everywhere (inherited): clocks, timers and percentages keep their width as they change. -->
     <Grid>
         <!-- While the notch is hidden (Settings → Show notch), a thin accent line marks where the top edge brings it back -->
         <Border x:Name="EdgeHint" Width="120" Height="3" CornerRadius="0,0,2,2" VerticalAlignment="Top" HorizontalAlignment="Center"
                 Background="{DynamicResource AccentBrush}" Opacity="0" IsHitTestVisible="False" />
         <!-- Pill = notch silhouette (Shape) + clipped content (Body). Sizes are driven by springs in code. -->
         <Grid x:Name="Pill" VerticalAlignment="Top" HorizontalAlignment="Center" AllowDrop="True">
-            <Path x:Name="Shape" Fill="{DynamicResource PillBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1" />
+            <!-- In a Canvas so the outline is never clipped to its layout slot: while the notch grows, the new outline is
+                 drawn a frame before layout catches up, and that clip cut its drop shadow off in a hard, blinking edge. -->
+            <Canvas IsHitTestVisible="True">
+                <Path x:Name="Shape" Fill="{DynamicResource PillBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1" />
+            </Canvas>
             <!-- Glass highlights (NotchWindow.Glass.cs): a sheen across the top, a faint accent glow at the bottom. -->
             <Path x:Name="GlassGlow" IsHitTestVisible="False" Visibility="Collapsed" Opacity="{Binding Opacity, ElementName=Shape}" />
             <Path x:Name="GlassSheen" IsHitTestVisible="False" Visibility="Collapsed" Opacity="{Binding Opacity, ElementName=Shape}">
@@ -39,7 +45,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border x:Name="MiniArt" Width="22" Height="22" CornerRadius="6" VerticalAlignment="Center"
+                        <Border x:Name="MiniArt" Width="22" Height="22" CornerRadius="{StaticResource RadiusS}" VerticalAlignment="Center"
                                 Background="{DynamicResource HoverBrush}">
                             <Border.Clip>
                                 <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6" />
@@ -95,7 +101,7 @@
 
                     <!-- Event reminder (compact): calendar tile, "10m", dismiss -->
                     <Grid x:Name="ReminderPart" Margin="9,0,7,0" Visibility="Collapsed">
-                        <Border x:Name="ReminderTile" Width="22" Height="22" CornerRadius="6" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        <Border x:Name="ReminderTile" Width="22" Height="22" CornerRadius="{StaticResource RadiusS}" HorizontalAlignment="Left" VerticalAlignment="Center"
                                 Background="{DynamicResource AccentSoftBrush}">
                             <hero:HeroIcon Kind="CalendarDays" Width="12" Height="12" Foreground="{DynamicResource AccentBrush}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -114,6 +120,9 @@
                 </Grid>
 
                 <!-- Alert: the notch grows for a few seconds for a reminder or a Windows notification (filled in code) -->
+                <!-- Left/right edge, closed: a narrow tab of icons stacked along the edge (NotchWindow.Edge.cs) -->
+                <StackPanel x:Name="SideLayer" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+
                 <Grid x:Name="PeekLayer" Margin="18,0,12,0" VerticalAlignment="Stretch" Visibility="Collapsed" Opacity="0"
                       Background="Transparent" Cursor="Hand" MouseLeftButtonUp="OnPeekClick"
                       MouseEnter="OnPeekHover" MouseLeave="OnPeekHover">
@@ -122,8 +131,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <ContentControl x:Name="PeekIconHost" Width="40" Height="40" Focusable="False" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" Margin="13,0,10,0" VerticalAlignment="Center">
+                    <ContentControl x:Name="PeekIconHost" Width="40" Height="40" Focusable="False" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" />
+                    <StackPanel x:Name="PeekText" Grid.Column="1" Margin="13,0,10,0" VerticalAlignment="Center">
                         <TextBlock x:Name="PeekTitle" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         <!-- Up to two lines, then "…"; the full text is in the Notifications tool -->
                         <TextBlock x:Name="PeekSub" FontSize="12.5" Foreground="{DynamicResource SubTextBrush}" Margin="0,1,0,0"
@@ -131,6 +140,8 @@
                                    LineHeight="16" LineStackingStrategy="BlockLineHeight" MaxHeight="32" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Optional buttons for this alert (Open, Show in folder…) -->
+                        <StackPanel x:Name="PeekActions" Orientation="Horizontal" VerticalAlignment="Center" />
                         <!-- "+2": more alerts waiting; dismissing shows the next -->
                         <TextBlock x:Name="PeekMore" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SubTextBrush}"
                                    VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed" />
@@ -146,7 +157,7 @@
                 <Grid x:Name="ExpandedLayer" Opacity="0" Visibility="Collapsed">
                     <Grid x:Name="Header" Height="30" VerticalAlignment="Top" Margin="18,16,14,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="BackButton" Style="{StaticResource IconButton}" Width="26" Height="26" Margin="-4,0,6,0"
+                            <Button x:Name="BackButton" Style="{StaticResource IconButton}" Width="26" Height="26" Margin="-4,0,6,0" ToolTip="Back"
                                     Foreground="{DynamicResource SubTextBrush}" Visibility="Collapsed" Click="OnBackClick">
                                 <hero:HeroIcon Kind="ChevronLeft" Width="17" Height="17" />
                             </Button>
@@ -180,7 +191,7 @@
                                       HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
                             <!-- Indicator and tabs share one centered strip, so the indicator stays aligned while the notch resizes. -->
                             <Grid x:Name="TabStrip" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Border x:Name="TabIndicator" Width="35" Height="28" CornerRadius="8" HorizontalAlignment="Left"
+                                <Border x:Name="TabIndicator" Width="35" Height="28" CornerRadius="{StaticResource RadiusM}" HorizontalAlignment="Left"
                                         VerticalAlignment="Center" Background="{DynamicResource HoverBrush}" Opacity="0">
                                     <Border.RenderTransform>
                                         <TranslateTransform x:Name="TabIndicatorShift" />
@@ -210,7 +221,7 @@
                             <Rectangle x:Name="DropShelfFrame" IsHitTestVisible="False" RadiusX="14" RadiusY="14" StrokeThickness="1.5" StrokeDashArray="4 3"
                                        Stroke="{DynamicResource SubTextBrush}" Opacity="0.5" />
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                                <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
+                                <Border Width="40" Height="40" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
                                     <hero:HeroIcon Kind="ArchiveBox" Width="20" Height="20" Foreground="{DynamicResource AccentBrush}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
@@ -224,7 +235,7 @@
                             <Rectangle x:Name="DropPhoneFrame" IsHitTestVisible="False" RadiusX="14" RadiusY="14" StrokeThickness="1.5" StrokeDashArray="4 3"
                                        Stroke="{DynamicResource SubTextBrush}" Opacity="0.5" />
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                                <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
+                                <Border Width="40" Height="40" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
                                     <hero:HeroIcon Kind="DevicePhone" Width="20" Height="20" Foreground="{DynamicResource AccentBrush}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
@@ -238,7 +249,7 @@
                             <Rectangle x:Name="DropAskFrame" IsHitTestVisible="False" RadiusX="14" RadiusY="14" StrokeThickness="1.5" StrokeDashArray="4 3"
                                        Stroke="{DynamicResource SubTextBrush}" Opacity="0.5" />
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                                <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
+                                <Border Width="40" Height="40" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Center">
                                     <hero:HeroIcon Kind="Sparkles" Width="20" Height="20" Foreground="{DynamicResource AccentBrush}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>

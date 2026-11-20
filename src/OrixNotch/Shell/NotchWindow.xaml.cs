@@ -36,10 +36,16 @@ public partial class NotchWindow : Window
     private const double RadiusCollapsed = 10;
     private const double RadiusExpanded = 26;
 
+    /// <summary>Island and Pill float this far from the screen edge; Notch and Tab touch it.</summary>
+    private const double IslandGap = 8;
+
+    private static bool Floating => App.Settings.NotchShape is "Island" or "Pill";
+
     public const string SettingsId = "settings";
 
     private readonly Spring _width = new(207);
-    private readonly Spring _height = new(32);
+    // Near-critical (default 32 overshoots ~4 px): the bottom edge, with the tab bar rising into it, read as a shake.
+    private readonly Spring _height = new(32) { Damping = 36 };
 
     // Dodge: the closed notch runs from a pointer coming at it from the left or right, always
     // keeping DodgeGap away from it, and drifts home when the pointer backs off. It can only be
@@ -84,8 +90,6 @@ public partial class NotchWindow : Window
     private string _activeTool;
     private string? _backTarget;
     private double _expandedH = 220;
-    private double _toolW = 560;
-    private double _toolH = 120;
 
     // Closed-notch size, from Settings → Display
     private double _collapsedH = 38;
@@ -115,6 +119,7 @@ public partial class NotchWindow : Window
             UpdateConceal();
             FollowPointerScreen();
             if (!(_dodging && _animating)) Repel(_repelTimer.Interval.TotalSeconds); // the frame loop owns it while dodging
+            PaceRepel();
         };
         _guardTimer.Tick += (_, _) => Guard();
 
@@ -136,10 +141,20 @@ public partial class NotchWindow : Window
         };
 
         NowPlayingService.Instance.PropertyChanged += OnActivityChanged;
+        ThemeService.FollowAlbumArt();
+        ThemeService.WatchWallpaper();
         PomodoroService.Instance.PropertyChanged += OnActivityChanged;
         CountdownService.Instance.PropertyChanged += OnActivityChanged;
         StopwatchService.Instance.PropertyChanged += OnActivityChanged;
-        NotchActivityService.Instance.PropertyChanged += (_, _) => UpdateActivity();
+        NotchActivityService.Instance.PropertyChanged += (_, e) =>
+        {
+            // A running timer changes Text and Progress every tick: Text is bound in XAML, Progress only moves the arc.
+            if (e.PropertyName == nameof(NotchActivityService.Progress))
+            {
+                if (TimerPart.Visibility == Visibility.Visible) MiniArc.Data = BuildMiniArc(NotchActivityService.Instance.Progress);
+            }
+            else if (e.PropertyName != nameof(NotchActivityService.Text)) UpdateActivity();
+        };
         EventReminderService.Instance.Alert += _ => ShowReminderPeek();
         NotificationWatcher.Instance.Arrived += ShowNotificationPeek;
         AiLimitWatcher.Instance.Alert += ShowAiLimitPeek;
@@ -148,23 +163,74 @@ public partial class NotchWindow : Window
         UpdateService.Instance.Available += ShowUpdatePeek;
         PowerWatcher.Instance.Alert += ShowPowerPeek;
         VolumeService.Instance.Changed += ShowVolumePeek;
+        VolumeService.Instance.MicChanged += muted =>
+            EnqueuePeek(new PeekRequest("mic", () => GlyphTile(muted ? AppIcon.MicrophoneOff : AppIcon.Microphone),
+                muted ? "Microphone muted" : "Microphone on", muted ? "No app can hear you" : "", TimeSpan.FromSeconds(2)));
+        KeepAwakeService.Changed += on =>
+            EnqueuePeek(new PeekRequest("awake", () => GlyphTile(AppIcon.Coffee),
+                on ? "Keep awake on" : "Keep awake off", on ? "The PC and screen won't sleep" : "", TimeSpan.FromSeconds(2)));
         BluetoothWatcher.Instance.Changed += ShowBluetoothPeek;
+        BluetoothWatcher.Instance.Battery += (device, level) =>
+        {
+            // Only refresh the connect alert still on screen or waiting; a late reading shouldn't pop a new one.
+            var key = "bt:" + device;
+            if (!App.Settings.BluetoothAlerts || (_currentPeek?.Key != key && _peekQueue.All(r => r.Key != key))) return;
+            EnqueuePeek(new PeekRequest(key, () => GlyphTile(AppIcon.Bluetooth), device, $"Connected · {level}% battery",
+                TimeSpan.FromSeconds(3)));
+        };
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
+        ScreenshotWatcher.Instance.Taken += ShowScreenshotPeek;
+        AutomationService.Instance.Acted += (title, sub) =>
+            EnqueuePeek(new PeekRequest("automation", () => GlyphTile(AppIcon.Bolt), title, sub, TimeSpan.FromSeconds(4)));
+        SubscriptionService.Instance.Renewing += (sub, days) =>
+        {
+            if (!App.Settings.SubscriptionAlerts) return;
+            EnqueuePeek(new PeekRequest("sub:" + sub.Id, () => GlyphTile(AppIcon.CreditCard),
+                days == 0 ? $"{sub.Name} renews today" : days == 1 ? $"{sub.Name} renews tomorrow" : $"{sub.Name} renews in {days} days",
+                $"{sub.PriceLabel} · cancel before then if you don't need it", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("subscriptions")));
+        };
+        ScreenTimeService.Instance.Summary += (seconds, top) =>
+            EnqueuePeek(new PeekRequest("screentime", () => GlyphTile(AppIcon.Hourglass), $"{ScreenTimeService.Format(seconds)} on screen today",
+                top is null ? "Click to see your day" : $"Most of it in {top} · click to see your day", TimeSpan.FromSeconds(6), OnClick: ShowWrap));
+        PomodoroService.Instance.StreakReached += days =>
+        {
+            if (!App.Settings.Celebrations) return;
+            EnqueuePeek(new PeekRequest("streak", () => GlyphTile(AppIcon.Fire), $"{days}-day focus streak",
+                days >= 7 ? "A focus session every day. Impressive. Keep it going!" : "Focus every day, and it adds up. Keep going!", TimeSpan.FromSeconds(6)));
+        };
+        AutomationService.Instance.Birthday += title =>
+            EnqueuePeek(new PeekRequest("birthday:" + title, () => GlyphTile(AppIcon.Cake), title, "Today. Don't forget to say happy birthday!",
+                TimeSpan.FromSeconds(8), OnClick: () => OpenTool("calendar")));
+        BreakService.Instance.Due += kind =>
+            EnqueuePeek(new PeekRequest("break:" + kind.Id, () => GlyphTile(kind.Icon), kind.Title, kind.Sub, TimeSpan.FromSeconds(6)));
+        BreakService.Instance.Reconfigure();
+        ScreenTimeService.Instance.GoalPassed += (app, minutes) =>
+            EnqueuePeek(new PeekRequest("goal:" + app, () => GlyphTile(AppIcon.Hourglass), app,
+                $"{CommandRegistry.FormatMinutes(minutes)} today, your daily goal. Maybe take a break?", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("screentime")));
+        OcrService.Instance.Done += (title, sub) =>
+            EnqueuePeek(new PeekRequest("ocr", () => GlyphTile(AppIcon.DocText), title, sub, TimeSpan.FromSeconds(4)));
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
-        ProfileService.Changed += () => _idleAvatarLoaded = false;
+        ProfileService.Changed += () => { _idleAvatarLoaded = false; OnIdleChanged(); };
         _peekTimer.Tick += (_, _) => EndPeek();
         _trackTimer.Tick += (_, _) => ShowTrackPeek();
         // A reminder already due at launch fired its alert before we subscribed: show it once we're up.
         Dispatcher.BeginInvoke(ShowReminderPeek, DispatcherPriority.ContextIdle);
+        Dispatcher.BeginInvoke(ShowWhatsNewPeek, DispatcherPriority.ContextIdle);
         SettingsService.Changed += OnSettingsChanged;
         HotkeyService.Triggered += OnHotkey;
 
         BuildEqualizer();
+        MakeRound(PeekDismiss);
+        TabBar.RenderTransform = _tabRise;
+        NowPlayingService.Instance.PropertyChanged += (_, _) => UpdateGlow();
+        PomodoroService.Instance.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PomodoroService.IsRunning)) UpdateGlow(); };
+        ThemeService.Changed += () => { _glowColor = null; UpdateGlow(); OnIdleChanged(); }; // idle colours are resolved once per render
+        _eqLive.Tick += (_, _) => TickEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
-            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool != SettingsId) MoveTabIndicator(_activeTool, animate: false);
+            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool is not (SettingsId or PaletteId or BriefId or WrapId)) MoveTabIndicator(_activeTool, animate: false);
         };
         WireTabScroll();
         BuildTabs();
@@ -188,23 +254,38 @@ public partial class NotchWindow : Window
         ClipboardService.Instance.Attach(_hwnd);
         HotkeyService.Attach(_hwnd);
 
-        SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(Place);
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(Place);
         Place();
         ThemeService.Changed += ApplyGlass;
         ApplyGlass();
         ApplyCaptureAffinity();
         VolumeService.Instance.Start();
-        BluetoothWatcher.Instance.Start();
-        DownloadWatcher.Instance.Start();
+        ApplyDeviceWatchers();
+        ScreenTimeService.Instance.Start();
+        AutomationService.Instance.Start();
+        Dispatcher.BeginInvoke(SubscriptionService.Instance.Start, DispatcherPriority.ContextIdle); // its alerts once the notch is up
         ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
         ForegroundAppWatcher.Instance.Start();
+        // Morning brief: a few seconds after the first unlock of the day, or after starting at sign-in.
+        SystemEvents.SessionSwitch += OnSessionSwitch;
+        After(TimeSpan.FromSeconds(20), TryMorningBrief);
         _guardTimer.Start();
         _repelTimer.Start();
     }
 
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(Place);
+
+    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason == SessionSwitchReason.SessionUnlock) Dispatcher.BeginInvoke(() => After(TimeSpan.FromSeconds(3), TryMorningBrief));
+    }
+
     protected override void OnClosed(EventArgs e)
     {
+        // SystemEvents is static: its handlers would keep this window alive.
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         HotkeyService.UnregisterAll();
         ForegroundAppWatcher.Instance.Stop();
         Win32.RemoveClipboardFormatListener(_hwnd);
@@ -216,6 +297,7 @@ public partial class NotchWindow : Window
         switch (msg)
         {
             case Win32.WM_CLIPBOARDUPDATE:
+                OcrService.Instance.OnClipboardUpdate();
                 ClipboardService.Instance.OnClipboardUpdate();
                 break;
             case Win32.WM_HOTKEY:
@@ -235,6 +317,26 @@ public partial class NotchWindow : Window
             case "teleprompter":
                 if (_expanded && _activeTool == "teleprompter") TeleprompterService.Instance.Toggle();
                 else OpenTool("teleprompter");
+                break;
+            case "mic":
+                VolumeService.Instance.ToggleMic();
+                break;
+            case "awake":
+                KeepAwakeService.Toggle();
+                break;
+            case "ocr":
+                OcrService.Instance.Start();
+                break;
+            case "focus":
+                if (PomodoroService.Instance.Focusing) PomodoroService.Instance.ToggleCommand.Execute(null); // pause
+                else PomodoroService.Instance.StartFocus();
+                break;
+            case "explain":
+                _ = ExplainSelectionAsync();
+                break;
+            case "palette":
+                if (_expanded && _activeTool == PaletteId) Collapse();
+                else ShowPalette();
                 break;
             default:
                 OpenTool(action);
@@ -266,14 +368,12 @@ public partial class NotchWindow : Window
         var screen = CurrentScreen();
         _placedOn = screen.DeviceName;
         var dpi = VisualTreeHelper.GetDpi(this);
-        var w = (int)Math.Round(Width * dpi.DpiScaleX);
-        var h = (int)Math.Round(Height * dpi.DpiScaleY);
-        var x = screen.Bounds.Left + (screen.Bounds.Width - w) / 2;
-        var y = screen.Bounds.Top;
+        var (x, y, w, h, maxShove) = EdgePlacement(screen, dpi);
         (_homeX, _homeY) = (x, y);
-        _maxShove = screen.Bounds.Width / dpi.DpiScaleX / 2;
-        _shovePx = (int)Math.Round(_shove.Value * dpi.DpiScaleX);
-        Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, x + _shovePx, y, w, h, Win32.SWP_NOACTIVATE);
+        _maxShove = maxShove;
+        ApplyEdgeLayout();
+        _shovePx = (int)Math.Round(_shove.Value * (Vertical ? dpi.DpiScaleY : dpi.DpiScaleX));
+        Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, x + (Vertical ? 0 : _shovePx), y + (Vertical ? _shovePx : 0), w, h, Win32.SWP_NOACTIVATE);
     }
 
     /// <summary>Keeps the notch above other topmost windows and out of the way of fullscreen apps.</summary>
@@ -290,11 +390,95 @@ public partial class NotchWindow : Window
         // A listed app set to "Hide completely" hides it too, except while an alert it lets through is showing.
         var hide = _exclusive || HiddenForApp && App.Settings.HideForAppsMode == "Hidden" && !_peeking;
         var target = hide ? Visibility.Hidden : Visibility.Visible;
-        if (Visibility != target) Visibility = target;
+        if (Visibility != target)
+        {
+            Visibility = target;
+            UpdatePillMotion();
+        }
         if (!hide)
             Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0,
                 Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+        CheckQuietEnded();
+        if (!_peeking && _peekQueue.Count > 0 && !AlertsHeld()) ShowNextPeek(); // full screen ended: held alerts play now
     }
+
+    // ---------------------------------------------------------------- quiet hours
+
+    private readonly HashSet<string> _quietMissed = new(); // by key: repeats of one alert (battery updates) count once
+    private bool _wasQuiet;
+
+    /// <summary>Whether <paramref name="now"/> falls in [from, to); a window like 22:00–07:00 crosses midnight.</summary>
+    internal static bool InWindow(TimeOnly now, TimeOnly from, TimeOnly to) =>
+        from <= to ? now >= from && now < to : now >= from || now < to;
+
+    /// <summary>
+    /// Quiet hours are on now: the schedule in Settings → General, the tray's "Quiet for 1 hour", or (Automations)
+    /// a call, meaning the microphone is in use.
+    /// </summary>
+    public static bool QuietActive() => QuietSnoozed() || QuietScheduled() || (App.Settings.AutoQuietOnMic && InCall)
+        || (App.Settings.FocusQuiet && PomodoroService.Instance.Focusing);
+
+    /// <summary>Microphone or camera in use. Refreshed by Guard every couple of seconds (reading it is a registry walk).</summary>
+    public static bool InCall { get; private set; }
+
+    public static bool QuietSnoozed() => App.Settings.QuietUntil is { } until && until > DateTime.Now;
+
+    public static bool QuietScheduled()
+    {
+        var s = App.Settings;
+        return s.QuietEnabled && TimeOnly.TryParse(s.QuietFrom, out var from) && TimeOnly.TryParse(s.QuietTo, out var to)
+            && InWindow(TimeOnly.FromDateTime(DateTime.Now), from, to);
+    }
+
+    /// <summary>Tray: quiet for an hour, or end a quiet hour early.</summary>
+    public static void ToggleQuietHour()
+    {
+        App.Settings.QuietUntil = QuietSnoozed() ? null : DateTime.Now.AddHours(1);
+        SettingsService.Save(notify: false);
+        Instance?.Guard();
+    }
+
+    /// <summary>Feedback for something the user just did (volume keys, mic mute) shows even while quiet.</summary>
+    private static bool IsUserFeedback(string key) => key is "volume" or "mic" or "awake" or "ocr";
+
+    private bool HeldForQuiet(PeekRequest request)
+    {
+        if (IsUserFeedback(request.Key) || !QuietActive()) return false;
+        if (request.Key == ReminderPeekKey && App.Settings.QuietLetRemindersThrough) return false;
+        _quietMissed.Add(request.Key);
+        return true;
+    }
+
+    private void CheckQuietEnded()
+    {
+        InCall = SystemToggles.InCall();
+        UpdateGlow();
+        var quiet = QuietActive();
+        if (_wasQuiet && !quiet && _quietMissed.Count > 0)
+        {
+            var n = _quietMissed.Count;
+            _quietMissed.Clear();
+            EnqueuePeek(new PeekRequest("quiet", () => GlyphTile(AppIcon.Moon),
+                n == 1 ? "1 alert while you were quiet" : $"{n} alerts while you were quiet", "Click to see notifications",
+                TimeSpan.FromSeconds(6), OnClick: () => OpenTool("notifications")));
+        }
+        if (_wasQuiet && !quiet) ShowWhatsNewPeek();
+        _wasQuiet = quiet;
+    }
+
+#if DEBUG
+    static NotchWindow()
+    {
+        static TimeOnly T(int h, int m = 0) => new(h, m);
+        System.Diagnostics.Debug.Assert(InWindow(T(23), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(InWindow(T(3), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(7), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(12), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(InWindow(T(13), T(13), T(14)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(14), T(13), T(14)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(9), T(9), T(9))); // equal ends: no window
+    }
+#endif
 
     // ---------------------------------------------------------------- auto-hide
 
@@ -302,6 +486,17 @@ public partial class NotchWindow : Window
     private bool _exclusive;           // an exclusive full-screen game: the window is hidden outright
     private bool _revealed;            // the pointer touched the top edge over the hidden notch
     private double _opacityTarget = 1;
+
+    /// <summary>The closed pill can be seen: not faded out and not hidden for a game or a listed app.</summary>
+    private bool PillShown => _opacityTarget > 0 && Visibility == Visibility.Visible;
+
+    /// <summary>The endless pill animations (equalizer, marquee) run only while someone can see them.</summary>
+    private void UpdatePillMotion()
+    {
+        var music = NotchActivityService.Instance.Kind == NotchActivityKind.Music;
+        SetEqualizer(!_expanded && music && PillShown);
+        if (music) UpdateMarquee();
+    }
 
     /// <summary>One of the apps in Settings → General "Hide for these apps" is in front.</summary>
     private bool HiddenForApp =>
@@ -344,10 +539,9 @@ public partial class NotchWindow : Window
         var conceal = Concealable();
         if (conceal && Win32.GetCursorPos(out var p))
         {
-            var dpi = VisualTreeHelper.GetDpi(this);
-            var x = Math.Abs(p.X - (_homeX + Width * dpi.DpiScaleX / 2)) / dpi.DpiScaleX;
-            var y = (p.Y - _homeY) / dpi.DpiScaleY;
-            var half = _idleW / 2 + 40;
+            var (along, y) = EdgeLocal(p); // touching the notch's own edge brings it back
+            var x = Math.Abs(along);
+            var half = Math.Max(_idleW, BodySpan) / 2 + 40; // the pill as drawn now: a wide music pill reveals from its ends too
             if (y <= 1 && x <= half) _revealed = true;
             else if (y > _collapsedH + DodgeBand || x > half + 40) _revealed = false;
         }
@@ -356,10 +550,11 @@ public partial class NotchWindow : Window
         var target = conceal && !_revealed ? 0.0 : 1.0;
         if (_opacityTarget == target) return;
         _opacityTarget = target;
-        var fade = TimeSpan.FromMilliseconds(target > 0 ? 160 : 300);
+        UpdatePillMotion();
+        var fade = target > 0 ? Motion.Fast : Motion.Scale(300);
         Pill.BeginAnimation(OpacityProperty, new DoubleAnimation(target, fade));
         // Hidden by choice, mark the spot; hidden for a full-screen video, stay out of sight entirely.
-        EdgeHint.Width = Math.Round(_idleW * 0.55);
+        if (!Vertical) EdgeHint.Width = Math.Round(Math.Max(_idleW, BodySpan) * 0.55);
         EdgeHint.BeginAnimation(OpacityProperty, new DoubleAnimation(target == 0 && !_fullscreen && !HiddenForApp ? 0.7 : 0, fade));
     }
 
@@ -378,13 +573,13 @@ public partial class NotchWindow : Window
             "ExtraLarge" => (266.0, 46.0),
             _ => (207.0, 38.0), // ≈ a MacBook hardware notch
         };
+        if (App.Settings.NotchShape == "Pill") _collapsedH -= 6; // the minimal pill is slimmer while closed
         _timerW = _idleW + 44;
         _musicW = _idleW + 150;
         CollapsedLayer.Height = _collapsedH;
         if (!_expanded)
         {
-            _width.Target = ActivityWidth();
-            _height.Target = _collapsedH;
+            SetCollapsedTarget();
             StartAnimation();
         }
     }
@@ -400,18 +595,23 @@ public partial class NotchWindow : Window
     /// <summary>Opens the notch on a tool (or settings).</summary>
     public void OpenTool(string id)
     {
-        Expand(activate: true);
+        Expand(activate: true, present: false);
         if (id == SettingsId) ShowSettings();
         else ShowTool(id);
     }
 
-    public void Expand(bool activate)
+    /// <param name="present">False when the caller shows its own view right after: the last tool isn't shown (and
+    /// its <see cref="IToolView.OnShown"/> polling started) only to be swapped out at once.</param>
+    public void Expand(bool activate, bool present = true)
     {
+        FinishCornerTurnNow(); // opening mid-turn: finish it on the new edge first
         if (Visibility != Visibility.Visible) Visibility = Visibility.Visible;
         if (!_expanded)
         {
             if (_peeking)
             {
+                // Opened over an alert (hover, hotkey, tray): it comes back after closing instead of vanishing unread.
+                if (_currentPeek is { } shown && !IsUserFeedback(shown.Key)) _peekQueue.Insert(0, shown);
                 _peeking = false;
                 _currentPeek = null;
                 _peekTimer.Stop();
@@ -422,8 +622,12 @@ public partial class NotchWindow : Window
             _idleRotate.Stop();
             _repelTimer.Stop();
             SetShove(0);
-            if (EventReminderService.Instance.IsActive) ShowTool("calendar");
-            else ShowTool(_activeTool == SettingsId ? App.Settings.LastTool : _activeTool);
+            if (present)
+            {
+                if (EventReminderService.Instance.IsActive) ShowTool("calendar");
+                else if (ContextTool() is { } matched) ShowTool(matched, remember: false);
+                else ShowTool(Shown(_activeTool is SettingsId or PaletteId or BriefId or WrapId ? App.Settings.LastTool : _activeTool));
+            }
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
             _leaveTimer.Start();
@@ -455,8 +659,7 @@ public partial class NotchWindow : Window
         _expanded = false;
         _leaveTimer.Stop();
         _repelTimer.Start();
-        _height.Target = _collapsedH;
-        _width.Target = ActivityWidth();
+        SetCollapsedTarget();
         HideDropChooser(restore: false);
         if (ToolHost.Content is IToolView view) view.OnHidden();
         if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
@@ -465,13 +668,10 @@ public partial class NotchWindow : Window
         // Alerts that arrived while the notch was open play once it has closed.
         if (_peekQueue.Count > 0)
         {
-            var later = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-            later.Tick += (_, _) =>
+            After(TimeSpan.FromMilliseconds(600), () =>
             {
-                later.Stop();
                 if (!_peeking) ShowNextPeek();
-            };
-            later.Start();
+            });
         }
     }
 
@@ -517,8 +717,22 @@ public partial class NotchWindow : Window
     /// that reaches the notch without approaching from a side doesn't move it, so hover-open works.
     /// </summary>
     /// <returns>True while the pointer is being dodged (keeps the per-frame loop running).</returns>
+    /// <summary>
+    /// The pointer watch only needs frame-like rate when the pointer is near the notch and something uses it
+    /// (dodge, hide/reveal, follow-pointer monitor); otherwise it idles, instead of waking 25 times a second forever.
+    /// </summary>
+    private void PaceRepel()
+    {
+        var used = App.Settings.RepelCursor || App.Settings.MonitorIndex == -2 || Concealable();
+        var near = used && (_dodging || Turning || Win32.GetCursorPos(out var p) && EdgeLocal(p) is var (along, away)
+            && away < 300 && Math.Abs(along) < BodySpan / 2 + 300);
+        var ms = !used ? 500 : near ? 40 : 120;
+        if (_repelTimer.Interval.TotalMilliseconds != ms) _repelTimer.Interval = TimeSpan.FromMilliseconds(ms);
+    }
+
     private bool Repel(double dt)
     {
+        if (Turning) return true; // the corner turn drives the notch until it's on the new edge
         if (!App.Settings.RepelCursor || _expanded || _peeking || !IsVisible || !SystemParameters.ClientAreaAnimation
             || Concealable() // hidden notch: reaching the top edge reveals it, it mustn't run from that pointer
             || (Win32.GetAsyncKeyState(Win32.VK_LBUTTON) & 0x8000) != 0 // mid-drag: dropping onto the notch must stay easy
@@ -531,11 +745,9 @@ public partial class NotchWindow : Window
 
         // Pointer relative to the notch's home centre, in DIPs, from screen coordinates: the window
         // is moving under us, and its cached position (PointFromScreen) can trail the last move.
-        var dpi = VisualTreeHelper.GetDpi(this);
-        var x = (p.X - (_homeX + Width * dpi.DpiScaleX / 2)) / dpi.DpiScaleX;
-        var y = (p.Y - _homeY) / dpi.DpiScaleY;
-        var half = Body.ActualWidth / 2;
-        var inBand = y >= -8 && y <= Body.ActualHeight + DodgeBand;
+        var (x, y) = EdgeLocal(p); // along the edge, and away from it
+        var half = BodySpan / 2;
+        var inBand = y >= -8 && y <= BodyDepth + DodgeBand;
         var beside = Math.Abs(x - _shove.Value) > half;
 
         if (!inBand)
@@ -568,18 +780,24 @@ public partial class NotchWindow : Window
         var lead = Math.Clamp(_pointerSpeed * 0.022, -60, 60);
         var aimX = _dodgeSide < 0 ? x + Math.Max(0, lead) : x + Math.Min(0, lead);
         var target = DodgeTarget(aimX, half);
+        if (Math.Abs(target) > limit && !Turning)
+        {
+            // Cornered against the end of its edge: turn the corner onto the next edge (NotchWindow.Edge.cs).
+            StartCornerTurn(Math.Sign(target));
+            return true;
+        }
         if (Math.Abs(target) > limit)
         {
-            // Cornered against the screen edge: hop over the pointer to its other side in one
+            // Fallback (shouldn't happen mid-turn): hop over the pointer to its other side in one
             // frame (sliding would pass under it) and fade back in there, then run home.
             _dodgeSide = -_dodgeSide;
             _shove.Value = Math.Clamp(DodgeTarget(x, half, toward: false), -limit, limit);
             _shove.Velocity = 0;
             _dodgeSpeed = 0;
             target = DodgeTarget(x, half);
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180))
+            var fadeIn = new DoubleAnimation(0, 1, Motion.Fast)
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                EasingFunction = Motion.Out,
             };
             Timeline.SetDesiredFrameRate(fadeIn, 60);
             Pill.BeginAnimation(OpacityProperty, fadeIn);
@@ -627,11 +845,13 @@ public partial class NotchWindow : Window
     private void MoveWindowBy(double dip)
     {
         if (_hwnd == IntPtr.Zero) return;
-        var px = (int)Math.Round(dip * VisualTreeHelper.GetDpi(this).DpiScaleX);
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var px = (int)Math.Round(dip * (Vertical ? dpi.DpiScaleY : dpi.DpiScaleX));
         if (px == _shovePx) return;
         _shovePx = px;
         // Position only: no z-order, activation, size or owner-redraw work, so a move costs DWM a recomposite and nothing more.
-        Win32.SetWindowPos(_hwnd, IntPtr.Zero, _homeX + px, _homeY, 0, 0,
+        // The notch slides along its edge: sideways on the top or bottom, up and down on the left or right.
+        Win32.SetWindowPos(_hwnd, IntPtr.Zero, _homeX + (Vertical ? 0 : px), _homeY + (Vertical ? px : 0), 0, 0,
             Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOREDRAW);
     }
 
@@ -720,8 +940,13 @@ public partial class NotchWindow : Window
     {
         var target = _backTarget ?? App.Settings.LastTool;
         _backTarget = null;
-        ShowTool(target == SettingsId ? ToolRegistry.Ordered()[0].Id : target);
+        ShowTool(target == SettingsId ? FirstTool() : Shown(target));
     }
+
+    /// <summary>A tool hidden in Settings → Tabs since it was last open isn't reopened (it would show with no tab).</summary>
+    private static string Shown(string id) => ToolRegistry.Ordered().Any(t => t.Id == id) ? id : FirstTool();
+
+    private static string FirstTool() => (ToolRegistry.Ordered().FirstOrDefault() ?? ToolRegistry.Ordered(includeHidden: true)[0]).Id;
 
     // ---------------------------------------------------------------- animation
 
@@ -741,7 +966,9 @@ public partial class NotchWindow : Window
         if (dt <= 0) return;
         dt = Math.Min(dt, 0.05);
 
-        var moving = _dodging && Repel(dt);
+        var moving = Turning || (_dodging && Repel(dt));
+        if (_bending) StepBend(dt);
+        else if (Turning) StepCornerTurn(dt);
 
         // Sub-step for stability on slow frames.
         var steps = (int)Math.Ceiling(dt / (1 / 240.0));
@@ -763,42 +990,105 @@ public partial class NotchWindow : Window
 
     private void ApplyGeometry()
     {
-        var w = Math.Max(60, _width.Value);
+        if (_bending) return; // the L-shaped corner turn draws itself (NotchWindow.Bend.cs)
+        var w = Math.Max(Vertical ? 20 : 60, _width.Value); // the side tab is narrower than any top notch
         var h = Math.Max(20, _height.Value);
 
         // 0 = collapsed, 1 = fully open (to whatever size the current tool wants).
         // While an alert is showing the notch only grows to PeekH: track that separately.
-        var peek = _peeking && !_expanded ? Math.Clamp((h - _collapsedH) / (_peekH - _collapsedH), 0, 1) : 0;
-        var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((h - _collapsedH) / Math.Max(1, _expandedH - _collapsedH), 0, 1);
-        var ear = EarCollapsed + (EarExpanded - EarCollapsed) * p;
-        var radius = RadiusCollapsed + (RadiusExpanded - RadiusCollapsed) * p + (RadiusPeek - RadiusCollapsed) * peek;
+        // Progress is measured by how far the notch reaches into the screen (its depth), on any edge.
+        var depth = Vertical ? w : h;
+        var span = Vertical ? h : w;
+        var peekDepth = Vertical ? PeekW : _peekH;
+        // Fully open once it has grown 200 px (or reached its size): switching between open tools of different sizes
+        // (a tool → the taller Settings) then just resizes, instead of re-running the open morph mid-way.
+        var openDepth = Math.Min(Vertical ? _expandedW : _expandedH, ClosedDepth + 200);
+        var peek = _peeking && !_expanded ? Math.Clamp((depth - ClosedDepth) / Math.Max(1, peekDepth - ClosedDepth), 0, 1) : 0;
+        var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((depth - ClosedDepth) / Math.Max(1, openDepth - ClosedDepth), 0, 1);
+        var floating = Floating;
+        var ear = App.Settings.NotchShape == "Notch" ? EarCollapsed + (EarExpanded - EarCollapsed) * p : 0;
+        // A floating island is a capsule while closed (radius = half its height), rounding like the others as it opens.
+        var closedRadius = floating ? depth / 2 : RadiusCollapsed;
+        var radius = closedRadius + (RadiusExpanded - closedRadius) * p + (RadiusPeek - closedRadius) * peek;
 
         MoveWindowBy(_shove.Value);
 
         // A pure slide changes nothing inside the window: skip the visual updates so WPF doesn't
         // re-render (and re-upload) the whole transparent window every frame.
-        var shape = (w, h, ear, radius, p, peek, _peeking, _expanded);
+        var shape = (w, h, ear, radius + CornerAmount * 1000, p, peek, _peeking, _expanded); // the corner turn changes the outline too
         if (shape == _shapeDrawn) return;
         _shapeDrawn = shape;
 
-        Pill.Width = w + 2 * EarExpanded;
-        Pill.Height = h;
-        Body.Margin = new Thickness(EarExpanded, 0, EarExpanded, 0);
+        // The ears run along the edge: room for them on both ends of the span.
+        Pill.Width = Vertical ? w : w + 2 * EarExpanded;
+        Pill.Height = Vertical ? h + 2 * EarExpanded : h;
+        Body.Margin = Vertical ? new Thickness(0, EarExpanded, 0, EarExpanded) : new Thickness(EarExpanded, 0, EarExpanded, 0);
         Body.Width = w;
         Body.Height = h;
-        Body.Clip = new RectangleGeometry(new Rect(0, 0, w, h), radius, radius);
-        Shape.Data = NotchGeometry(w, h, ear, radius, EarExpanded - ear);
+        // Runs every frame of an open/close: move one clip instead of allocating a new geometry each time.
+        if (Body.Clip is not RectangleGeometry clip || clip.IsFrozen) Body.Clip = clip = new RectangleGeometry();
+        clip.Rect = new Rect(0, 0, w, h);
+        clip.RadiusX = clip.RadiusY = radius;
+        var gap = floating ? IslandGap : 0;
+        Pill.Margin = Edge switch
+        {
+            ScreenEdge.Bottom => new Thickness(0, 0, 0, gap),
+            ScreenEdge.Left => new Thickness(gap, 0, 0, 0),
+            ScreenEdge.Right => new Thickness(0, 0, gap, 0),
+            _ => new Thickness(0, gap, 0, 0),
+        };
+        var r = Math.Min(radius, depth / 2);
+        var corner = CornerAmount; // 0 normally; towards 1 while tucking into a screen corner
+        Geometry outline;
+        if (floating)
+        {
+            // A floating notch tucks into a rounded square (never a disc).
+            var rr = r + (depth * 0.3 - r) * corner;
+            outline = new RectangleGeometry(Vertical ? new Rect(0, EarExpanded, w, h) : new Rect(EarExpanded, 0, w, h), rr, rr);
+        }
+        else if (corner > 0)
+        {
+            // The corner piece: square where it touches the screen's corner, a big round on the inner corner.
+            var e = ear * (1 - corner);
+            var nearR = radius * (1 - corner);                       // at the screen corner: towards square
+            var farR = radius + (depth * 0.8 - radius) * corner;     // facing the screen: towards a big round
+            outline = CornerEnd > 0
+                ? NotchGeometry(span, depth, e, e * (1 - corner), farR, nearR, EarExpanded - e)
+                : NotchGeometry(span, depth, e * (1 - corner), e, nearR, farR, EarExpanded - e);
+        }
+        else outline = NotchGeometry(span, depth, ear, radius, EarExpanded - ear); // drawn for a top notch...
+        if (!floating && Edge != ScreenEdge.Top)
+        {
+            outline = outline.Clone(); // ...then turned onto the actual edge
+            outline.Transform = EdgeTransform(depth);
+            outline.Freeze();
+        }
+        Shape.Data = outline;
         if (GlassSheen.Visibility == Visibility.Visible) GlassSheen.Data = GlassGlow.Data = Shape.Data;
 
         // Content materialises out of a blur as the notch opens (and dissolves back on close).
         var reveal = Math.Clamp((p - 0.35) / 0.65, 0, 1);
         ExpandedLayer.Opacity = reveal;
+        // Staggered: the header leads, the tab bar follows and rises a few pixels into place.
+        Header.Opacity = Math.Clamp(reveal / 0.7, 0, 1);
+        var tabs = Math.Clamp((reveal - 0.3) / 0.7, 0, 1);
+        TabBar.Opacity = tabs;
+        _tabRise.Y = Motion.Reduced ? 0 : (1 - tabs) * 6;
         ExpandedLayer.Visibility = p > 0.3 ? Visibility.Visible : Visibility.Collapsed;
         _blur.Radius = (1 - reveal) * 14;
         ExpandedLayer.Effect = reveal < 0.999 && ExpandedLayer.Visibility == Visibility.Visible ? _blur : null;
 
-        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1);
-        CollapsedLayer.Visibility = p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
+        // Depth: a soft shadow that grows as the notch opens, so it lifts off bright wallpapers. Not on glass (it would
+        // show through and darken it), and removed when closed so the idle notch costs no effect pass.
+        _openP = p;
+        ApplyShapeEffect();
+
+        // The minimal Pill keeps its closed content quieter.
+        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1) * (App.Settings.NotchShape == "Pill" ? 0.75 : 1)
+            * Math.Clamp(1 - CornerAmount * 2, 0, 1); // empty while it turns a corner
+        CollapsedLayer.Visibility = !Vertical && p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
+        SideLayer.Opacity = CollapsedLayer.Opacity;
+        SideLayer.Visibility = Vertical && p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
         PeekLayer.Opacity = Math.Clamp((peek - 0.5) * 2, 0, 1);
         PeekLayer.Visibility = _peeking && peek > 0.5 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -807,25 +1097,31 @@ public partial class NotchWindow : Window
     /// Notch silhouette: concave quarter-circle "ears" at the top-left and top-right that flow
     /// into the screen edge, straight sides, and rounded bottom corners.
     /// </summary>
-    private static Geometry NotchGeometry(double bodyW, double h, double ear, double radius, double inset)
+    private static Geometry NotchGeometry(double bodyW, double h, double ear, double radius, double inset) =>
+        NotchGeometry(bodyW, h, ear, ear, radius, radius, inset);
+
+    /// <summary>The outline with its own ear and bottom radius on each side (the corner turn tucks one side in).</summary>
+    private static Geometry NotchGeometry(double bodyW, double h, double earL, double earR, double radiusL, double radiusR, double inset)
     {
-        radius = Math.Max(0, Math.Min(radius, Math.Min(bodyW / 2, h - ear)));
-        var left = inset;
+        var ear = Math.Max(earL, earR);
+        radiusL = Math.Max(0, Math.Min(radiusL, Math.Min(bodyW / 2, h - earL)));
+        radiusR = Math.Max(0, Math.Min(radiusR, Math.Min(bodyW / 2, h - earR)));
+        var left = inset + (ear - earL);
         var bodyL = inset + ear;
         var bodyR = bodyL + bodyW;
-        var right = bodyR + ear;
+        var right = bodyR + earR;
 
         var g = new StreamGeometry();
         using (var c = g.Open())
         {
             c.BeginFigure(new Point(left, 0), true, true);
-            c.ArcTo(new Point(bodyL, ear), new Size(ear, ear), 0, false, SweepDirection.Clockwise, true, true);
-            c.LineTo(new Point(bodyL, h - radius), true, true);
-            c.ArcTo(new Point(bodyL + radius, h), new Size(radius, radius), 0, false, SweepDirection.Counterclockwise, true, true);
-            c.LineTo(new Point(bodyR - radius, h), true, true);
-            c.ArcTo(new Point(bodyR, h - radius), new Size(radius, radius), 0, false, SweepDirection.Counterclockwise, true, true);
-            c.LineTo(new Point(bodyR, ear), true, true);
-            c.ArcTo(new Point(right, 0), new Size(ear, ear), 0, false, SweepDirection.Clockwise, true, true);
+            c.ArcTo(new Point(bodyL, earL), new Size(earL, earL), 0, false, SweepDirection.Clockwise, true, true);
+            c.LineTo(new Point(bodyL, h - radiusL), true, true);
+            c.ArcTo(new Point(bodyL + radiusL, h), new Size(radiusL, radiusL), 0, false, SweepDirection.Counterclockwise, true, true);
+            c.LineTo(new Point(bodyR - radiusR, h), true, true);
+            c.ArcTo(new Point(bodyR, h - radiusR), new Size(radiusR, radiusR), 0, false, SweepDirection.Counterclockwise, true, true);
+            c.LineTo(new Point(bodyR, earR), true, true);
+            c.ArcTo(new Point(right, 0), new Size(earR, earR), 0, false, SweepDirection.Clockwise, true, true);
         }
         g.Freeze();
         return g;
@@ -833,7 +1129,6 @@ public partial class NotchWindow : Window
 
     // ---------------------------------------------------------------- collapsed live activity
 
-    private bool HasActivity() => NotchActivityService.Instance.HasActivity;
     private bool _reminderPulsing;
 
     /// <summary>Closed-notch width for the current state: compact for timers and reminders, wide for track text.</summary>
@@ -943,7 +1238,7 @@ public partial class NotchWindow : Window
         if (pulse != _reminderPulsing)
         {
             _reminderPulsing = pulse;
-            ReminderTile.BeginAnimation(OpacityProperty, pulse
+            ReminderTile.BeginAnimation(OpacityProperty, pulse && !Motion.Reduced // a looping pulse stays still with animations off
                 ? new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever }
                 : null);
         }
@@ -953,11 +1248,12 @@ public partial class NotchWindow : Window
             if (_currentPeek?.Key == ReminderPeekKey) EndPeek();
         }
 
-        SetEqualizer(!_expanded && music);
+        SetEqualizer(!_expanded && music && PillShown);
 
+        if (Vertical) RenderSide();
         if (!_expanded && !_peeking)
         {
-            _width.Target = ActivityWidth();
+            SetCollapsedTarget();
             StartAnimation();
         }
     }
@@ -968,7 +1264,7 @@ public partial class NotchWindow : Window
         if (tint is not { } c) return ThemeService.CurrentAccent.Mean;
         static double Lum(Color x) => (0.299 * x.R + 0.587 * x.G + 0.114 * x.B) / 255;
         for (var i = 0; i < 6 && Lum(c) < 0.55; i++)
-            c = Color.FromRgb((byte)(c.R + (255 - c.R) * 0.25), (byte)(c.G + (255 - c.G) * 0.25), (byte)(c.B + (255 - c.B) * 0.25));
+            c = ThemeService.Mix(c, Colors.White, 0.25);
         return c;
     }
 
@@ -979,7 +1275,7 @@ public partial class NotchWindow : Window
         TrackShift.X = 0;
         TrackText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var overflow = TrackText.DesiredSize.Width - TitleSlot.ActualWidth;
-        if (overflow <= 2 || _expanded) return;
+        if (overflow <= 2 || _expanded || !PillShown || Motion.Reduced) return; // animations off: the title stays put
         var travel = TimeSpan.FromSeconds(overflow / 28);
         var hold = TimeSpan.FromSeconds(1.6);
         var slide = new DoubleAnimationUsingKeyFrames { RepeatBehavior = RepeatBehavior.Forever };
@@ -1062,7 +1358,7 @@ public partial class NotchWindow : Window
             default:
                 // Apple-style: glyph in the left ear, value in the right.
                 var item = items[_idleIndex % items.Count];
-                IdleSlotA.Content = IdleGlyph(item, 15);
+                IdleSlotA.Content = IdleGlyph(item, 16);
                 IdleSlotB.Content = IdleValue(item);
                 break;
         }
@@ -1080,14 +1376,15 @@ public partial class NotchWindow : Window
             UpdateActivity();
             return;
         }
-        RenderIdle();
+        if (!Vertical) RenderIdle(); // the side tab doesn't show the idle row
         UpdateIdleRotation();
         if (!_peeking)
         {
-            var w = IdleWidth();
+            if (Vertical) RenderSide();
+            var w = Vertical ? SideDepth : IdleWidth();
             if (Math.Abs(_width.Target - w) > 0.5)
             {
-                _width.Target = w;
+                SetCollapsedTarget();
                 StartAnimation();
             }
         }
@@ -1120,15 +1417,16 @@ public partial class NotchWindow : Window
         foreach (var (slot, delay) in new[] { (IdleSlotA, 0), (IdleSlotB, 60) })
         {
             if (App.Settings.IdleLayout == "Split" && slot == IdleSlotA) continue; // left item stays put
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            var begin = TimeSpan.FromMilliseconds(delay);
-            slot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(320)) { BeginTime = begin, EasingFunction = ease });
+            var ease = Motion.Out;
+            var begin = Motion.Scale(delay);
+            slot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Slow) { BeginTime = begin, EasingFunction = ease });
             ((TranslateTransform)slot.RenderTransform).BeginAnimation(TranslateTransform.YProperty,
-                new DoubleAnimation(7, 0, TimeSpan.FromMilliseconds(320)) { BeginTime = begin, EasingFunction = ease });
+                new DoubleAnimation(7, 0, Motion.Slow) { BeginTime = begin, EasingFunction = ease });
         }
+        if (Vertical) RenderSide();
         if (!_expanded && !_peeking)
         {
-            _width.Target = IdleWidth();
+            SetCollapsedTarget();
             StartAnimation();
         }
     }
@@ -1169,9 +1467,46 @@ public partial class NotchWindow : Window
                 grid.Children.Add(new Ellipse { Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill } });
             return grid;
         }
-        var icon = new HeroIcon { Kind = item.Glyph ?? AppIcon.Info, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center };
-        icon.SetResourceReference(ForegroundProperty, item.ValueBrush == "TextBrush" ? "SubTextBrush" : item.ValueBrush);
-        return icon;
+        var glyphBrush = !ThemeService.IsDefaultScheme && item.ValueBrush == "TextBrush"
+            ? Application.Current.Resources["SubTextBrush"] as Brush // other schemes: a quiet grey icon beside the value
+            : IdleBrush(item);
+        return new HeroIcon { Kind = item.Glyph ?? AppIcon.Info, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center, Foreground = glyphBrush };
+    }
+
+    /// <summary>
+    /// Each idle item has its own colour, shared by its icon and its value, like the Dynamic Island's live activities.
+    /// Fixed, not the accent, so items stay recognisable at a glance. Status overrides it: red needs attention
+    /// (low battery, mic muted, an AI tool near its limit), green is good (charging, a stock up).
+    /// </summary>
+    private static readonly Dictionary<string, Color> IdleColors = new()
+    {
+        ["clock"] = C(0xF5, 0xF5, 0xF7), ["clock2"] = C(0x64, 0xD2, 0xFF), ["date"] = C(0xFF, 0x45, 0x3A),
+        ["weather"] = C(0x5A, 0xC8, 0xFA), ["sun"] = C(0xFF, 0xD6, 0x0A), ["nextEvent"] = C(0xFF, 0x45, 0x3A),
+        ["timeline"] = C(0xFF, 0x9F, 0x0A), ["todos"] = C(0x30, 0xD1, 0x58), ["battery"] = C(0x30, 0xD1, 0x58),
+        ["cpu"] = C(0xBF, 0x5A, 0xF2), ["network"] = C(0x40, 0x9C, 0xFF), ["stock"] = C(0x30, 0xD1, 0x58),
+        ["aiUsage"] = C(0xFF, 0x9F, 0x0A), ["unread"] = C(0xFF, 0x37, 0x5F), ["clipboard"] = C(0x64, 0xD2, 0xFF),
+        ["shelf"] = C(0xAC, 0x8E, 0xFF), ["streak"] = C(0xFF, 0x9F, 0x0A), ["screentime"] = C(0x5E, 0x5C, 0xE6),
+        ["mic"] = C(0xFF, 0x45, 0x3A), ["call"] = C(0xFF, 0x45, 0x3A), ["awake"] = C(0xFF, 0x9F, 0x0A),
+    };
+
+    private static Color C(byte r, byte g, byte b) => Color.FromRgb(r, g, b);
+
+    private static Brush IdleBrush(IdleItem item)
+    {
+        // Another scheme was picked: the idle notch takes that scheme's look (grey icon, its text colour) instead.
+        if (!ThemeService.IsDefaultScheme)
+            return Application.Current.Resources[item.ValueBrush] as Brush ?? Brushes.White;
+        var color = item.ValueBrush switch
+        {
+            "BadBrush" => C(0xFF, 0x45, 0x3A),
+            "GoodBrush" => C(0x30, 0xD1, 0x58),
+            _ => IdleColors.GetValueOrDefault(item.Id.Split(':')[0], C(0xF5, 0xF5, 0xF7)),
+        };
+        if (ThemeService.CurrentScheme.IsLight) // bright colours wash out on a light notch: deepen them
+            color = color == C(0xF5, 0xF5, 0xF7) ? C(0x1C, 0x1C, 0x1E) : Color.FromRgb((byte)(color.R * 0.72), (byte)(color.G * 0.72), (byte)(color.B * 0.72));
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
     }
 
     /// <summary>
@@ -1190,6 +1525,7 @@ public partial class NotchWindow : Window
         ["shelf"] = "00 files",
         ["aiUsage"] = "100%",
         ["weather"] = "-00°",
+        ["timeline"] = "0000000000", // the timeline is 112 px: give it the wide notch
     };
 
     private static readonly Dictionary<(string, double), double> IdleWidthCache = new();
@@ -1211,7 +1547,43 @@ public partial class NotchWindow : Window
         return width;
     }
 
-    private static TextBlock IdleValue(IdleItem item, double fontSize = 13.5, TextAlignment align = TextAlignment.Right)
+    private static FrameworkElement IdleValue(IdleItem item, double fontSize = 13.5, TextAlignment align = TextAlignment.Right)
+    {
+        if (item.Id == "timeline") return new DayTimeline(IdleInfoService.Instance.TodayEvents);
+        if (item.Id == "clock" && App.Settings.ClockStyle == "Flip") return FlipClock(IdleText(item, fontSize - 1, TextAlignment.Center));
+        return IdleText(item, fontSize, align);
+    }
+
+    private static string? _flipShown; // the time the flip clock last showed: a new one flips in
+
+    /// <summary>Settings › Display "Clock style: Flip": the time on a small split tile that flips when the minute changes.</summary>
+    private static FrameworkElement FlipClock(TextBlock text)
+    {
+        var seam = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.7 };
+        seam.SetResourceReference(Border.BackgroundProperty, "PillBrush");
+        var face = new Grid();
+        face.Children.Add(text);
+        face.Children.Add(seam);
+        var tile = new Border
+        {
+            CornerRadius = Radii.S, Padding = new Thickness(5, 1, 5, 1), VerticalAlignment = VerticalAlignment.Center,
+            Child = face, RenderTransformOrigin = new Point(0.5, 0.5),
+        };
+        tile.SetResourceReference(Border.BackgroundProperty, "Surface2Brush");
+        if (_flipShown is not null && _flipShown != text.Text)
+        {
+            var flip = new ScaleTransform(1, 1);
+            tile.RenderTransform = flip;
+            flip.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.05, 1, Motion.Scale(380))
+            {
+                EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.35 },
+            });
+        }
+        _flipShown = text.Text;
+        return tile;
+    }
+
+    private static TextBlock IdleText(IdleItem item, double fontSize, TextAlignment align)
     {
         var text = new TextBlock
         {
@@ -1225,7 +1597,9 @@ public partial class NotchWindow : Window
             MaxWidth = 230,
         };
         System.Windows.Documents.Typography.SetNumeralAlignment(text, FontNumeralAlignment.Tabular);
-        text.SetResourceReference(TextBlock.ForegroundProperty, item.ValueBrush);
+        // The value takes the item's colour (dimmed when there's nothing to show: "No more events", "All done").
+        if (item.ValueBrush == "SubTextBrush") text.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+        else text.Foreground = IdleBrush(item);
         return text;
     }
 
@@ -1233,7 +1607,7 @@ public partial class NotchWindow : Window
     private static StackPanel IdleChip(IdleItem item)
     {
         var chip = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        chip.Children.Add(IdleGlyph(item, 13));
+        chip.Children.Add(IdleGlyph(item, 14));
         var value = IdleValue(item, 13, TextAlignment.Left);
         value.Margin = new Thickness(6, 0, 0, 0);
         value.MaxWidth = 160;
@@ -1260,34 +1634,43 @@ public partial class NotchWindow : Window
     private readonly DispatcherTimer _peekTimer = new();
 
     /// <summary>One alert: what to draw, and what dismiss / click do.</summary>
+    private sealed record PeekAction(AppIcon Icon, string Tip, Action Run);
+
     private sealed record PeekRequest(string Key, Func<FrameworkElement> Icon, string Title, string Sub,
-        TimeSpan Duration, Action? OnDismiss = null, Action? OnClick = null)
+        TimeSpan Duration, Action? OnDismiss = null, Action? OnClick = null, PeekAction[]? Actions = null)
     {
         public DateTime QueuedAt { get; } = DateTime.Now;
+        /// <summary>Arrived while alerts were held (full screen, a listed app): shown when the hold ends, however late.</summary>
+        public bool Held { get; set; }
     }
 
     // Reminder alerts and Windows notifications share one queue and show one after another.
     private readonly List<PeekRequest> _peekQueue = new();
     private PeekRequest? _currentPeek;
 
-    private double PeekW => Math.Max(_musicW + 40, 400);
+    private double PeekW => Math.Max(_musicW + 40, 400) + (_currentPeek?.Actions?.Length ?? 0) * 32;
 
     private void EnqueuePeek(PeekRequest request)
     {
+        if (HeldForQuiet(request)) return;
         // A newer alert with the same key (same app / same reminder) replaces the waiting one.
         _peekQueue.RemoveAll(r => r.Key == request.Key);
         // The same alert already showing (volume steps): refresh it in place.
         if (_peeking && _currentPeek?.Key == request.Key)
         {
+            // Everything, not just the text: an empty sub, other buttons (their closures) or a second line change too.
             _currentPeek = request;
-            PeekIconHost.Content = request.Icon();
-            PeekTitle.Text = OneLine(request.Title);
-            PeekSub.Text = OneLine(request.Sub);
+            FillPeek(request);
+            PeekLayer.Height = _peekH;
             _peekTimer.Stop();
             _peekTimer.Interval = request.Duration;
             _peekTimer.Start();
+            _width.Target = PeekW;
+            _height.Target = _peekH;
+            StartAnimation();
             return;
         }
+        request.Held = AlertsHeld() && !IsUserFeedback(request.Key); // stale volume steps after a film are noise
         _peekQueue.Add(request);
         if (_peekQueue.Count > 4) _peekQueue.RemoveAt(0);
         if (!_peeking) ShowNextPeek();
@@ -1302,25 +1685,17 @@ public partial class NotchWindow : Window
 
     private void ShowNextPeek()
     {
-        if (_expanded || AlertsHeld()) return; // stays queued until the notch is closed / the app is left
+        if (_expanded || AlertsHeld() || Turning) return; // mid-turn: shown when the turn ends // stays queued until the notch is closed / the app is left
         if (Visibility != Visibility.Visible) Visibility = Visibility.Visible; // a listed app hid it but lets alerts through
-        _peekQueue.RemoveAll(r => DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
+        _peekQueue.RemoveAll(r => !r.Held && DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
         if (_peekQueue.Count == 0) return;
         var next = _peekQueue[0];
         _peekQueue.RemoveAt(0);
 
         _currentPeek = next;
         UpdatePeekMore();
-        PeekIconHost.Content = next.Icon();
-        PeekTitle.Text = OneLine(next.Title);
-        PeekSub.Text = OneLine(next.Sub);
-        PeekSub.Visibility = string.IsNullOrWhiteSpace(next.Sub) ? Visibility.Collapsed : Visibility.Visible;
-        _peekH = SubWraps(PeekSub.Text) ? PeekH2 : PeekH;
-        if (_peeking)
-        {
-            // Already open: swap the content with a quick fade instead of shrinking and growing again.
-            PeekLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
-        }
+        FillPeek(next);
+        AnimatePeekIn();
         _peeking = true;
         UpdateConceal();
         PeekLayer.Height = _peekH;
@@ -1330,6 +1705,36 @@ public partial class NotchWindow : Window
         _width.Target = PeekW;
         _height.Target = _peekH;
         StartAnimation();
+    }
+
+    /// <summary>Draws an alert's icon, text, buttons and height: a new alert, or one refreshed in place.</summary>
+    private void FillPeek(PeekRequest next)
+    {
+        PeekIconHost.Content = next.Icon();
+        PeekTitle.Text = OneLine(next.Title);
+        PeekSub.Text = OneLine(next.Sub);
+        PeekSub.Visibility = string.IsNullOrWhiteSpace(next.Sub) ? Visibility.Collapsed : Visibility.Visible;
+        PeekActions.Children.Clear();
+        foreach (var action in next.Actions ?? [])
+        {
+            var button = new Button
+            {
+                Width = 28, Height = 28, Margin = new Thickness(0, 0, 4, 0), ToolTip = action.Tip,
+                Style = (Style)FindResource("IconButton"), Content = new HeroIcon { Kind = action.Icon, Width = 13, Height = 13 },
+            };
+            button.SetResourceReference(BackgroundProperty, "HoverBrush");
+            button.SetResourceReference(ForegroundProperty, "TextBrush");
+            System.Windows.Automation.AutomationProperties.SetName(button, action.Tip);
+            MakeRound(button);
+            button.Click += (_, e) =>
+            {
+                e.Handled = true;
+                EndPeek();
+                action.Run();
+            };
+            PeekActions.Children.Add(button);
+        }
+        _peekH = SubWraps(PeekSub.Text) ? PeekH2 : PeekH;
     }
 
     /// <summary>Multi-line text (chat messages, emails) as one line, so the alert's layout holds.</summary>
@@ -1373,8 +1778,7 @@ public partial class NotchWindow : Window
         PeekLayer.BeginAnimation(OpacityProperty, null);
         PeekLayer.Visibility = Visibility.Collapsed;
         if (_expanded) return;
-        _width.Target = ActivityWidth();
-        _height.Target = _collapsedH;
+        SetCollapsedTarget();
         StartAnimation();
         if (HiddenForApp) Guard(); // "Hide completely" let this alert through; hide again now it's done
     }
@@ -1396,15 +1800,52 @@ public partial class NotchWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>Alert buttons are circles, like the alert's icon tile (the IconButton template is a rounded square).</summary>
+    private static void MakeRound(Button button)
+    {
+        void Apply()
+        {
+            button.ApplyTemplate();
+            if (button.Template?.FindName("Bd", button) is Border bd) bd.CornerRadius = new CornerRadius(button.Width / 2);
+        }
+        if (button.IsLoaded) Apply();
+        else button.Loaded += (_, _) => Apply();
+    }
+
+    /// <summary>
+    /// Each alert arrives: its icon pops in with a small overshoot and its text rises into place (also when it replaces
+    /// one already on screen, so the swap reads as "next" instead of a flicker).
+    /// </summary>
+    private void AnimatePeekIn()
+    {
+        var pop = new ScaleTransform(0.7, 0.7);
+        PeekIconHost.RenderTransform = pop;
+        var grow = new DoubleAnimation(0.7, 1, Motion.Slow) { EasingFunction = Motion.Pop };
+        pop.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+        pop.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+
+        var rise = new TranslateTransform(0, 8);
+        PeekText.RenderTransform = rise;
+        rise.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, Motion.Base) { EasingFunction = Motion.Out });
+        PeekText.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Base) { EasingFunction = Motion.Out });
+        PeekActions.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Slow) { EasingFunction = Motion.Out });
+    }
+
     private void ShowReminderPeek()
     {
         var r = EventReminderService.Instance;
         if (!r.IsActive) return;
-        EnqueuePeek(new PeekRequest(ReminderPeekKey, () => GlyphTile(AppIcon.CalendarDays), r.Title, r.SubText,
-            TimeSpan.FromSeconds(5),
+        // Automations › Join: a meeting with a link opens it from the reminder.
+        var link = App.Settings.AutoJoinLink ? r.CurrentLink : null;
+        EnqueuePeek(new PeekRequest(ReminderPeekKey, () => GlyphTile(AppIcon.CalendarDays), r.Title,
+            link is null ? r.SubText : $"{r.SubText} · click to join",
+            TimeSpan.FromSeconds(link is null ? 5 : 8),
             OnDismiss: () => EventReminderService.Instance.Dismiss(),
-            OnClick: () => Expand(activate: true))); // a live reminder routes this to Calendar
+            OnClick: link is null
+                ? () => Expand(activate: true) // a live reminder routes this to Calendar
+                : () => Launcher.Open(link)));
     }
+
 
     private void ShowNotificationPeek(NotchNotification n)
     {
@@ -1429,7 +1870,8 @@ public partial class NotchWindow : Window
             : r.Date == DateTime.Today ? $"Resets {r:t}"
             : r.Date == DateTime.Today.AddDays(1) ? $"Resets tomorrow {r:t}"
             : $"Resets {r:ddd h:mm tt}";
-        var pace = a.Percent >= 95 ? $"{Math.Max(0, 100 - a.Percent):0}% left" : "Pace yourself";
+        var pace = a.Full is { } full ? $"Full by {full:t} at this pace"
+            : a.Percent >= 95 ? $"{Math.Max(0, 100 - a.Percent):0}% left" : "Pace yourself";
         var sub = resets is null ? pace : $"{pace} · {resets}";
         EnqueuePeek(new PeekRequest($"ailimit:{a.ToolId}:{a.Window}", () => LogoTile(a.Logo), title, sub,
             TimeSpan.FromSeconds(6), OnClick: () => OpenTool("aiusage")));
@@ -1442,9 +1884,27 @@ public partial class NotchWindow : Window
             TimeSpan.FromSeconds(8), OnClick: () => _ = UpdateService.Instance.InstallAsync()));
     }
 
+    /// <summary>First launch after an update: say so once, and link to the release notes.</summary>
+    private void ShowWhatsNewPeek()
+    {
+        var version = UpdateService.CurrentVersion;
+        var last = App.Settings.LastSeenVersion;
+        if (last == version || QuietActive()) return; // while quiet: shown when quiet ends (CheckQuietEnded)
+        App.Settings.LastSeenVersion = version;
+        SettingsService.Save(notify: false);
+        if (SettingsService.FirstRun || ShotsDir is not null) return; // a new install gets the welcome instead
+        EnqueuePeek(new PeekRequest("whatsnew", () => GlyphTile(AppIcon.Sparkles), $"Updated to OrixNotch {version}",
+            "Click to see what's new", TimeSpan.FromSeconds(8), OnClick: () =>
+            {
+                Launcher.Open($"https://github.com/faisal-shohag/orixNotch/releases/tag/v{version}");
+            }));
+    }
+
     private void ShowPowerPeek(string title, string sub, bool charging) =>
-        EnqueuePeek(new PeekRequest("power", () => GlyphTile(charging ? AppIcon.Bolt : AppIcon.BatteryFull), title, sub,
-            TimeSpan.FromSeconds(3)));
+        // Plugged in: the battery fills to its level (sub is "NN%").
+        EnqueuePeek(new PeekRequest("power",
+            () => charging && int.TryParse(sub.TrimEnd('%'), out var pct) ? ChargingTile.Create(pct) : GlyphTile(AppIcon.BatteryFull),
+            title, sub, TimeSpan.FromSeconds(3)));
 
     private void ShowVolumePeek(float level, bool muted)
     {
@@ -1461,22 +1921,62 @@ public partial class NotchWindow : Window
             connected ? "Connected" : "Disconnected", TimeSpan.FromSeconds(3)));
     }
 
+    /// <summary>An alert from a script: an orixnotch://peek link or the local peek API. Text arrives clipped.</summary>
+    public void ShowExternalPeek(string title, string sub, string? icon)
+    {
+        var glyph = Enum.TryParse<AppIcon>(icon, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) ? parsed : AppIcon.Bolt;
+        EnqueuePeek(new PeekRequest("ext:" + title, () => GlyphTile(glyph), title, sub, TimeSpan.FromSeconds(5)));
+    }
+
     private void ShowDownloadPeek(string path)
     {
         if (!App.Settings.DownloadAlerts) return;
+        void ShowInFolder() => Launcher.Reveal(path);
+        var actions = new List<PeekAction>
+        {
+            new(AppIcon.File, "Open", () => Launcher.Open(path)),
+            new(AppIcon.Folder, "Show in folder", ShowInFolder),
+        };
+        if (PhoneTransferService.Instance.IsRunning)
+            actions.Add(new(AppIcon.DevicePhone, "Send to phone", () => PhoneTransferService.Instance.Send([path])));
+        actions.Add(new(AppIcon.ArchiveBox, "Add to Shelf", () => ShelfService.Instance.AddFiles([path], owned: false)));
         EnqueuePeek(new PeekRequest("download:" + path, () => GlyphTile(AppIcon.ArrowDown), "Download finished",
-            System.IO.Path.GetFileName(path) + " · click to show", TimeSpan.FromSeconds(4),
-            OnClick: () =>
+            System.IO.Path.GetFileName(path), TimeSpan.FromSeconds(6), OnClick: ShowInFolder, Actions: actions.ToArray()));
+    }
+
+    /// <summary>A screenshot was saved: its thumbnail; clicking parks it on the Shelf (drag it out or send it to the phone from there).</summary>
+    private void ShowScreenshotPeek(string path)
+    {
+        if (!App.Settings.ScreenshotAlerts || OcrService.Instance.Waiting || !System.IO.File.Exists(path)) return;
+        EnqueuePeek(new PeekRequest("screenshot", () => ThumbTile(path), "Screenshot saved",
+            "Click to put it on the Shelf", TimeSpan.FromSeconds(5), OnClick: () =>
             {
-                try
-                {
-                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
-                }
-                catch (Exception ex)
-                {
-                    App.Log(ex);
-                }
+                ShelfService.Instance.AddFiles([path], owned: false);
+                OpenTool("shelf");
             }));
+    }
+
+    /// <summary>A small preview of an image file (decoded small, and not left locked).</summary>
+    private static FrameworkElement ThumbTile(string path)
+    {
+        var frame = new Border { Width = 40, Height = 40, CornerRadius = Radii.M, ClipToBounds = true };
+        frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
+        try
+        {
+            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+            bitmap.BeginInit();
+            bitmap.UriSource = new Uri(path);
+            bitmap.DecodePixelHeight = 80;
+            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            frame.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
+        }
+        catch (Exception) // a half-written screenshot throws FileFormatException, ArgumentException, …: show the glyph
+        {
+            frame.Child = new HeroIcon { Kind = AppIcon.Photo, Width = 19, Height = 19 };
+        }
+        return frame;
     }
 
     private void ShowPhoneReceivedPeek(string peer, int count, bool text)
@@ -1492,7 +1992,7 @@ public partial class NotchWindow : Window
     /// <summary>Brand logo on a soft tile (AI usage alerts).</summary>
     private static FrameworkElement LogoTile(BrandLogo logo)
     {
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20) };
         tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var mark = BrandLogos.Create(logo, 20);
         mark.HorizontalAlignment = HorizontalAlignment.Center;
@@ -1503,7 +2003,7 @@ public partial class NotchWindow : Window
     /// <summary>Accent-soft rounded tile with a glyph (reminders).</summary>
     private static FrameworkElement GlyphTile(AppIcon kind)
     {
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20) };
         tile.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         var icon = new HeroIcon { Kind = kind, Width = 19, Height = 19, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         icon.SetResourceReference(ForegroundProperty, "AccentBrush");
@@ -1518,11 +2018,11 @@ public partial class NotchWindow : Window
         {
             var image = new Image { Source = n.Icon, Width = 34, Height = 34, Stretch = Stretch.Uniform };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-            var frame = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11), Child = image };
+            var frame = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20), Child = image };
             frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
             return frame;
         }
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20) };
         tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var letter = new TextBlock
         {
@@ -1538,9 +2038,9 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>Clockwise arc from 12 o'clock covering <paramref name="progress"/> of the mini ring.</summary>
-    private static Geometry BuildMiniArc(double progress)
+    /// <summary>A progress ring's arc, clockwise from 12 o'clock, for a size×size box (also the Timer tool's big ring).</summary>
+    internal static Geometry BuildMiniArc(double progress, double size = 22, double inset = 2.5)
     {
-        const double size = 22, inset = 2.5;
         var radius = size / 2 - inset;
         var center = new Point(size / 2, size / 2);
         progress = Math.Clamp(progress, 0, 0.9999);
@@ -1555,6 +2055,64 @@ public partial class NotchWindow : Window
         geometry.Figures.Add(figure);
         geometry.Freeze();
         return geometry;
+    }
+
+    private readonly TranslateTransform _tabRise = new();
+    private readonly DropShadowEffect _depth = new() { BlurRadius = 28, ShadowDepth = 8, Direction = 270, Color = Colors.Black, Opacity = 0 };
+    private readonly DropShadowEffect _glow = new() { BlurRadius = 26, ShadowDepth = 0, Opacity = 0.6 };
+    private double _openP;          // how open the notch is, 0–1 (the spring's progress)
+    private Color? _glowColor;
+    private bool _glowBreathing;
+
+    /// <summary>
+    /// The notch's one effect: while open, a soft shadow that grows with it (not on glass, it would show through);
+    /// while closed, the glow (Appearance › Glow): red on a call, accent in a focus session (both breathing slowly),
+    /// the cover's colour while music plays. Nothing at all otherwise, so the idle notch costs no effect pass.
+    /// </summary>
+    private void ApplyShapeEffect()
+    {
+        var shadow = ThemeService.IsGlass ? 0 : _openP;
+        _depth.Opacity = 0.45 * shadow;
+        Shape.Effect = shadow > 0.02 ? _depth : _glowColor is not null ? _glow : null;
+    }
+
+    public void RefreshGlow() => UpdateGlow();
+
+    /// <summary>The device watchers only feed their alerts: run each only while its alert is on (Settings → Alerts).</summary>
+    public static void ApplyDeviceWatchers()
+    {
+        var s = App.Settings;
+        if (s.BluetoothAlerts) BluetoothWatcher.Instance.Start(); else BluetoothWatcher.Instance.Stop();
+        if (s.DownloadAlerts) DownloadWatcher.Instance.Start(); else DownloadWatcher.Instance.Stop();
+        if (s.ScreenshotAlerts) ScreenshotWatcher.Instance.Start(); else ScreenshotWatcher.Instance.Stop();
+    }
+
+    private void UpdateGlow()
+    {
+        Color? color = null;
+        var breathe = false;
+        if (App.Settings.NotchGlow)
+        {
+            if (InCall) (color, breathe) = ((ThemeService.Get("BadBrush") as SolidColorBrush)?.Color ?? Colors.Red, true);
+            else if (PomodoroService.Instance.Focusing) (color, breathe) = (ThemeService.CurrentAccent.Mean, true);
+            else if (NowPlayingService.Instance.IsPlaying && NowPlayingService.Instance.ArtTint is { } tint) color = tint;
+        }
+        if (color == _glowColor && breathe == _glowBreathing) return;
+        _glowColor = color;
+        _glowBreathing = breathe;
+        if (color is { } c) _glow.Color = c;
+        if (breathe && !Motion.Reduced)
+        {
+            var pulse = new DoubleAnimation(0.3, 0.8, TimeSpan.FromSeconds(2.2)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() };
+            Timeline.SetDesiredFrameRate(pulse, 20); // a slow breath doesn't need 60 fps
+            _glow.BeginAnimation(DropShadowEffect.OpacityProperty, pulse);
+        }
+        else
+        {
+            _glow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+            _glow.Opacity = 0.6;
+        }
+        ApplyShapeEffect();
     }
 
     private void BuildEqualizer()
@@ -1582,8 +2140,47 @@ public partial class NotchWindow : Window
     {
         if (on == _eqRunning) return;
         _eqRunning = on;
-        if (on) _eq.Begin(this, true);
-        else _eq.Stop(this);
+        _eqLive.Stop();
+        if (!on)
+        {
+            _eq.Stop(this);
+            return;
+        }
+        if (Motion.Reduced) return; // animations off: the bars stand still
+        if (App.Settings.ReactivePill && !BatterySaver() && VolumeService.Instance.Peak() is not null) _eqLive.Start();
+        else _eq.Begin(this, true);
+    }
+
+    // Live bars: the speakers' peak level ~30 times a second, each bar at its own phase so they don't move as one.
+    private readonly DispatcherTimer _eqLive = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+    private readonly double[] _eqLevels = new double[5];
+    private System.Windows.Shapes.Rectangle[]? _bars;
+
+    private void TickEqualizer()
+    {
+        var bars = _bars ??= [Bar1, Bar2, Bar3, Bar4, Bar5];
+        var peak = Math.Sqrt(VolumeService.Instance.Peak() ?? 0); // square root: quiet passages still move
+        var t = Environment.TickCount64 / 1000.0;
+        for (var i = 0; i < bars.Length; i++)
+        {
+            var wobble = 0.65 + 0.35 * Math.Sin(t * (5 + i * 1.7) + i);
+            var target = Math.Clamp(0.22 + peak * wobble, 0.22, 1);
+            // Rise fast, fall slower, like a VU meter.
+            _eqLevels[i] += (target - _eqLevels[i]) * (target > _eqLevels[i] ? 0.6 : 0.2);
+            if (bars[i].RenderTransform is ScaleTransform scale) scale.ScaleY = _eqLevels[i];
+        }
+    }
+
+    private static bool BatterySaver()
+    {
+        try
+        {
+            return Windows.System.Power.PowerManager.EnergySaverStatus == Windows.System.Power.EnergySaverStatus.On;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     // ---------------------------------------------------------------- tools
@@ -1594,7 +2191,7 @@ public partial class NotchWindow : Window
         if (tools.Count == 0) tools = [ToolRegistry.All[0]];
 
         var previousActive = _activeTool;
-        if (_activeTool != SettingsId && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
+        if (_activeTool is not (SettingsId or PaletteId or BriefId or WrapId) && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
 
         // Settings isn't in the scrolling strip: it's pinned at the right end (SettingsTabHost).
         SettingsTabHost.Child ??= MakeTab(SettingsId, "Settings", AppIcon.Gear);
@@ -1642,7 +2239,9 @@ public partial class NotchWindow : Window
         var tab = new RadioButton
         {
             Style = (Style)FindResource("TabButton"),
-            Content = new HeroIcon { Kind = icon, Width = 17, Height = 17 },
+            Content = id == "notifications" ? WithUnreadBadge(new HeroIcon { Kind = icon, Width = 17, Height = 17 })
+                : IsNewTool(id) ? WithNewDot(id, new HeroIcon { Kind = icon, Width = 17, Height = 17 })
+                : new HeroIcon { Kind = icon, Width = 17, Height = 17 },
             ToolTip = name,
             GroupName = "tools",
             Tag = id,
@@ -1650,6 +2249,7 @@ public partial class NotchWindow : Window
         };
         tab.Checked += (_, _) =>
         {
+            if (id == _activeTool) return; // Present() checks the tab of the tool it just showed
             if (id == SettingsId) ShowSettings();
             else ShowTool(id);
         };
@@ -1657,8 +2257,79 @@ public partial class NotchWindow : Window
         return tab;
     }
 
+    // "New" dots on the tabs of tools added in this release, until each is opened (not on a first install: all is new).
+    private readonly Dictionary<string, FrameworkElement> _newDots = new();
+
+    private static bool IsNewTool(string id) =>
+        !SettingsService.FirstRun && ToolRegistry.NewTools.Contains(id) && !App.Settings.SeenNew.Contains("tool|" + id);
+
+    private FrameworkElement WithNewDot(string id, FrameworkElement icon)
+    {
+        var dot = new Ellipse
+        {
+            Width = 6, Height = 6, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -3, -5, 0), IsHitTestVisible = false,
+        };
+        dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentBrush");
+        _newDots[id] = dot;
+        var grid = new Grid();
+        grid.Children.Add(icon);
+        grid.Children.Add(dot);
+        return grid;
+    }
+
+    private void MarkToolSeen(string id)
+    {
+        if (!_newDots.Remove(id, out var dot)) return;
+        dot.Visibility = Visibility.Collapsed;
+        App.Settings.SeenNew.Add("tool|" + id);
+        SettingsService.Save(notify: false);
+    }
+
+    /// <summary>The Notifications tab's icon with a count of what arrived since it was last opened.</summary>
+    private static FrameworkElement WithUnreadBadge(FrameworkElement icon)
+    {
+        var count = new TextBlock { FontSize = 8.5, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        count.SetResourceReference(TextBlock.ForegroundProperty, "OnAccentBrush");
+        var badge = new Border
+        {
+            MinWidth = 13, Height = 13, CornerRadius = Radii.S, Padding = new Thickness(3, 0, 3, 0),
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -6, -9, 0), IsHitTestVisible = false, Child = count,
+        };
+        badge.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+        void Update()
+        {
+            var n = NotificationHistory.Instance.Unread;
+            count.Text = n > 9 ? "9+" : n.ToString();
+            badge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        var grid = new Grid();
+        grid.Children.Add(icon);
+        grid.Children.Add(badge);
+        // Tabs are rebuilt on every settings change: only a badge on screen listens, or each rebuild leaks one more.
+        grid.Loaded += (_, _) =>
+        {
+            NotificationHistory.Instance.Changed -= Update;
+            NotificationHistory.Instance.Changed += Update;
+            Update();
+        };
+        grid.Unloaded += (_, _) => NotificationHistory.Instance.Changed -= Update;
+        Update();
+        return grid;
+    }
+
+    /// <summary>Automations › "Match the app in front": the tool set for the app in front, if any.</summary>
+    private static string? ContextTool()
+    {
+        var s = App.Settings;
+        return s.ContextTools && ForegroundAppWatcher.Instance.Current is { } app && s.AppTools.TryGetValue(app, out var tool)
+            && ToolRegistry.Ordered().Any(t => t.Id == tool) ? tool : null; // not a tool hidden from the tabs
+    }
+
+    /// <param name="remember">False for a tool picked for the app in front: the next plain open returns to the last one chosen.</param>
     /// <summary>Shows a tool. <paramref name="backTo"/> makes it a sub-page with a back chevron.</summary>
-    public void ShowTool(string id, string? backTo = null)
+    public void ShowTool(string id, string? backTo = null, bool remember = true)
     {
         if (id == SettingsId)
         {
@@ -1667,21 +2338,126 @@ public partial class NotchWindow : Window
         }
 
         var def = ToolRegistry.All.FirstOrDefault(t => t.Id == id) ?? ToolRegistry.All[0];
+        MarkToolSeen(def.Id);
         _backTarget = backTo;
         Present(def.Id, def.Name, def.Width, def.Height, () => def.Create(), showTabs: true);
 
-        if (App.Settings.LastTool != def.Id)
+        if (remember && App.Settings.LastTool != def.Id)
         {
             App.Settings.LastTool = def.Id;
             SettingsService.Save(notify: false);
         }
     }
 
+    /// <summary>Hotkey "Explain selected text": copy the selection while its app is still in front, then ask.</summary>
+    private async Task ExplainSelectionAsync()
+    {
+        var text = await SelectionService.CopyAsync();
+        OpenTool("ask");
+        View<Tools.AskAiView>("ask")?.Explain(text);
+    }
+
+    /// <summary>An orixnotch://theme link: apply the look, with Undo on the alert.</summary>
+    public void ApplyThemeLink(ExternalCommands.Link link)
+    {
+        var before = ThemeService.Current();
+        var look = ThemeService.Parse(link.Get, before);
+        if (look == before) return;
+        ThemeService.ApplyLook(look);
+        var name = ThemeService.Schemes.FirstOrDefault(s => s.Id == look.Scheme)?.Name ?? look.Scheme;
+        EnqueuePeek(new PeekRequest("theme", () => GlyphTile(AppIcon.Palette), "New look applied",
+            $"{name}{(look.Glass ? " glass" : "")}", TimeSpan.FromSeconds(8),
+            Actions: [new PeekAction(AppIcon.Backward, "Undo", () => ThemeService.ApplyLook(before))]));
+    }
+
+    /// <summary>Appearance › Reset theme: back to the default look, with Undo on the alert.</summary>
+    public void ResetTheme()
+    {
+        var before = ThemeService.Current();
+        var look = ThemeService.DefaultLook();
+        if (look == before) return;
+        ThemeService.ApplyLook(look);
+        EnqueuePeek(new PeekRequest("theme", () => GlyphTile(AppIcon.Palette), "Theme reset", "Back to the default look",
+            TimeSpan.FromSeconds(8), Actions: [new PeekAction(AppIcon.Backward, "Undo", () => ThemeService.ApplyLook(before))]));
+    }
+
+    public const string PaletteId = "palette";
+    public const string BriefId = "brief";
+    public const string WrapId = "wrap";
+
+    /// <summary>The end-of-day wrap: today's screen time, focus and to-dos, with "Save image".</summary>
+    public void ShowWrap()
+    {
+        Expand(activate: true, present: false);
+        _backTarget = null;
+        Present(WrapId, $"Your day · {DateTime.Today:ddd, MMM d}", 720, 128, () => new Tools.WrapView(), showTabs: false);
+        (_views[WrapId] as Tools.WrapView)?.Show();
+    }
+
+    private static void After(TimeSpan delay, Action action)
+    {
+        var timer = new DispatcherTimer { Interval = delay };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            action();
+        };
+        timer.Start();
+    }
+
+    /// <summary>
+    /// Automations › Morning brief: once a day, at the first unlock (or at launch), the notch opens for a few seconds
+    /// on the day's weather, next event, to-dos, AI usage and a stock. Never while quiet, in full screen or in use.
+    /// </summary>
+    private async void TryMorningBrief()
+    {
+        try
+        {
+            await TryMorningBriefAsync();
+        }
+        catch (Exception ex) // async void: an error here would otherwise only reach the global handler
+        {
+            App.Log(ex);
+        }
+    }
+
+    private async Task TryMorningBriefAsync()
+    {
+        var s = App.Settings;
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        if (!s.MorningBrief || s.BriefShown == today || _expanded || _peeking || QuietActive() || AlertsHeld()) return;
+        s.BriefShown = today;
+        SettingsService.Save(notify: false);
+        var items = await IdleInfoService.Instance.SnapshotAsync("weather", "nextEvent", "todos", "aiUsage", "stock");
+        if (_expanded || _peeking || items.Count == 0) return;
+        Expand(activate: false, present: false); // no focus taken: you may already be typing
+        _awaitingCursor = true;   // stays open until the timer ends, or the pointer visits and leaves
+        var hour = DateTime.Now.Hour;
+        var greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+        Present(BriefId, $"{greeting}, {ProfileService.FirstName}", 720, 110, () => new Tools.MorningBriefView(), showTabs: false);
+        (_views[BriefId] as Tools.MorningBriefView)?.Show(items, i => IdleGlyph(i, 14));
+        After(TimeSpan.FromSeconds(9), () =>
+        {
+            if (_expanded && _activeTool == BriefId && !IsCursorOverPill() && !_pinned) Collapse();
+        });
+    }
+
+    /// <summary>Opens the notch on the command palette ("timer 10", "todo …", "20 usd to eur", tool names…).</summary>
+    public void ShowPalette()
+    {
+        Expand(activate: true, present: false);
+        _backTarget = null;
+        Present(PaletteId, "Command", 720, 220, () => new Tools.CommandPaletteView(), showTabs: false);
+    }
+
+    /// <summary>A tool's view when it has been created (opening it creates it).</summary>
+    public T? View<T>(string id) where T : FrameworkElement => _views.GetValueOrDefault(id) as T;
+
     public void ShowSettings()
     {
         if (_activeTool != SettingsId) _backTarget = _activeTool;
-        // Settings opens taller than the tools (≈750×512).
-        Present(SettingsId, "Settings", 714, 438, () => new SettingsView(), showTabs: false);
+        // Settings opens taller than the tools, so its whole sidebar fits (≈750×640).
+        Present(SettingsId, "Settings", 714, 568, () => new SettingsView(), showTabs: false); // tall enough for the whole sidebar
     }
 
     /// <summary>Opens the notch on one Settings page ("tabs", "appearance"…).</summary>
@@ -1748,11 +2524,10 @@ public partial class NotchWindow : Window
             Place();
         }
 
-        _toolW = w;
-        _toolH = h;
         ToolHost.Width = w;
         ToolHost.Height = h;
         _expandedH = chrome + h;
+        _expandedW = w + 2 * SidePad;
         if (!_expanded) return h;
         _width.Target = w + 2 * SidePad;
         _height.Target = _expandedH;
@@ -1792,29 +2567,32 @@ public partial class NotchWindow : Window
             TabIndicator.Opacity = 1;
             return;
         }
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var ease = Motion.Out;
         TabIndicatorShift.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(x, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+            new DoubleAnimation(x, Motion.Base) { EasingFunction = ease });
     }
 
     /// <summary>New content slides in from the side of the tab it came from and fades up.</summary>
     private static void SlideIn(UIElement element, int direction)
     {
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+        var ease = Motion.Out;
+        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Base) { EasingFunction = ease });
         var shift = new TranslateTransform();
         element.RenderTransform = shift;
         if (direction == 0)
-            shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(6, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+            shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(6, 0, Motion.Base) { EasingFunction = ease });
         else
-            shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(18 * direction, 0, TimeSpan.FromMilliseconds(280)) { EasingFunction = ease });
+            shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(18 * direction, 0, Motion.Base) { EasingFunction = ease });
     }
 
     private void OnSettingsChanged()
     {
+        ApplyDeviceWatchers(); // a profile or imported settings can switch the alerts
         ApplyNotchSize();
         BuildTabs();
         Place();
+        _shapeDrawn = default; // the shape or edge may have changed: redraw even at the same size
+        ApplyGeometry();
         ApplyCaptureAffinity();
     }
 
@@ -1852,6 +2630,18 @@ public partial class NotchWindow : Window
 
     /// <summary>Puts a drop on the Shelf, offers it to the phone or hands it to Ask AI, then shows where it went.</summary>
     public async void DeliverDrop(DropPayload payload, DropTarget target)
+    {
+        try
+        {
+            await DeliverDropAsync(payload, target);
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
+    }
+
+    private async Task DeliverDropAsync(DropPayload payload, DropTarget target)
     {
         HideDropChooser(restore: false);
         ShowTool(target switch { DropTarget.Phone => "phone", DropTarget.Ask => "ask", _ => "shelf" });

@@ -55,6 +55,9 @@ public static class ThemeService
 {
     public static IReadOnlyList<ColorScheme> Schemes { get; } =
     [
+        // The default pair: slate and white cards with a coral accent; "System" picks one by Windows' light/dark mode.
+        new("coral", "Coral", C("#14171D"), C("#1B1F27"), C("#232832"), C("#2D333E"), C("#F4F5F7"), C("#8B909A"), false, "coral"),
+        new("coral-light", "Coral Light", C("#FFFFFF"), C("#FBF3F1"), C("#F3E7E3"), C("#EADBD6"), C("#1F2430"), C("#868B95"), true, "coral"),
         new("midnight", "Midnight", C("#000000"), C("#121214"), C("#1C1C1F"), C("#28282C"), C("#F5F5F7"), C("#8A8A90"), false, "orange"),
         new("graphite", "Graphite", C("#1B1B1D"), C("#242427"), C("#2D2D31"), C("#38383D"), C("#F2F2F4"), C("#94949A"), false, "blue"),
         new("slate", "Slate", C("#161A20"), C("#1F242C"), C("#283039"), C("#333C47"), C("#EEF1F5"), C("#8F99A6"), false, "sky"),
@@ -78,6 +81,7 @@ public static class ThemeService
 
     public static IReadOnlyList<AccentColor> Accents { get; } =
     [
+        new("coral", "Coral", C("#E8442A")),
         new("orange", "Orange", C("#FF8A3D")),
         new("amber", "Amber", C("#FFC233")),
         new("lime", "Lime", C("#A3E635")),
@@ -107,15 +111,78 @@ public static class ThemeService
 
     public static event Action? Changed;
 
+    /// <summary>Scheme setting that follows Windows' light/dark app mode: Coral Light or Coral.</summary>
+    public const string SystemScheme = "system";
+
+    /// <summary>On the default theme (System, Coral or Coral Light): the idle notch shows its items in their own colours.</summary>
+    public static bool IsDefaultScheme => App.Settings.ThemeScheme is SystemScheme or "coral" or "coral-light";
+
+    /// <summary>Back to the default theme: System scheme, its own accent, no glass.</summary>
+    public static Look DefaultLook() => new(SystemScheme, AutoAccent, false, 0.6, false, App.Settings.NotchSize);
+
     public static ColorScheme CurrentScheme =>
-        Schemes.FirstOrDefault(s => s.Id == App.Settings.ThemeScheme) ?? Schemes[0];
+        App.Settings.ThemeScheme == SystemScheme
+            ? Schemes.First(s => s.Id == (SystemToggles.DarkMode ? "coral" : "coral-light"))
+            : Schemes.FirstOrDefault(s => s.Id == App.Settings.ThemeScheme) ?? Schemes[0];
 
     /// <summary>Accent setting that follows the scheme's own accent.</summary>
     public const string AutoAccent = "auto";
 
     public static bool IsAutoAccent => App.Settings.ThemeAccent == AutoAccent;
 
-    public static AccentColor CurrentAccent => AccentFor(CurrentScheme);
+    public static AccentColor CurrentAccent => AlbumAccent() ?? AccentFor(CurrentScheme);
+
+    /// <summary>Settings › Appearance "Follow album art": the playing song's cover colour, made vivid enough to read.</summary>
+    private static AccentColor? AlbumAccent()
+    {
+        if (!App.Settings.AlbumAccent || NowPlayingService.Instance.ArtTint is not { } tint) return null;
+        var (h, s, l) = ToHsl(tint);
+        if (s < 0.08) return null; // a grey cover has no colour to borrow
+        var light = CurrentScheme.IsLight;
+        return new AccentColor("album", "Album art",
+            FromHsl(h, Math.Max(s, 0.6), Math.Clamp(l, light ? 0.38 : 0.55, light ? 0.48 : 0.68)));
+    }
+
+    private static readonly System.Windows.Threading.DispatcherTimer AlbumDebounce = new() { Interval = TimeSpan.FromMilliseconds(500) };
+
+    /// <summary>Re-applies the accent when the cover changes (debounced: skipping tracks fires quickly).</summary>
+    public static void FollowAlbumArt()
+    {
+        AlbumDebounce.Tick += (_, _) =>
+        {
+            AlbumDebounce.Stop();
+            Apply();
+        };
+        NowPlayingService.Instance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(NowPlayingService.ArtTint) || !App.Settings.AlbumAccent) return;
+            AlbumDebounce.Stop();
+            AlbumDebounce.Start();
+        };
+    }
+
+    internal static (double H, double S, double L) ToHsl(Color c)
+    {
+        double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), l = (max + min) / 2, d = max - min;
+        if (d < 1e-6) return (0, 0, l);
+        var s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        var h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
+        return (h / 6, s, l);
+    }
+
+    internal static Color FromHsl(double h, double s, double l)
+    {
+        static double Hue(double p, double q, double t)
+        {
+            t = (t + 1) % 1;
+            return t < 1 / 6.0 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3.0 ? p + (q - p) * (2 / 3.0 - t) * 6 : p;
+        }
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        static byte B(double v) => (byte)Math.Round(Math.Clamp(v, 0, 1) * 255);
+        return Color.FromRgb(B(Hue(p, q, h + 1 / 3.0)), B(Hue(p, q, h)), B(Hue(p, q, h - 1 / 3.0)));
+    }
 
     /// <summary>The accent <paramref name="scheme"/> shows: its own while the accent is Auto, else the one picked.</summary>
     public static AccentColor AccentFor(ColorScheme scheme) =>
@@ -134,7 +201,8 @@ public static class ThemeService
             // Glass: the notch is a see-through tint over the desktop (NotchWindow.Glass.cs),
             // panels are lighter panes on it and the rim catches light at the top.
             var pill = PillAlpha;
-            res["PillBrush"] = s.PillTo is { } to ? Gradient([WithAlpha(s.Pill, pill), WithAlpha(to, pill)], vertical: true) : Solid(WithAlpha(s.Pill, pill));
+            var tint = GlassTint(s);
+            res["PillBrush"] = s.PillTo is { } to ? Gradient([WithAlpha(tint, pill), WithAlpha(to, pill)], vertical: true) : Solid(WithAlpha(tint, pill));
             var pane = (byte)Math.Max(0x70, pill * 0.75);
             res["SurfaceBrush"] = Solid(WithAlpha(s.Surface, pane));
             res["Surface2Brush"] = Solid(WithAlpha(s.Surface2, pane));
@@ -175,6 +243,161 @@ public static class ThemeService
 
         Changed?.Invoke();
     }
+
+    /// <summary>
+    /// The glass colour: the scheme's notch colour, or with "Tint from wallpaper" that blended with the colour of
+    /// the wallpaper behind the notch (kept dark on dark schemes, light on light ones, so text stays readable).
+    /// </summary>
+    private static Color GlassTint(ColorScheme s)
+    {
+        if (!App.Settings.GlassWallpaperTint || WallpaperColor() is not { } wall) return s.Pill;
+        var (h, sat, _) = ToHsl(wall);
+        var tinted = FromHsl(h, Math.Min(sat, 0.55), s.IsLight ? 0.9 : 0.12);
+        return Mix(s.Pill, tinted, 0.75);
+    }
+
+    private static Color? _wallpaper;
+    private static bool _wallpaperRead;
+
+    /// <summary>Average colour of the top-centre strip of the current wallpaper (where the notch sits); null if it can't be read.</summary>
+    private static Color? WallpaperColor()
+    {
+        if (_wallpaperRead) return _wallpaper;
+        _wallpaperRead = true;
+        try
+        {
+            // The image Windows actually shows (also for slideshows and Spotlight), else the one set in Settings.
+            var transcoded = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Themes\TranscodedWallpaper");
+            var path = System.IO.File.Exists(transcoded) ? transcoded
+                : Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Control Panel\Desktop", "WallPaper", null) as string;
+            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return _wallpaper = null;
+            var image = new System.Windows.Media.Imaging.BitmapImage();
+            using (var stream = System.IO.File.OpenRead(path))
+            {
+                image.BeginInit();
+                image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                image.StreamSource = stream;
+                image.DecodePixelWidth = 160;
+                image.EndInit();
+            }
+            var bgra = new System.Windows.Media.Imaging.FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+            int w = bgra.PixelWidth, h = Math.Max(1, bgra.PixelHeight / 6), x0 = w * 3 / 10, cols = w * 4 / 10; // top sixth, middle 40%
+            var pixels = new byte[cols * h * 4];
+            bgra.CopyPixels(new Int32Rect(x0, 0, cols, h), pixels, cols * 4, 0);
+            long r = 0, g = 0, b = 0;
+            for (var i = 0; i < pixels.Length; i += 4)
+            {
+                b += pixels[i];
+                g += pixels[i + 1];
+                r += pixels[i + 2];
+            }
+            var n = pixels.Length / 4;
+            return _wallpaper = Color.FromRgb((byte)(r / n), (byte)(g / n), (byte)(b / n));
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            return _wallpaper = null;
+        }
+    }
+
+    /// <summary>Re-reads the wallpaper when Windows says the desktop changed (call once at start).</summary>
+    public static void WatchWallpaper() =>
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, e) =>
+        {
+            // Windows' light/dark switch arrives as a General change: the System scheme follows it.
+            if (e.Category == Microsoft.Win32.UserPreferenceCategory.General && App.Settings.ThemeScheme == SystemScheme)
+                Application.Current?.Dispatcher.BeginInvoke(Apply);
+            if (e.Category != Microsoft.Win32.UserPreferenceCategory.Desktop || !App.Settings.GlassWallpaperTint) return;
+            _wallpaperRead = false;
+            Application.Current?.Dispatcher.BeginInvoke(Apply);
+        };
+
+    /// <summary>One-click looks: a scheme with its glass settings.</summary>
+    public static readonly (string Name, string Scheme, bool Glass, double Strength, bool WallpaperTint)[] Looks =
+    [
+        ("Midnight", "midnight", false, 0.6, false),
+        ("Liquid", "midnight", true, 0.35, true),
+        ("Frost", "frost", true, 0.75, true),
+        ("Aurora", "aurora", false, 0.6, false),
+    ];
+
+    public static void ApplyLook(int index)
+    {
+        var look = Looks[index];
+        var s = App.Settings;
+        s.ThemeScheme = look.Scheme;
+        s.ThemeAccent = AutoAccent;
+        s.Glass = look.Glass;
+        s.GlassStrength = look.Strength;
+        s.GlassWallpaperTint = look.WallpaperTint;
+        _wallpaperRead = false;
+        SettingsService.Save(notify: false);
+        Apply();
+    }
+
+    // ---------------------------------------------------------------- sharing a look
+
+    public static readonly string[] Sizes = ["Small", "Default", "Large", "ExtraLarge"];
+
+    /// <summary>The current look as a link others can open: scheme, accent, glass and size.</summary>
+    public static string ShareLink()
+    {
+        var s = App.Settings;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return $"orixnotch://theme?scheme={s.ThemeScheme}&accent={s.ThemeAccent}&glass={(s.Glass ? 1 : 0)}" +
+               $"&strength={s.GlassStrength.ToString("0.##", inv)}&tint={(s.GlassWallpaperTint ? 1 : 0)}&size={s.NotchSize}";
+    }
+
+    /// <summary>A look read from a link; unknown or missing values keep the current ones.</summary>
+    public sealed record Look(string Scheme, string Accent, bool Glass, double Strength, bool Tint, string Size);
+
+    public static Look Current()
+    {
+        var s = App.Settings;
+        return new(s.ThemeScheme, s.ThemeAccent, s.Glass, s.GlassStrength, s.GlassWallpaperTint, s.NotchSize);
+    }
+
+    /// <summary>Reads a theme link's values against the known schemes, accents and sizes (it can come from anyone).</summary>
+    public static Look Parse(Func<string, string> get, Look current)
+    {
+        var scheme = get("scheme");
+        var accent = get("accent");
+        var size = get("size");
+        return new(
+            scheme == SystemScheme || Schemes.Any(x => x.Id == scheme) ? scheme : current.Scheme,
+            accent == AutoAccent || Accents.Any(x => x.Id == accent) ? accent : current.Accent,
+            get("glass") is "1" or "0" ? get("glass") == "1" : current.Glass,
+            double.TryParse(get("strength"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var st)
+                && st is >= 0 and <= 1 ? st : current.Strength,
+            get("tint") is "1" or "0" ? get("tint") == "1" : current.Tint,
+            Sizes.Contains(size) ? size : current.Size);
+    }
+
+    public static void ApplyLook(Look look)
+    {
+        var s = App.Settings;
+        s.ThemeScheme = look.Scheme;
+        s.ThemeAccent = look.Accent;
+        s.Glass = look.Glass;
+        s.GlassStrength = look.Strength;
+        s.GlassWallpaperTint = look.Tint;
+        s.NotchSize = look.Size;
+        _wallpaperRead = false;
+        SettingsService.Save(); // notify: the size changes the notch's layout
+        Apply();
+    }
+
+#if DEBUG
+    static ThemeService()
+    {
+        var current = new Look("midnight", "auto", false, 0.6, false, "Default");
+        var q = new Dictionary<string, string> { ["scheme"] = "frost", ["accent"] = "pink", ["glass"] = "1", ["strength"] = "0.35", ["size"] = "Large" };
+        System.Diagnostics.Debug.Assert(Parse(k => q.GetValueOrDefault(k, ""), current) == new Look("frost", "pink", true, 0.35, false, "Large"));
+        var bad = new Dictionary<string, string> { ["scheme"] = "x", ["accent"] = "<script>", ["strength"] = "9", ["size"] = "Huge" };
+        System.Diagnostics.Debug.Assert(Parse(k => bad.GetValueOrDefault(k, ""), current) == current);
+    }
+#endif
 
     /// <summary>The notch is frosted glass (Settings › Appearance › Glass).</summary>
     public static bool IsGlass => App.Settings.Glass;

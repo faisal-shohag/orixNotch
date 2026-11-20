@@ -25,7 +25,7 @@ public static class ToolRegistry
 {
     // One panel size (≈726×323) for every tool: 690 wide content after
     // 18 px padding, ≈203 tall between header and tab bar. A few tools need a little more.
-    private const double W = 720;
+    public const double W = 720;
     private const double H = 220;
 
     public static IReadOnlyList<ToolDef> All { get; } =
@@ -43,13 +43,19 @@ public static class ToolRegistry
         new("todos", "To-Dos", AppIcon.ListBullet, W, H, () => new TodosView()),
         new("timer", "Timers", AppIcon.Clock, W, H, () => new TimerView()),
         new("calendar", "Calendar", AppIcon.CalendarDays, W, 245, () => new CalendarView()),
+        new("subscriptions", "Subscriptions", AppIcon.CreditCard, W, H, () => new SubscriptionsView()),
         new("notifications", "Notifications", AppIcon.Bell, W, H, () => new NotificationsView()),
         new("weather", "Weather", AppIcon.Cloud, W, 245, () => new WeatherView()),
+        new("controls", "Controls", AppIcon.Adjust, W, H, () => new ControlsView()),
         new("system", "System", AppIcon.Signal, W, H, () => new SystemMonitorView()),
+        new("screentime", "Screen Time", AppIcon.Hourglass, W, H, () => new ScreenTimeView()),
         new("stocks", "Stocks", AppIcon.ChartLine, W, H, () => new StocksView()),
         new("converter", "Converter", AppIcon.ArrowsLeftRight, W, H, () => new ConverterView()),
         new("emoji", "Emoji", AppIcon.FaceSmile, W, 245, () => new EmojiView()),
     ];
+
+    /// <summary>Tools added in this release: their tabs get a "new" dot until opened once. Update with each release.</summary>
+    public static readonly string[] NewTools = ["screentime", "controls", "subscriptions"];
 
     /// <summary>Tools in the user's order, hidden ones removed.</summary>
     public static List<ToolDef> Ordered(bool includeHidden = false)

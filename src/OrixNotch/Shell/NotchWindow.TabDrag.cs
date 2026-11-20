@@ -112,7 +112,7 @@ public partial class NotchWindow
         Mouse.OverrideCursor = GrabCursor.Value; // wins over the hand cursor of whatever is under the pointer
         Animate(ScaleOf(tab), ScaleTransform.ScaleXProperty, LiftScale, 160);
         Animate(ScaleOf(tab), ScaleTransform.ScaleYProperty, LiftScale, 160);
-        tab.BeginAnimation(OpacityProperty, new DoubleAnimation(0.92, TimeSpan.FromMilliseconds(160)));
+        tab.BeginAnimation(OpacityProperty, new DoubleAnimation(0.92, Motion.Fast));
     }
 
     private void DragTabTo(double dx)
@@ -169,7 +169,7 @@ public partial class NotchWindow
         _dragSettling = true;
         Animate(ScaleOf(tab), ScaleTransform.ScaleXProperty, 1, 150);
         Animate(ScaleOf(tab), ScaleTransform.ScaleYProperty, 1, 150);
-        tab.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(150)));
+        tab.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Motion.Fast));
         Animate(ShiftOf(tab), TranslateTransform.XProperty, _slotX[_dragTo] - _slotX[_dragFrom], 150, () => FinishTabDrag(commit: true));
     }
 
@@ -181,7 +181,7 @@ public partial class NotchWindow
         foreach (var t in _dragTabs.Where(t => t != tab)) Animate(ShiftOf(t), TranslateTransform.XProperty, 0, 140);
         Animate(ScaleOf(tab), ScaleTransform.ScaleXProperty, 1, 150);
         Animate(ScaleOf(tab), ScaleTransform.ScaleYProperty, 1, 150);
-        tab.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(150)));
+        tab.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Motion.Fast));
         Animate(ShiftOf(tab), TranslateTransform.XProperty, 0, 150, () => FinishTabDrag(commit: false));
     }
 
@@ -298,7 +298,7 @@ public partial class NotchWindow
 
     private static void Animate(IAnimatable target, DependencyProperty property, double to, int ms, Action? done = null)
     {
-        var animation = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+        var animation = new DoubleAnimation(to, Motion.Scale(ms)) { EasingFunction = Motion.Out };
         if (done is not null) animation.Completed += (_, _) => done();
         target.BeginAnimation(property, animation);
     }

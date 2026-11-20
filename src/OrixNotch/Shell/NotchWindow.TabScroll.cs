@@ -118,9 +118,9 @@ public partial class NotchWindow
             return;
         }
         // From the live offset so chained wheel notches retarget mid-glide.
-        BeginAnimation(TabScrollProperty, new DoubleAnimation(TabScroller.HorizontalOffset, target, TimeSpan.FromMilliseconds(220))
+        BeginAnimation(TabScrollProperty, new DoubleAnimation(TabScroller.HorizontalOffset, target, Motion.Base)
         {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            EasingFunction = Motion.Out,
         });
     }
 
@@ -130,6 +130,8 @@ public partial class NotchWindow
         SetValue(TabScrollProperty, TabScroller.HorizontalOffset);
         BeginAnimation(TabScrollProperty, null);
     }
+
+    private (bool Left, bool Right, double F) _tabFadeKey;
 
     /// <summary>Fades whichever end still has tabs past it; none when everything fits.</summary>
     private void UpdateTabFade()
@@ -143,6 +145,9 @@ public partial class NotchWindow
         var left = TabScroller.HorizontalOffset > 0.5;
         var right = TabScroller.HorizontalOffset < TabScroller.ScrollableWidth - 0.5;
         var f = TabFade / w;
+        // Called every frame of a glide: only build a new mask when the ends or the width change.
+        if (TabScroller.OpacityMask is not null && _tabFadeKey == (left, right, f)) return;
+        _tabFadeKey = (left, right, f);
         TabScroller.OpacityMask = new LinearGradientBrush(new GradientStopCollection
         {
             new(left ? Colors.Transparent : Colors.Black, 0),

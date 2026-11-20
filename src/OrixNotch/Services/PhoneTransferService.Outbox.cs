@@ -102,12 +102,7 @@ public sealed partial class PhoneTransferService
             if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
             {
                 var path = Path.Combine(Storage.Dir("phone-out"), $"Clipboard {DateTime.Now:yyyy-MM-dd HHmmss}.png");
-                using (var file = File.Create(path))
-                {
-                    var encoder = new PngBitmapEncoder();
-                    encoder.Frames.Add(BitmapFrame.Create(image));
-                    encoder.Save(file);
-                }
+                Storage.SavePng(image, path);
                 Send([path]);
                 return true;
             }
@@ -121,14 +116,38 @@ public sealed partial class PhoneTransferService
 
     public void RemoveFromOutbox(PhoneOutboxItem item)
     {
-        if (Outbox.Remove(item)) Push("outbox");
+        if (!Outbox.Remove(item)) return;
+        DeleteOwnCopy(item.Path);
+        Push("outbox");
     }
 
     public void ClearOutbox()
     {
         if (Outbox.Count == 0) return;
+        var paths = Outbox.Select(i => i.Path).ToList();
         Outbox.Clear();
+        foreach (var path in paths) DeleteOwnCopy(path);
         Push("outbox");
+    }
+
+    /// <summary>Clipboard images are saved into phone-out just to be sent: delete them with their outbox item.</summary>
+    private static void DeleteOwnCopy(string? path)
+    {
+        if (path is null || !path.StartsWith(Storage.Dir("phone-out"), StringComparison.OrdinalIgnoreCase)) return;
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // the phone is still downloading it: the sweep at the next launch takes it
+        }
+    }
+
+    /// <summary>The outbox lives in memory, so at launch nothing in phone-out is still waiting to be sent.</summary>
+    private static void SweepOutboxFolder()
+    {
+        foreach (var file in Directory.EnumerateFiles(Storage.Dir("phone-out"))) DeleteOwnCopy(file);
     }
 
     // ---------------------------------------------------------------- endpoints

@@ -171,7 +171,7 @@
                             </Trigger>
                             <DataTrigger Binding="{Binding Starred}" Value="True">
                                 <Setter TargetName="Star" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="Star" Property="Foreground" Value="#FFB800" />
+                                <Setter TargetName="Star" Property="Foreground" Value="{DynamicResource StarBrush}" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Done}" Value="True">
                                 <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SubTextBrush}" />
@@ -181,5 +181,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
+        <!-- Confetti when the last open to-do is ticked (Celebrations) -->
+        <Canvas x:Name="Fx" Grid.RowSpan="3" IsHitTestVisible="False" ClipToBounds="False" />
     </Grid>
 </UserControl>

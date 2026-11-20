@@ -13,14 +13,13 @@ namespace OrixNotch.Tools;
 
 public sealed class StockQuote
 {
-    private static readonly Brush Neutral = Frozen(Color.FromRgb(0x8E, 0x8E, 0x93));
-
     public string Symbol { get; init; } = "";
     public string Name { get; init; } = "";
     public string PriceText { get; init; } = "–";
     public string ChangeText { get; init; } = "…";
-    public Brush Tint { get; init; } = Neutral;
-    public PointCollection Points { get; init; } = new();
+    public Brush Tint { get; init; } = ThemeService.Get("SubTextBrush"); // no change yet: the theme's grey
+    public IReadOnlyList<double> Closes { get; init; } = [];
+    public double Previous { get; init; } = double.NaN;
 
     public static StockQuote Placeholder(string symbol, string name = "Loading…") =>
         new() { Symbol = symbol, Name = name };
@@ -37,28 +36,9 @@ public sealed class StockQuote
             ChangeText = $"{(change >= 0 ? "+" : "")}{pct:0.00}%",
             // Theme brushes so the pill keeps contrast on light schemes; picked up again on the next refresh.
             Tint = ThemeService.Get(change > 0 ? "GoodBrush" : change < 0 ? "BadBrush" : "SubTextBrush"),
-            Points = Sparkline(closes, previous, 120, 24),
+            Closes = closes,
+            Previous = previous,
         };
-    }
-
-    private static PointCollection Sparkline(IReadOnlyList<double> values, double baseline, double w, double h)
-    {
-        var points = new PointCollection();
-        if (values.Count < 2) return points;
-        var min = Math.Min(values.Min(), baseline);
-        var max = Math.Max(values.Max(), baseline);
-        var range = Math.Max(1e-9, max - min);
-        for (var i = 0; i < values.Count; i++)
-            points.Add(new Point(w * i / (values.Count - 1), h - (values[i] - min) / range * h));
-        points.Freeze();
-        return points;
-    }
-
-    private static Brush Frozen(Color c)
-    {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
     }
 }
 
@@ -120,15 +100,30 @@ public partial class StocksView : UserControl, IToolView
         _quotes.Remove(q);
     }
 
+    private bool _refreshing;
+
     private async Task RefreshAsync()
     {
-        Status.Text = "Updating…";
-        await Task.WhenAll(_quotes.ToList().Select(LoadOneAsync));
-        _lastFetch = DateTime.Now;
-        Status.Text = $"Updated {DateTime.Now:t}";
+        // The timer, the Refresh button and opening the tool can overlap: one fetch round at a time.
+        if (_refreshing) return;
+        _refreshing = true;
+        try
+        {
+            Status.Text = "Updating…";
+            var results = await Task.WhenAll(_quotes.ToList().Select(LoadOneAsync));
+            _lastFetch = DateTime.Now;
+            var failed = results.Count(ok => !ok);
+            Status.Text = failed == 0 ? $"Updated {DateTime.Now:t}"
+                : failed == results.Length ? "Offline · couldn't update" : $"Updated {DateTime.Now:t} · {failed} failed";
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
-    private async Task LoadOneAsync(StockQuote current)
+    /// <summary>Fetches one quote; false when it failed (the last good quote stays on screen).</summary>
+    private async Task<bool> LoadOneAsync(StockQuote current)
     {
         StockQuote next;
         try
@@ -156,11 +151,14 @@ public partial class StocksView : UserControl, IToolView
         }
         catch (Exception)
         {
+            // A blip shouldn't wipe a good price and chart: only a symbol that never loaded says "Unavailable".
+            if (current.Closes.Count > 0 || !double.IsNaN(current.Previous)) return false;
             next = StockQuote.Placeholder(current.Symbol, "Unavailable");
         }
 
         var index = _quotes.IndexOf(current);
         if (index < 0) index = _quotes.ToList().FindIndex(q => q.Symbol == current.Symbol);
         if (index >= 0) _quotes[index] = next;
+        return next.Closes.Count > 0 || !double.IsNaN(next.Previous);
     }
 }

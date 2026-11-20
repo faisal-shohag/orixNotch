@@ -27,8 +27,9 @@ public sealed partial class CalendarFeedService : ObservableObject
 
     private readonly DispatcherTimer _timer = new() { Interval = Every };
     private bool _refreshing;
+    private bool _again; // a link was added or removed mid-refresh: go round once more so it counts
 
-    private CalendarFeedService() => _timer.Tick += async (_, _) => await RefreshAsync();
+    private CalendarFeedService() => _timer.Tick += (_, _) => _ = RefreshAsync();
 
     public void Start()
     {
@@ -38,50 +39,83 @@ public sealed partial class CalendarFeedService : ObservableObject
 
     public async Task RefreshAsync()
     {
-        if (_refreshing) return;
+        if (_refreshing)
+        {
+            _again = true;
+            return;
+        }
         _refreshing = true;
         try
         {
-            var feeds = Feeds;
-            var previous = Storage.Load<List<CalendarEvent>>(FileName);
-            var events = new List<CalendarEvent>();
-            var failed = new List<string>();
-            // Last month (for looking back) through a year ahead.
-            var from = DateTime.Today.AddMonths(-1);
-            var to = DateTime.Today.AddYears(1);
-            foreach (var feed in feeds)
+            do
             {
-                try
-                {
-                    var text = await Http.Client.GetStringAsync(FetchUrl(feed));
-                    var parsed = await Task.Run(() => IcsParser.Parse(text, from, to));
-                    events.AddRange(parsed.Select(o => new CalendarEvent
-                    {
-                        Date = DateTime.SpecifyKind(o.Start.Date, DateTimeKind.Unspecified), // same form as the user's own events
-                        Time = o.AllDay ? "" : $"{o.Start.Hour:00}:{o.Start.Minute:00}",
-                        Title = o.Title,
-                        Feed = FeedId(feed),
-                    }));
-                }
-                catch (Exception ex)
-                {
-                    // Offline or a bad link: keep what this calendar had last time.
-                    App.Log(ex);
-                    failed.Add(feed);
-                    events.AddRange(previous.Where(e => e.Feed == FeedId(feed)));
-                }
+                _again = false;
+                await RefreshOnceAsync();
             }
-            Storage.Save(FileName, events);
-            EventReminderService.Instance.Reload();
-            Updated?.Invoke();
-            Status = feeds.Count == 0 ? ""
-                : failed.Count > 0 ? $"{failed.Count} of {feeds.Count} failed · using last copy"
-                : $"Synced {DateTime.Now:t} · {events.Count(e => e.Date >= DateTime.Today)} upcoming";
+            while (_again);
+        }
+        catch (Exception ex) // fire-and-forget callers: never lose the error
+        {
+            App.Log(ex);
         }
         finally
         {
             _refreshing = false;
         }
+    }
+
+    private async Task RefreshOnceAsync()
+    {
+        var feeds = Feeds;
+        if (feeds.Count == 0)
+        {
+            // Nothing subscribed: clear the last feed's events once, then stop writing and reloading every 30 minutes.
+            Status = "";
+            if (!File.Exists(Storage.PathOf(FileName))) return;
+            File.Delete(Storage.PathOf(FileName));
+            EventReminderService.Instance.Reload();
+            Updated?.Invoke();
+            return;
+        }
+        var previous = Storage.Load<List<CalendarEvent>>(FileName);
+        var events = new List<CalendarEvent>();
+        var failed = new List<string>();
+        // Last month (for looking back) through a year ahead.
+        var from = DateTime.Today.AddMonths(-1);
+        var to = DateTime.Today.AddYears(1);
+        foreach (var feed in feeds)
+        {
+            try
+            {
+                var text = await Http.Client.GetStringAsync(FetchUrl(feed));
+                // An expired link often answers 200 with a sign-in page: that's a failure, not an empty calendar.
+                if (!text.Contains("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Not a calendar (the link may have expired)");
+                var parsed = await Task.Run(() => IcsParser.Parse(text, from, to));
+                events.AddRange(parsed.Select(o => new CalendarEvent
+                {
+                    Date = DateTime.SpecifyKind(o.Start.Date, DateTimeKind.Unspecified), // same form as the user's own events
+                    Time = o.AllDay ? "" : $"{o.Start.Hour:00}:{o.Start.Minute:00}",
+                    Title = o.Title,
+                    Feed = FeedId(feed),
+                    Link = o.Link,
+                }));
+            }
+            catch (Exception ex)
+            {
+                // Offline or a bad link: keep what this calendar had last time. Offline is logged once, not every 30 min.
+                if (ex is not System.Net.Http.HttpRequestException || !Status.Contains("failed")) App.Log(ex);
+                failed.Add(feed);
+                events.AddRange(previous.Where(e => e.Feed == FeedId(feed)));
+            }
+        }
+        Storage.Save(FileName, events);
+        // Status first: Settings re-renders on Updated and should show the new line.
+        Status = feeds.Count == 0 ? ""
+            : failed.Count > 0 ? $"{failed.Count} of {feeds.Count} failed · using last copy"
+            : $"Synced {DateTime.Now:t} · {events.Count(e => e.Date >= DateTime.Today)} upcoming";
+        EventReminderService.Instance.Reload();
+        Updated?.Invoke();
     }
 
     // ---------------------------------------------------------------- the links (secret: anyone with one can read the calendar)
@@ -94,18 +128,8 @@ public sealed partial class CalendarFeedService : ObservableObject
     {
         get
         {
-            try
-            {
-                var path = Storage.PathOf(LinksFile);
-                if (!File.Exists(path)) return [];
-                var text = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), Entropy, DataProtectionScope.CurrentUser));
-                return text.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
-            }
-            catch (Exception ex)
-            {
-                App.Log(ex);
-                return [];
-            }
+            var text = Storage.LoadSecret(LinksFile, Entropy) ?? "";
+            return text.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
         }
     }
 
@@ -128,13 +152,7 @@ public sealed partial class CalendarFeedService : ObservableObject
 
     private static void SaveFeeds(List<string> feeds)
     {
-        var path = Storage.PathOf(LinksFile);
-        if (feeds.Count == 0)
-        {
-            File.Delete(path);
-            return;
-        }
-        File.WriteAllBytes(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(string.Join('\n', feeds)), Entropy, DataProtectionScope.CurrentUser));
+        Storage.SaveSecret(LinksFile, string.Join('\n', feeds), Entropy); // no feeds: the file is deleted
     }
 
     /// <summary>Stable id for a link that doesn't reveal it (stored on each event).</summary>

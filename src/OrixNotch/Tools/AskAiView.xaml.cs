@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -39,6 +40,36 @@ public partial class AskAiView : UserControl, IToolView
 
     private readonly List<AiTurn> _conversation = new();
     private List<ChatEntry> _history = new();
+
+    // A long chat would resend (and keep in memory as base64) everything: send the recent turns, keep images on the
+    // newest few, and store at most MaxSavedEntries for the next launch.
+    private const int MaxSentTurns = 41; // odd, so a window ending on a question starts on one
+    private const int ImageTurns = 6;
+    private const int MaxSavedEntries = 80;
+
+    private void ForgetOldImages()
+    {
+        for (var i = 0; i < _conversation.Count - ImageTurns; i++)
+            if (_conversation[i].Images is { Count: > 0 }) _conversation[i] = _conversation[i] with { Images = null };
+    }
+
+    private void TrimHistory()
+    {
+        var drop = _history.Count - MaxSavedEntries;
+        if (drop <= 0) return;
+        foreach (var name in _history.Take(drop).SelectMany(e => e.Images ?? []))
+        {
+            try
+            {
+                File.Delete(Path.Combine(Storage.PathOf(ImageDir), Path.GetFileName(name)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // still open somewhere: harmless leftover
+            }
+        }
+        _history.RemoveRange(0, drop);
+    }
     private CancellationTokenSource? _cts;
     private string? _keySetupFor;
     /// <summary>Bumped by New chat, so a reply still streaming from the old chat knows to drop itself.</summary>
@@ -47,6 +78,8 @@ public partial class AskAiView : UserControl, IToolView
     public AskAiView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.AskAiHeight, v => App.Settings.AskAiHeight = v, MinChatHeight, MaxChatHeight, DefaultHeight);
+        _grip.Released += () => { if (ChatScroll.IsVisible) ChatScroll.ScrollToEnd(); };
         PreviewKeyDown += OnPreviewKeyDown;
         foreach (var (text, icon) in SuggestionItems) Suggestions.Children.Add(SuggestionChip(text, icon));
         InitImages();
@@ -77,12 +110,13 @@ public partial class AskAiView : UserControl, IToolView
         EmptyState.Visibility = Visibility.Collapsed;
         ChatScroll.Visibility = Visibility.Visible;
         NewChatButton.Visibility = Visibility.Visible;
+        ForgetOldImages();
         Dispatcher.BeginInvoke(ChatScroll.ScrollToEnd, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     public void OnShown()
     {
-        ApplyHeight();
+        _grip.Apply();
         UpdateKeyState();
         _ = RefreshModelListAsync();
     }
@@ -110,7 +144,7 @@ public partial class AskAiView : UserControl, IToolView
         row.AppendChild(name);
 
         var chip = new FrameworkElementFactory(typeof(Border));
-        chip.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+        chip.SetValue(Border.CornerRadiusProperty, Radii.S);
         chip.SetValue(Border.PaddingProperty, new Thickness(6, 0, 6, 1));
         chip.SetValue(MarginProperty, new Thickness(7, 0, 0, 0));
         chip.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
@@ -192,50 +226,10 @@ public partial class AskAiView : UserControl, IToolView
 
     // ---------------------------------------------------------------- resize (same handle as the teleprompter)
 
+    private readonly ResizeGrip _grip;
     private const double DefaultHeight = 220;
     private const double MinChatHeight = 200;
     private const double MaxChatHeight = 520;
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
-
-    private static void ApplyHeight() =>
-        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.AskAiHeight, MinChatHeight, MaxChatHeight));
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            App.Settings.AskAiHeight = DefaultHeight;
-            ApplyHeight();
-            SettingsService.Save(notify: false);
-            e.Handled = true;
-            return;
-        }
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinChatHeight, MaxChatHeight);
-        App.Settings.AskAiHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
-        if (ChatScroll.IsVisible) ChatScroll.ScrollToEnd();
-    }
 
     public void OnHidden()
     {
@@ -294,6 +288,33 @@ public partial class AskAiView : UserControl, IToolView
             return;
         }
         SetInput(text + ": ");
+    }
+
+    /// <summary>From the command palette: sends the question, or leaves it in the box when it can't be sent yet (no key).</summary>
+    public void Ask(string question)
+    {
+        SetInput(question);
+        UpdateSendState();
+        if (SendButton.IsEnabled && _cts is null) OnSend(this, new RoutedEventArgs());
+    }
+
+    /// <summary>Hotkey "Explain selected text". No text (nothing selected): the box is primed instead.</summary>
+    public void Explain(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            SetInput("Explain: ");
+            return;
+        }
+        UpdateSendState();
+        if (!Input.IsEnabled || _cts is not null)
+        {
+            SetInput($"Explain this: {text}"); // no key yet, or a reply is still streaming
+            return;
+        }
+        var preview = text.ReplaceLineEndings(" ");
+        _ = SendAsync($"Explain this clearly and briefly:\n\n{text}",
+            display: $"Explain: “{(preview.Length > 80 ? preview[..79] + "…" : preview)}”");
     }
 
     private void SetInput(string text)
@@ -386,18 +407,31 @@ public partial class AskAiView : UserControl, IToolView
         var cts = _cts = new CancellationTokenSource();
         UpdateSendState();
         var text = "";
+        var reply = new System.Text.StringBuilder();
+        long drawnAt = 0;
+        void Flush()
+        {
+            text = reply.ToString();
+            if (text.Length == 0) return;
+            RevealCard(card);
+            RenderReply(body, text);
+            ChatScroll.ScrollToEnd();
+        }
         var failed = false;
         try
         {
             // Earlier images go along only while the model can read them (the user may have switched models).
-            var turns = ModelReadsImages ? _conversation.ToList() : _conversation.Select(t => t with { Images = null }).ToList();
+            var recent = _conversation.TakeLast(MaxSentTurns).SkipWhile(t => !t.FromUser);
+            var turns = ModelReadsImages ? recent.ToList() : recent.Select(t => t with { Images = null }).ToList();
             await foreach (var chunk in AiService.StreamReplyAsync(turns, cts.Token))
             {
-                text += chunk;
-                if (text.Length > 0) RevealCard(card);
-                RenderReply(body, text);
-                ChatScroll.ScrollToEnd();
+                reply.Append(chunk);
+                // Each draw rebuilds the whole reply and re-highlights its code: per chunk that grows quadratically.
+                if (Environment.TickCount64 - drawnAt < 60) continue;
+                drawnAt = Environment.TickCount64;
+                Flush();
             }
+            Flush();
         }
         catch (OperationCanceledException) when (chatId != _chatId)
         {
@@ -405,6 +439,7 @@ public partial class AskAiView : UserControl, IToolView
         }
         catch (OperationCanceledException)
         {
+            Flush();
             if (text.Length == 0) body.Children.Clear();
             body.Children.Add(Note("Stopped"));
         }
@@ -429,7 +464,9 @@ public partial class AskAiView : UserControl, IToolView
             ShowActions(actions, text, at);
             _history.Add(new ChatEntry(true, prompt, display, at, sent.Count > 0 ? SaveImages(sent) : null));
             _history.Add(new ChatEntry(false, text, null, at));
+            TrimHistory();
             Storage.Save(HistoryFile, _history);
+            ForgetOldImages();
         }
         else
         {
@@ -524,7 +561,7 @@ public partial class AskAiView : UserControl, IToolView
         {
             Width = 24,
             Height = 24,
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = Radii.L,
             VerticalAlignment = VerticalAlignment.Top,
             // Centered on the first line of text (card padding 10 + half an ~18px line − half the avatar),
             // so it lines up with the status word while waiting and with the reply after.
@@ -563,7 +600,7 @@ public partial class AskAiView : UserControl, IToolView
         card.HorizontalAlignment = HorizontalAlignment.Stretch;
         card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         card.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
-        if (animate) card.BeginAnimation(OpacityProperty, new DoubleAnimation(0.4, 1, TimeSpan.FromMilliseconds(220)));
+        if (animate) card.BeginAnimation(OpacityProperty, new DoubleAnimation(0.4, 1, Motion.Base));
     }
 
     /// <summary>Footer of a finished reply: Copy on the left, the time it arrived on the right.</summary>
@@ -653,7 +690,7 @@ public partial class AskAiView : UserControl, IToolView
             Cursor = Cursors.Hand;
             Focusable = false;
             var factory = new FrameworkElementFactory(typeof(Border), "Bd");
-            factory.SetValue(Border.CornerRadiusProperty, new CornerRadius(13));
+            factory.SetValue(Border.CornerRadiusProperty, Radii.L);
             factory.SetValue(Border.PaddingProperty, new Thickness(11, 5, 12, 5));
             factory.SetResourceReference(Border.BackgroundProperty, "Surface2Brush");
             factory.AppendChild(new FrameworkElementFactory(typeof(ContentPresenter)));
@@ -907,7 +944,7 @@ public partial class AskAiView : UserControl, IToolView
         stack.Children.Add(header);
         stack.Children.Add(divider);
         stack.Children.Add(body);
-        var card = new Border { CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 6, 0, 6), Child = stack, BorderThickness = new Thickness(1) };
+        var card = new Border { CornerRadius = Radii.M, Margin = new Thickness(0, 6, 0, 6), Child = stack, BorderThickness = new Thickness(1) };
         card.SetResourceReference(Border.BackgroundProperty, "PillBrush"); // darker than the reply card it sits in
         card.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
         return card;

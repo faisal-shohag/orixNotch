@@ -36,6 +36,24 @@ public partial class NotchWindow
         DropChooser.Visibility = Visibility.Visible;
         SetToolSize(ask ? ChooserWithAskW : ChooserW, ChooserH, showTabs: false);
         DropChooser.MouseMove += OnChooserMouseMove;
+        _dragAlive = true;
+        PreviewDragOver += OnDragAlive;
+        PreviewDragLeave += OnDragGone;
+    }
+
+    // A drag cancelled (Esc) or dropped outside the notch sends no MouseMove over the chooser: notice the drag left
+    // the window and stayed gone. Moving between tiles is a leave then an over at once, so it waits a moment.
+    private bool _dragAlive;
+
+    private void OnDragAlive(object sender, DragEventArgs e) => _dragAlive = true;
+
+    private void OnDragGone(object sender, DragEventArgs e)
+    {
+        _dragAlive = false;
+        After(TimeSpan.FromMilliseconds(400), () =>
+        {
+            if (!_dragAlive) HideDropChooser(restore: true);
+        });
     }
 
     /// <param name="restore">Bring the current tool back (the drag was abandoned over the notch).</param>
@@ -43,6 +61,8 @@ public partial class NotchWindow
     {
         if (DropChooser.Visibility != Visibility.Visible) return;
         DropChooser.MouseMove -= OnChooserMouseMove;
+        PreviewDragOver -= OnDragAlive;
+        PreviewDragLeave -= OnDragGone;
         DropChooser.Visibility = Visibility.Collapsed;
         ToolHost.Visibility = Visibility.Visible;
         if (restore && _expanded) ShowTool(_activeTool);

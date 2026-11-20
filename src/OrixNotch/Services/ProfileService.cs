@@ -68,9 +68,7 @@ public static class ProfileService
         var scale = 160.0 / side;
         var scaled = new TransformedBitmap(crop, new ScaleTransform(scale, scale));
 
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(scaled));
-        using (var fs = File.Create(Storage.PathOf(AvatarFile))) encoder.Save(fs);
+        Storage.SavePng(scaled, Storage.PathOf(AvatarFile));
         Changed?.Invoke();
     }
 

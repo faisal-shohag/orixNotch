@@ -113,7 +113,7 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <Border CornerRadius="11" Padding="9,4,10,4" Background="{DynamicResource SurfaceBrush}"
+                <Border CornerRadius="{StaticResource RadiusM}" Padding="9,4,10,4" Background="{DynamicResource SurfaceBrush}"
                         BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <hero:HeroIcon Kind="CalendarDays" Width="12" Height="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" />
@@ -154,7 +154,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <Border Width="116" Height="116" CornerRadius="12" Background="{DynamicResource Surface2Brush}" VerticalAlignment="Center">
+                        <Border Width="116" Height="116" CornerRadius="{StaticResource RadiusL}" Background="{DynamicResource Surface2Brush}" VerticalAlignment="Center">
                             <Border.Effect>
                                 <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.45" Color="Black" />
                             </Border.Effect>
@@ -199,13 +199,13 @@
                             </StackPanel>
 
                             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" IsEnabled="{Binding HasSession}">
-                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding PreviousCommand}" VerticalAlignment="Center">
+                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding PreviousCommand}" VerticalAlignment="Center" ToolTip="Previous">
                                     <hero:HeroIcon Kind="Backward" Width="18" Height="18" />
                                 </Button>
                                 <Button Style="{StaticResource PlayButton}" Margin="16,0" Command="{Binding PlayPauseCommand}">
                                     <hero:HeroIcon x:Name="PlayIcon" Kind="Play" Width="18" Height="18" />
                                 </Button>
-                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding NextCommand}" VerticalAlignment="Center">
+                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding NextCommand}" VerticalAlignment="Center" ToolTip="Next">
                                     <hero:HeroIcon Kind="Forward" Width="18" Height="18" />
                                 </Button>
                             </StackPanel>
@@ -227,7 +227,7 @@
                         <Button Style="{StaticResource RowButton}" Click="OnOpenCalendar" ToolTip="Open Calendar">
                             <Grid>
                                 <StackPanel Orientation="Horizontal">
-                                    <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource AccentSoftBrush}">
+                                    <Border Width="22" Height="22" CornerRadius="{StaticResource RadiusS}" Background="{DynamicResource AccentSoftBrush}">
                                         <hero:HeroIcon Kind="CalendarDays" Width="13" Height="13" Foreground="{DynamicResource AccentBrush}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
@@ -265,7 +265,7 @@
                         <Button Style="{StaticResource RowButton}" Click="OnOpenTodos" ToolTip="Open Reminders">
                             <Grid>
                                 <StackPanel Orientation="Horizontal">
-                                    <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource AccentSoftBrush}">
+                                    <Border Width="22" Height="22" CornerRadius="{StaticResource RadiusS}" Background="{DynamicResource AccentSoftBrush}">
                                         <hero:HeroIcon Kind="ListBullet" Width="13" Height="13" Foreground="{DynamicResource AccentBrush}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>

@@ -36,7 +36,7 @@ public static class Skeleton
     {
         void Update()
         {
-            if (element.IsVisible)
+            if (element.IsVisible && !Motion.Reduced) // animations off: a still placeholder
             {
                 element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0.45, TimeSpan.FromMilliseconds(850))
                 {

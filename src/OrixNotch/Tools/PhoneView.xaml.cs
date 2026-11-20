@@ -21,6 +21,7 @@ public partial class PhoneView : UserControl, IToolView
     public PhoneView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.PhoneHeight, v => App.Settings.PhoneHeight = v, MinPhoneHeight, MaxPhoneHeight, DefaultHeight);
         TransferList.ItemsSource = Phone.Transfers;
         OutboxList.ItemsSource = Phone.Outbox;
         Loaded += (_, _) =>
@@ -40,7 +41,7 @@ public partial class PhoneView : UserControl, IToolView
 
     public void OnShown()
     {
-        ApplyHeight();
+        _grip.Apply();
         Update();
     }
 
@@ -105,7 +106,14 @@ public partial class PhoneView : UserControl, IToolView
     {
         App.Settings.PhoneEnabled = true;
         SettingsService.Save(false);
-        await Phone.SyncAsync();
+        try
+        {
+            await Phone.SyncAsync();
+        }
+        catch (Exception ex) // async void: a failed start must still turn the setting back off below
+        {
+            App.Log(ex);
+        }
         if (!Phone.IsRunning)
         {
             App.Settings.PhoneEnabled = false;
@@ -117,7 +125,14 @@ public partial class PhoneView : UserControl, IToolView
     {
         App.Settings.PhoneEnabled = false;
         SettingsService.Save(false);
-        await Phone.SyncAsync();
+        try
+        {
+            await Phone.SyncAsync();
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
     }
 
     private void OnOpenFolder(object sender, RoutedEventArgs e)
@@ -125,7 +140,7 @@ public partial class PhoneView : UserControl, IToolView
         try
         {
             Directory.CreateDirectory(Phone.ReceiveFolder);
-            Process.Start(new ProcessStartInfo(Phone.ReceiveFolder) { UseShellExecute = true });
+            Launcher.Open(Phone.ReceiveFolder);
         }
         catch (Exception ex)
         {
@@ -150,15 +165,8 @@ public partial class PhoneView : UserControl, IToolView
             return;
         }
         if ((sender as FrameworkElement)?.DataContext is not PhoneTransfer { SavedPath: { } path }) return;
-        try
-        {
-            if (File.Exists(path)) Process.Start("explorer.exe", $"/select,\"{path}\"");
-            else if (Path.GetDirectoryName(path) is { } dir && Directory.Exists(dir)) Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
-        }
+        if (File.Exists(path)) Launcher.Reveal(path);
+        else if (Path.GetDirectoryName(path) is { } dir && Directory.Exists(dir)) Launcher.Open(dir);
     }
 
     private void OnAddFiles(object sender, RoutedEventArgs e)
@@ -199,49 +207,10 @@ public partial class PhoneView : UserControl, IToolView
 
     // ---------------------------------------------------------------- resize (same handle as Ask AI)
 
+    private readonly ResizeGrip _grip;
     private const double DefaultHeight = 220;
     private const double MinPhoneHeight = 200;
     private const double MaxPhoneHeight = 520;
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
-
-    private static void ApplyHeight() =>
-        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.PhoneHeight, MinPhoneHeight, MaxPhoneHeight));
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            App.Settings.PhoneHeight = DefaultHeight;
-            ApplyHeight();
-            SettingsService.Save(notify: false);
-            e.Handled = true;
-            return;
-        }
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinPhoneHeight, MaxPhoneHeight);
-        App.Settings.PhoneHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
-    }
 
     private void OnCancelTransfer(object sender, RoutedEventArgs e)
     {

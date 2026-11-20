@@ -11,9 +11,16 @@ public static class HotkeyService
     public static IReadOnlyList<HotkeyAction> Actions { get; } =
     [
         new("toggle", "Open or close the notch", "Works from anywhere."),
+        new("palette", "Command palette", "Type a command: timer 10, todo buy milk, 20 usd to eur, ask …, or a tool's name."),
         new("ask", "Ask AI", "Opens the notch on the AI chat."),
         new("clipboard", "Clipboard history", "Opens the notch on clipboard history."),
         new("teleprompter", "Teleprompter", "Opens the teleprompter and starts or pauses scrolling."),
+        new("todos", "Add a to-do", "Opens To-Dos ready to type. Enter saves it."),
+        new("focus", "Start focus", "Starts a focus session (alerts wait until it ends). Press again to pause."),
+        new("explain", "Explain selected text", "Select text in any app, press this, and Ask AI explains it. Your clipboard is put back after."),
+        new("ocr", "Copy text from screen", "Snip any part of the screen and copy the text in it. Read on this PC by Windows."),
+        new("mic", "Mute microphone", "Mutes or unmutes your default microphone in every app."),
+        new("awake", "Keep awake", "Keeps the PC and screen from sleeping until you press it again."),
     ];
 
     private const int BaseId = 0x4F00;
@@ -73,12 +80,14 @@ public static class HotkeyService
                 case "shift": modifiers |= Win32.MOD_SHIFT; break;
                 case "win": modifiers |= Win32.MOD_WIN; break;
                 default:
-                    if (!Enum.TryParse(part, true, out key)) return false;
+                    // "1" is the digit key (Enum.TryParse would read it as the number 1: Key.Cancel).
+                    if (part.Length == 1 && char.IsDigit(part[0])) key = Key.D0 + (part[0] - '0');
+                    else if (int.TryParse(part, out _) || !Enum.TryParse(part, true, out key)) return false;
                     break;
             }
         }
-        // Require a modifier so plain typing never triggers a global hotkey.
-        return key != Key.None && modifiers != 0;
+        // Require Ctrl, Alt or Win so typing never triggers a global hotkey (Shift+A alone would swallow every capital A).
+        return key != Key.None && (modifiers & (Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_WIN)) != 0;
     }
 
     /// <summary>Builds "Ctrl+Alt+N" from a key event; null while only modifiers are held.</summary>
@@ -89,7 +98,7 @@ public static class HotkeyService
             or Key.LWin or Key.RWin) return null;
 
         var mods = Keyboard.Modifiers;
-        if (mods == ModifierKeys.None) return null;
+        if ((mods & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0) return null; // Shift alone isn't enough
         var parts = new List<string>();
         if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
         if (mods.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");

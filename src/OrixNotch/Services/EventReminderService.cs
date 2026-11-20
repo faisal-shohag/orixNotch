@@ -1,5 +1,3 @@
-using System.IO;
-using System.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OrixNotch.Tools;
@@ -14,8 +12,6 @@ namespace OrixNotch.Services;
 public sealed partial class EventReminderService : ObservableObject
 {
     public static EventReminderService Instance { get; } = new();
-
-    public static readonly string[] SoundNames = ["Calendar", "Chime", "Bell", "No Sound"];
 
     public static TimeSpan Lead => TimeSpan.FromMinutes(Math.Max(1, App.Settings.ReminderLeadMin));
     public static TimeSpan Linger => TimeSpan.FromMinutes(Math.Max(1, App.Settings.ReminderLingerMin));
@@ -37,6 +33,9 @@ public sealed partial class EventReminderService : ObservableObject
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(15) };
     private List<CalendarEvent> _events = new();
     private string? _currentKey;
+
+    /// <summary>The reminded event's meeting link, if its calendar gave one.</summary>
+    public string? CurrentLink { get; private set; }
     private readonly HashSet<string> _dismissed = new();
     private readonly HashSet<string> _chimedLead = new();
     private readonly HashSet<string> _chimedStart = new();
@@ -51,9 +50,13 @@ public sealed partial class EventReminderService : ObservableObject
     /// <summary>Call after events.json changes (the Calendar does on add/delete).</summary>
     public void Reload()
     {
-        _events = CalendarEvent.LoadAll();
+        _events = Meetings();
         Check();
     }
+
+    /// <summary>Calendar events that are things you attend: not AI limit resets or subscription renewals.</summary>
+    public static List<CalendarEvent> Meetings() =>
+        CalendarEvent.LoadAll().Where(e => e.Feed is not (CalendarEvent.AiFeed or CalendarEvent.SubscriptionFeed)).ToList();
 
     /// <summary>Re-evaluate now (e.g. after the lead/linger settings change).</summary>
     public void Recheck() => Check();
@@ -68,12 +71,23 @@ public sealed partial class EventReminderService : ObservableObject
 
     private static string Key(CalendarEvent e) => $"{e.Date:yyyy-MM-dd}|{e.Time}|{e.Title}";
 
+    private DateTime _prunedDay;
+
     private void Check()
     {
         var now = DateTime.Now;
+        if (now.Date != _prunedDay)
+        {
+            // Keys start with the event's date: forget days before yesterday (yesterday's may still be lingering).
+            _prunedDay = now.Date;
+            var cutoff = $"{now.Date.AddDays(-1):yyyy-MM-dd}";
+            foreach (var set in new[] { _dismissed, _chimedLead, _chimedStart })
+                set.RemoveWhere(k => string.CompareOrdinal(k, cutoff) < 0);
+        }
         var due = App.Settings.RemindersEnabled
             ? _events
-                .Where(e => e.Date.Date == now.Date && !_dismissed.Contains(Key(e)) && CalendarView.TryParseTime(e.Time, out _))
+                // Yesterday to tomorrow: a 00:05 meeting is reminded at 23:55, and a 23:58 one lingers past midnight.
+                .Where(e => Math.Abs((e.Date.Date - now.Date).TotalDays) <= 1 && !_dismissed.Contains(Key(e)) && CalendarView.TryParseTime(e.Time, out _))
                 .Select(e =>
                 {
                     CalendarView.TryParseTime(e.Time, out var t);
@@ -91,6 +105,7 @@ public sealed partial class EventReminderService : ObservableObject
         if (pick.Event is null)
         {
             _currentKey = null;
+            CurrentLink = null;
             IsActive = false;
             IsNow = false;
             Text = "";
@@ -104,6 +119,7 @@ public sealed partial class EventReminderService : ObservableObject
         var key = Key(pick.Event);
         var until = pick.Start - now;
         _currentKey = key;
+        CurrentLink = pick.Event.Link;
         IsNow = until <= TimeSpan.Zero;
         var when = IsNow ? "now" : until.TotalMinutes < 1 ? "in <1m" : $"in {(int)Math.Ceiling(until.TotalMinutes)}m";
         Text = $"{pick.Event.Title} · {when}";
@@ -118,31 +134,15 @@ public sealed partial class EventReminderService : ObservableObject
         // One chime + alert when the reminder first shows, one when the event starts.
         if (IsNow ? _chimedStart.Add(key) : _chimedLead.Add(key))
         {
-            PlaySound(App.Settings.ReminderSound);
+            SoundService.Play(App.Settings.ReminderSound);
             Alert?.Invoke(IsNow);
         }
         if (IsNow) _chimedLead.Add(key); // reminder appeared at/after start: don't chime twice
-    }
-
-    /// <summary>Plays one of <see cref="SoundNames"/> (also used to preview from Settings).</summary>
-    public static void PlaySound(string? name)
-    {
-        try
+        // Events at the same time share this chime: one sound per moment, not one for whichever is shown first or last.
+        foreach (var other in due.Where(x => x.Start == pick.Start).Select(x => Key(x.Event)))
         {
-            switch (name)
-            {
-                case "Calendar":
-                    var wav = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "Windows Notify Calendar.wav");
-                    if (File.Exists(wav)) new SoundPlayer(wav).Play();
-                    else SystemSounds.Asterisk.Play();
-                    break;
-                case "Chime": SystemSounds.Asterisk.Play(); break;
-                case "Bell": SystemSounds.Exclamation.Play(); break;
-            }
-        }
-        catch
-        {
-            // Sound is a nicety; never let it break the reminder.
+            if (IsNow) _chimedStart.Add(other);
+            _chimedLead.Add(other);
         }
     }
 }

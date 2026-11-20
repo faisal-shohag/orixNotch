@@ -30,29 +30,10 @@ public partial class AiUsageView : UserControl, IToolView
     private void OnStripScrolled(object sender, ScrollChangedEventArgs e)
     {
         if (e.OriginalSource != Strip) return;
-        FadeTo(EdgeLeft, Strip.HorizontalOffset > 1);
-        FadeTo(EdgeRight, Strip.HorizontalOffset < Strip.ScrollableWidth - 1);
+        EdgeScroll.ShowFades(Strip, EdgeLeft, EdgeRight);
     }
 
-    private static void FadeTo(FrameworkElement element, bool visible)
-    {
-        if (element.Tag is bool shown && shown == visible) return;
-        element.Tag = visible;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(visible ? 1.0 : 0.0, TimeSpan.FromMilliseconds(160)));
-    }
-
-    /// <summary>Edge fades go from the notch color to transparent, so cards dissolve into the edge (same as Clipboard).</summary>
-    private void UpdateEdgeFades()
-    {
-        var pill = ThemeService.PillFadeColor; // a gradient scheme's notch isn't one colour; see-through with glass
-        var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);
-        var left = new LinearGradientBrush(pill, clear, 0);
-        var right = new LinearGradientBrush(clear, pill, 0);
-        left.Freeze();
-        right.Freeze();
-        EdgeLeftFade.Fill = left;
-        EdgeRightFade.Fill = right;
-    }
+    private void UpdateEdgeFades() => (EdgeLeftFade.Fill, EdgeRightFade.Fill) = EdgeScroll.FadeBrushes();
 
     public void OnShown()
     {
@@ -139,9 +120,7 @@ public partial class AiUsageView : UserControl, IToolView
             stack.Children.Add(captions);
         }
 
-        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Child = stack };
-        card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
-        return card;
+        return CardFrame(stack);
     }
 
     /// <summary>Logo, name and a small badge ("Plan", "Local", "Pro"…).</summary>
@@ -150,7 +129,7 @@ public partial class AiUsageView : UserControl, IToolView
         var head = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
         head.Children.Add(BrandLogos.Create(p.Logo, 15));
         head.Children.Add(new TextBlock { Text = p.Name, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(7, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center });
-        var badge = new Border { CornerRadius = new CornerRadius(5), Padding = new Thickness(7, 1, 7, 2), VerticalAlignment = VerticalAlignment.Center };
+        var badge = new Border { CornerRadius = Radii.S, Padding = new Thickness(7, 1, 7, 2), VerticalAlignment = VerticalAlignment.Center };
         badge.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var badgeText = new TextBlock
         {
@@ -168,7 +147,7 @@ public partial class AiUsageView : UserControl, IToolView
 
     private static Border CardFrame(FrameworkElement content)
     {
-        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Child = content };
+        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = Radii.M, Padding = new Thickness(12, 10, 12, 10), Child = content };
         card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         return card;
     }
@@ -192,7 +171,7 @@ public partial class AiUsageView : UserControl, IToolView
         {
             var link = new Button { Content = p.LinkText ?? "Open", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
             var url = p.LinkUrl;
-            link.Click += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            link.Click += (_, _) => Launcher.Open(url);
             stack.Children.Add(link);
         }
         return CardFrame(stack);
@@ -218,7 +197,7 @@ public partial class AiUsageView : UserControl, IToolView
 
         var weeklyHas = p.WeeklyPercent is not null || weeklyLimit > 0;
         var wpct = p.WeeklyPercent ?? Pct(p.WeeklyTokens, weeklyLimit);
-        var wleft = p.WeeklyResets is { } wr ? $"Resets {wr:ddd h:mm tt}" : $"Today {Tokens(p.TodayTokens)}";
+        var wleft = p.WeeklyResets is { } wr ? $"Resets {wr:ddd t}" : $"Today {Tokens(p.TodayTokens)}";
         var wspare = weeklyHas ? $"{Math.Max(0, 100 - wpct):0}% left" : Tokens(p.WeeklyTokens);
         stack.Children.Add(Meter("Weekly", p.WeeklyTokens, wpct, weeklyHas, wleft, wspare));
 
@@ -280,51 +259,16 @@ public partial class AiUsageView : UserControl, IToolView
 
     private static string BrushFor(double pct) => pct > 85 ? "BadBrush" : "AccentBrush";
 
-    /// <summary>Rounded track with a proportional fill and a light tick at the value.</summary>
-    private static FrameworkElement Bar(double pct, string fillBrush)
-    {
-        var grid = new Grid { Height = 6, Margin = new Thickness(0, 5, 0, 4) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(pct, 0.01), GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(100 - pct, 0.01), GridUnitType.Star) });
+    /// <summary>The app's glowing bar: the value is printed above it, so its head is the compact glowing dot.</summary>
+    private static FrameworkElement Bar(double pct, string fillBrush) =>
+        new GlowBar { BarHeight = 6, Tone = fillBrush, Value = pct / 100, Margin = new Thickness(0, 5, 0, 4) };
 
-        var track = new Border { CornerRadius = new CornerRadius(3) };
-        track.SetResourceReference(Border.BackgroundProperty, "TrackBrush");
-        Grid.SetColumnSpan(track, 2);
-        grid.Children.Add(track);
-
-        if (pct > 0.5)
-        {
-            var fill = new Border { CornerRadius = new CornerRadius(3, 0, 0, 3) };
-            fill.SetResourceReference(Border.BackgroundProperty, fillBrush);
-            grid.Children.Add(fill);
-            if (pct < 99.5)
-            {
-                var tick = new Border { Width = 2, CornerRadius = new CornerRadius(1), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, -1, 0) };
-                tick.SetResourceReference(Border.BackgroundProperty, "TextBrush");
-                grid.Children.Add(tick);
-            }
-        }
-        return grid;
-    }
-
+    /// <summary>The last 14 days of tokens, in the app's one chart style (Shell/LineChart).</summary>
     private static FrameworkElement Trend(long[] daily)
     {
-        var max = Math.Max(1, daily.Max());
-        var grid = new UniformGrid { Rows = 1, Height = 22 };
-        for (var i = 0; i < daily.Length; i++)
-        {
-            var bar = new Border
-            {
-                Height = Math.Max(2, 22.0 * daily[i] / max),
-                VerticalAlignment = VerticalAlignment.Bottom,
-                CornerRadius = new CornerRadius(1.5),
-                Margin = new Thickness(1, 0, 1, 0),
-                Opacity = i == daily.Length - 1 ? 1 : 0.55,
-            };
-            bar.SetResourceReference(Border.BackgroundProperty, i == daily.Length - 1 ? "AccentBrush" : "SubTextBrush");
-            grid.Children.Add(bar);
-        }
-        return grid;
+        var chart = new LineChart { Height = 24, Values = daily.Select(d => (double)d).ToArray() };
+        chart.SetResourceReference(LineChart.StrokeProperty, "AccentBrush");
+        return chart;
     }
 
     private static string Tokens(long n) => n switch
