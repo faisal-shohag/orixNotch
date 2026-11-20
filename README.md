@@ -37,15 +37,15 @@ then gets out of your way.
 
 <table>
   <tr>
-    <td width="50%"><img src="store-assets/screenshots/02-alerts.png" alt="Alerts popping out of the notch" /><p align="center"><sub><b>Alerts</b> out of the closed notch</sub></p></td>
-    <td width="50%"><img src="store-assets/screenshots/03-music.png" alt="Now Playing with album art and lyrics" /><p align="center"><sub><b>Now Playing</b> with synced lyrics</sub></p></td>
+    <td width="50%"><img src="store-assets/screenshots/04-alerts.png" alt="Alerts popping out of the notch" /><p align="center"><sub><b>Alerts</b> out of the closed notch</sub></p></td>
+    <td width="50%"><img src="store-assets/screenshots/05-music.png" alt="Now Playing with album art and lyrics" /><p align="center"><sub><b>Now Playing</b> with synced lyrics</sub></p></td>
   </tr>
   <tr>
-    <td><img src="store-assets/screenshots/05-ask-ai.png" alt="Ask AI chat in the notch" /><p align="center"><sub><b>Ask AI</b> with Claude, ChatGPT, Gemini or DeepSeek</sub></p></td>
-    <td><img src="store-assets/screenshots/06-phone.png" alt="Phone transfer with a QR code" /><p align="center"><sub><b>Phone transfer</b> by QR code, no app needed</sub></p></td>
+    <td><img src="store-assets/screenshots/06-ask-ai.png" alt="Ask AI chat in the notch" /><p align="center"><sub><b>Ask AI</b> with Claude, ChatGPT, Gemini or DeepSeek</sub></p></td>
+    <td><img src="store-assets/screenshots/07-phone.png" alt="Phone transfer with a QR code" /><p align="center"><sub><b>Phone transfer</b> by QR code, no app needed</sub></p></td>
   </tr>
   <tr>
-    <td><img src="store-assets/screenshots/04-calendar.png" alt="Calendar with reminders" /><p align="center"><sub><b>Calendar</b> with Google, Outlook and iCloud sync</sub></p></td>
+    <td><img src="store-assets/screenshots/02-any-edge.png" alt="The notch on the top, bottom, left and right edges" /><p align="center"><sub><b>Any shape, any edge</b></sub></p></td>
     <td><img src="store-assets/screenshots/10-themes.png" alt="Color themes" /><p align="center"><sub><b>Themes</b> and accents, applied live</sub></p></td>
   </tr>
 </table>

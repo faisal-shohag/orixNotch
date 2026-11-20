@@ -18,6 +18,9 @@ public partial class NotchWindow
 {
     private const double ShotDpi = 288; // 3x: crisp even when shown large in a 4K frame
 
+    /// <summary>Screenshot mode slows the corner turn down so its in-between frames can be caught.</summary>
+    private double _shotTimeScale = 1;
+
     public static string? ShotsDir => Environment.GetEnvironmentVariable("ORIXNOTCH_SHOTS") is { Length: > 0 } dir ? dir : null;
 
     public async void RunShots()
@@ -85,6 +88,9 @@ public partial class NotchWindow
         await Tool("converter");
         await Tool("emoji", 2500);
         await Tool("teleprompter");
+        await Tool("screentime", 1500);
+        await Tool("controls", 1500);
+        await Tool("subscriptions", 1200);
 
         if (Want("drop-chooser"))
         {
@@ -178,10 +184,117 @@ public partial class NotchWindow
             await Shot("pill-idle");
         }
 
+        await EdgeShots(dir, Want);
+
         File.WriteAllText(Path.Combine(dir, "manifest.json"), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
         var flag = Path.Combine(dir, "continue.flag");
         for (var i = 0; i < 240 && !File.Exists(flag); i++) await Task.Delay(500);
         Application.Current.Shutdown();
+    }
+
+    /// <summary>
+    /// Shapes, screen edges and the corner turn. These are whole-window renders (transparent, 3×) with where the window
+    /// sat on the screen, written to screens.js (<c>window.SCREENS[name] = [x, y, w, h, screenW, screenH]</c> in DIPs)
+    /// so a frame can put each one on a drawn monitor exactly where it was.
+    /// </summary>
+    private async Task EdgeShots(string dir, Func<string, bool> want)
+    {
+        var screens = new Dictionary<string, double[]>();
+        var (edge, shape, corner) = (App.Settings.NotchEdge, App.Settings.NotchShape, App.Settings.CornerStyle);
+
+        void Capture(string name)
+        {
+            UpdateLayout();
+            var root = (FrameworkElement)Content;
+            if (root.ActualWidth <= 0) return;
+            var scale = ShotDpi / 96;
+            var full = new RenderTargetBitmap((int)Math.Ceiling(root.ActualWidth * scale), (int)Math.Ceiling(root.ActualHeight * scale), ShotDpi, ShotDpi, PixelFormats.Pbgra32);
+            full.Render(root);
+            Storage.SavePng(full, Path.Combine(dir, name + ".png"));
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var origin = root.PointToScreen(new Point(0, 0));
+            var b = CurrentScreen().Bounds;
+            screens[name] = [Math.Round((origin.X - b.Left) / dpi.DpiScaleX, 1), Math.Round((origin.Y - b.Top) / dpi.DpiScaleY, 1),
+                Math.Round(root.ActualWidth, 1), Math.Round(root.ActualHeight, 1), Math.Round(b.Width / dpi.DpiScaleX), Math.Round(b.Height / dpi.DpiScaleY)];
+        }
+
+        async Task Use(string newEdge, string newShape)
+        {
+            _pinned = false;
+            Collapse();
+            App.Settings.NotchEdge = newEdge;
+            App.Settings.NotchShape = newShape;
+            SettingsService.Save(notify: true);
+            await Task.Delay(900);
+            await Settle();
+        }
+
+        async Task Closed(string name)
+        {
+            if (!want(name)) return;
+            await Settle();
+            Capture(name);
+        }
+
+        async Task Open(string name, string tool)
+        {
+            if (!want(name)) return;
+            Expand(activate: false);
+            _pinned = true;
+            ShowTool(tool);
+            await Task.Delay(1500);
+            await Settle();
+            Capture(name);
+            _pinned = false;
+            Collapse();
+            await Task.Delay(700);
+        }
+
+        foreach (var s in new[] { "Island", "Notch", "Tab", "Pill" })
+        {
+            if (!want("shape-" + s.ToLowerInvariant())) continue;
+            await Use("Top", s);
+            await Closed("shape-" + s.ToLowerInvariant());
+        }
+        if (want("edge-top-open"))
+        {
+            await Use("Top", "Island");
+            await Open("edge-top-open", "home");
+        }
+        foreach (var e in new[] { "Bottom", "Left", "Right" })
+        {
+            var id = e.ToLowerInvariant();
+            if (!want($"edge-{id}") && !want($"edge-{id}-open")) continue;
+            await Use(e, "Island");
+            await Closed($"edge-{id}");
+            await Open($"edge-{id}-open", "home");
+        }
+
+        // The corner turn, top edge → right edge, slowed down: a few frames of the tuck, then of the bend.
+        foreach (var style in new[] { "Tuck", "Bend" })
+        {
+            var id = style.ToLowerInvariant();
+            if (!want("turn-" + id)) continue;
+            await Use("Top", "Island");
+            App.Settings.CornerStyle = style;
+            _shotTimeScale = 0.04;
+            StartCornerTurn(+1);
+            var i = 0;
+            foreach (var t in new[] { 0.06, 0.3, 0.5, 0.7, 0.94 })
+            {
+                while (Turning && (style == "Bend" ? _bendT : _turnT) < t) await Task.Delay(5);
+                if (!Turning) break;
+                Capture($"turn-{id}-{++i}");
+            }
+            while (Turning) await Task.Delay(20);
+            _shotTimeScale = 1;
+            screens["turn-" + id] = [i];
+        }
+
+        App.Settings.CornerStyle = corner;
+        await Use(edge, shape);
+        File.WriteAllText(Path.Combine(dir, "screens.js"),
+            "window.SCREENS = " + JsonSerializer.Serialize(screens, new JsonSerializerOptions { WriteIndented = true }) + ";\n");
     }
 
     /// <summary>Waits for the springs to stop and the content to finish materialising.</summary>

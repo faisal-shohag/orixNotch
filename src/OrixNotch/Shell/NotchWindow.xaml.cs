@@ -964,7 +964,7 @@ public partial class NotchWindow : Window
         var dt = _lastFrame == TimeSpan.Zero ? 1 / 60.0 : (now - _lastFrame).TotalSeconds;
         _lastFrame = now;
         if (dt <= 0) return;
-        dt = Math.Min(dt, 0.05);
+        dt = Math.Min(dt, 0.05) * _shotTimeScale;
 
         var moving = Turning || (_dodging && Repel(dt));
         if (_bending) StepBend(dt);

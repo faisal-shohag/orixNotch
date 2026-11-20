@@ -55,7 +55,7 @@ What's new in OrixNotch 0.15
 dynamic island · notch · clipboard history · calendar reminders · pomodoro timer · productivity tools · ai usage
 
 ## Screenshots (store-assets/screenshots, 1920x1080)
-01-hero, 02-alerts, 03-music, 04-calendar, 05-ask-ai, 06-phone, 07-shelf-clipboard, 08-focus, 09-out-of-your-way, 10-themes (made by marketing/store-shots/Make-StoreShots.ps1) · Box art: BoxArt-1080.png · Poster: Poster-720x1080.png
+01-hero, 02-any-edge, 03-corner-turn, 04-alerts, 05-music, 06-ask-ai, 07-phone, 08-new-tools, 09-focus, 10-themes (made by marketing/store-shots/Make-StoreShots.ps1; calendar, shelf-clipboard and out-of-your-way are kept as frames/_*.html) · Box art: BoxArt-1080.png · Poster: Poster-720x1080.png
 
 ## Copyright and trademark info
 Copyright © 2026. All rights reserved. OrixNotch and the OrixNotch logo are trademarks of Abu Nayim Faisal.

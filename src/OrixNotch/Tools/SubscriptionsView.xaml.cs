@@ -11,7 +11,9 @@ namespace OrixNotch.Tools;
 public partial class SubscriptionsView : UserControl, IToolView
 {
     private static SubscriptionService Service => SubscriptionService.Instance;
-    private static readonly string LocalCurrency = RegionInfo.CurrentRegion.ISOCurrencySymbol;
+    // ORIXNOTCH_CURRENCY: the Store screenshots show USD whatever region the PC they're made on is in.
+    private static readonly string LocalCurrency =
+        Environment.GetEnvironmentVariable("ORIXNOTCH_CURRENCY") is { Length: 3 } c ? c : RegionInfo.CurrentRegion.ISOCurrencySymbol;
 
     public SubscriptionsView()
     {

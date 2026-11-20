@@ -193,3 +193,37 @@ h1 .soft { color: var(--dim); }
   border-radius: 20px;
   background: #000;
 }
+
+/* A mock monitor showing captures where they were on screen (monitor.js). */
+.monitor {
+  position: absolute;
+  border-radius: 14px;
+  padding: 0;
+  background: #000;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.10), 0 40px 80px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.monitor .display {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(70% 90% at 80% 10%, rgba(253, 3, 136, 0.30), transparent 60%),
+    radial-gradient(60% 80% at 10% 100%, rgba(252, 111, 24, 0.22), transparent 60%),
+    linear-gradient(160deg, #1a1430 0%, #120f1f 45%, #0c0a14 100%);
+}
+.monitor img { position: absolute; display: block; height: auto; }
+.monitor .taskbar { position: absolute; background: rgba(20, 20, 26, 0.85); border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.monitor .cursor {
+  position: absolute;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 32'><path d='M2 2v24l6.5-6 4.2 9.5 4-1.8-4.1-9.3H21z' fill='white' stroke='black' stroke-width='1.6' stroke-linejoin='round'/></svg>") center / contain no-repeat;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.monitor-label {
+  position: absolute;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

@@ -72,7 +72,40 @@ function New-Seed([string]$dir) {
         AiProvider = "anthropic"; AiModel = "claude-opus-5-5"
         AskAiHeight = 400; PhoneEnabled = $true; LastNoteId = "note-standup"; LastTool = "home"
         HideForApps = @("powerpnt", "vlc") # the "Hide for these apps" shot (names resolve via App Paths)
+        ScreenTimeEnabled = $true; ScreenTimeGoals = @{ msedge = 120 }
     })
+
+    # Screen Time: today's minutes per app, for apps that exist on this PC (their icons come from the exe).
+    $apps = [ordered]@{
+        Code = @("$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe", 9900)
+        msedge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", 6300)
+        chrome = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", 4200)
+        explorer = @("$env:WINDIR\explorer.exe", 1500)
+        notepad = @("$env:WINDIR
+otepad.exe", 600)
+    }
+    $times = [ordered]@{}; $paths = [ordered]@{}
+    foreach ($k in $apps.Keys) {
+        if ($apps[$k][0] -and (Test-Path $apps[$k][0])) { $times[$k] = $apps[$k][1]; $paths[$k] = $apps[$k][0] }
+    }
+    New-Item -ItemType Directory "$dir/screentime" | Out-Null
+    Write-Json "$dir/screentime/$today.json" $times
+    # The week before, so the bar chart has a shape.
+    $week = 0.8, 1.1, 0.7, 1.25, 0.95, 0.6
+    for ($i = 1; $i -le 6; $i++) {
+        $day = [ordered]@{}
+        foreach ($k in $times.Keys) { $day[$k] = [int]($times[$k] * $week[$i - 1]) }
+        Write-Json "$dir/screentime/$($now.AddDays(-$i).ToString('yyyy-MM-dd')).json" $day
+    }
+    Write-Json "$dir/screentime-apps.json" $paths
+
+    Write-Json "$dir/subscriptions.json" @(
+        @{ Name = "Netflix"; Price = 15.49; Currency = "USD"; Cycle = "Monthly"; Next = & $iso $now.Date.AddDays(2); Day = $now.AddDays(2).Day }
+        @{ Name = "Spotify"; Price = 11.99; Currency = "USD"; Cycle = "Monthly"; Next = & $iso $now.Date.AddDays(6); Day = $now.AddDays(6).Day }
+        @{ Name = "iCloud+"; Price = 2.99; Currency = "USD"; Cycle = "Monthly"; Next = & $iso $now.Date.AddDays(11); Day = $now.AddDays(11).Day }
+        @{ Name = "GitHub Copilot"; Price = 100; Currency = "USD"; Cycle = "Yearly"; Next = & $iso $now.Date.AddDays(40); Day = $now.AddDays(40).Day }
+        @{ Name = "ChatGPT Plus"; Price = 20; Currency = "USD"; Cycle = "Monthly"; Next = & $iso $now.Date.AddDays(17); Day = $now.AddDays(17).Day }
+    )
 
     Write-Json "$dir/todos.json" @(
         @{ Text = "Review Q4 roadmap with design"; Done = $false; Starred = $true; Created = & $iso $now.AddHours(-5) }
@@ -215,8 +248,9 @@ if (-not $SkipCapture) {
     $env:ORIXNOTCH_SHOTS = $raw
     $env:ORIXNOTCH_PC_NAME = "Alex's PC"
     $env:ORIXNOTCH_AIUSAGE_DEMO = "1"
+    $env:ORIXNOTCH_CURRENCY = "USD"
     $proc = Start-Process $exe.FullName -PassThru
-    Remove-Item Env:ORIXNOTCH_SHOTS, Env:ORIXNOTCH_DATA_DIR, Env:ORIXNOTCH_PC_NAME, Env:ORIXNOTCH_AIUSAGE_DEMO
+    Remove-Item Env:ORIXNOTCH_SHOTS, Env:ORIXNOTCH_DATA_DIR, Env:ORIXNOTCH_PC_NAME, Env:ORIXNOTCH_AIUSAGE_DEMO, Env:ORIXNOTCH_CURRENCY
 
     # The phone page, while the app is up: decrypt the throwaway key and screenshot it at phone size.
     while (-not (Test-Path "$raw/manifest.json") -and -not $proc.HasExited) { Start-Sleep 1 }
@@ -243,7 +277,8 @@ $small = Join-Path $out "store-1920"
 New-Item -ItemType Directory -Force $big, $small | Out-Null
 Get-ChildItem $big, $small -Filter *.png | Remove-Item # frames that were renamed or dropped mustn't linger
 $profileDir = Join-Path ([IO.Path]::GetTempPath()) "orixnotch-shots-chrome"
-foreach ($frame in Get-ChildItem "$here/frames" -Filter "*.html" | Sort-Object Name) {
+# Frames named _*.html are kept for other uses (the Store takes 10 screenshots) and aren't rendered.
+foreach ($frame in Get-ChildItem "$here/frames" -Filter "*.html" | Where-Object Name -notlike "_*" | Sort-Object Name) {
     $png = Join-Path $big ($frame.BaseName + ".png")
     & $chrome --headless=new --disable-gpu --hide-scrollbars --user-data-dir="$profileDir" --allow-file-access-from-files `
         --force-device-scale-factor=2 --window-size=1920,1080 --virtual-time-budget=6000 --screenshot="$png" ([Uri]$frame.FullName).AbsoluteUri 2>$null | Out-Null
