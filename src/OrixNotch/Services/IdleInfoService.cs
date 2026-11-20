@@ -204,7 +204,7 @@ public sealed class IdleInfoService
                 var pct = (int)Math.Round(ps.BatteryLifePercent * 100);
                 var charging = ps.PowerLineStatus == Forms.PowerLineStatus.Online;
                 return new IdleItem(id, charging ? AppIcon.Bolt : AppIcon.BatteryFull, $"{pct}%",
-                    charging ? "GoodBrush" : pct < 20 ? "AccentBrush" : "TextBrush");
+                    charging ? "GoodBrush" : pct < 20 ? "BadBrush" : "TextBrush");
             }
             case "cpu":
             {
@@ -231,7 +231,7 @@ public sealed class IdleInfoService
                     : null;
             case "unread":
                 var unread = NotificationHistory.Instance.Unread;
-                return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new", "AccentBrush");
+                return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new");
             case "clipboard":
                 var clips = ClipboardService.Instance.Items.Count;
                 return new IdleItem(id, AppIcon.ClipboardList, clips == 1 ? "1 clip" : $"{clips} clips");
@@ -265,7 +265,7 @@ public sealed class IdleInfoService
         // (OpenCode) show today's tokens instead of "N%".
         static IdleItem Item(string id, (string Id, string Name, BrandLogo Logo, double? Percent, long TodayTokens) t) =>
             new(id, AppIcon.Sparkles, t.Percent is { } p ? $"{p:0}%" : CompactTokens(t.TodayTokens),
-                t.Percent >= 80 ? "AccentBrush" : "TextBrush", Logo: t.Logo);
+                t.Percent >= 80 ? "BadBrush" : "TextBrush", Logo: t.Logo);
 
         if (_ai.Count == 0) return [];
         if (App.Settings.IdleAiMode != "Choose")

@@ -1236,7 +1236,7 @@ public partial class NotchWindow : Window
             default:
                 // Apple-style: glyph in the left ear, value in the right.
                 var item = items[_idleIndex % items.Count];
-                IdleSlotA.Content = IdleGlyph(item, 15);
+                IdleSlotA.Content = IdleGlyph(item, 16);
                 IdleSlotB.Content = IdleValue(item);
                 break;
         }
@@ -1343,9 +1343,40 @@ public partial class NotchWindow : Window
                 grid.Children.Add(new Ellipse { Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill } });
             return grid;
         }
-        var icon = new HeroIcon { Kind = item.Glyph ?? AppIcon.Info, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center };
-        icon.SetResourceReference(ForegroundProperty, item.ValueBrush == "TextBrush" ? "SubTextBrush" : item.ValueBrush);
-        return icon;
+        return new HeroIcon { Kind = item.Glyph ?? AppIcon.Info, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center, Foreground = IdleBrush(item) };
+    }
+
+    /// <summary>
+    /// Each idle item has its own colour, shared by its icon and its value, like the Dynamic Island's live activities.
+    /// Fixed, not the accent, so items stay recognisable at a glance. Status overrides it: red needs attention
+    /// (low battery, mic muted, an AI tool near its limit), green is good (charging, a stock up).
+    /// </summary>
+    private static readonly Dictionary<string, Color> IdleColors = new()
+    {
+        ["clock"] = C(0xF5, 0xF5, 0xF7), ["clock2"] = C(0x64, 0xD2, 0xFF), ["date"] = C(0xFF, 0x45, 0x3A),
+        ["weather"] = C(0x5A, 0xC8, 0xFA), ["sun"] = C(0xFF, 0xD6, 0x0A), ["nextEvent"] = C(0xFF, 0x45, 0x3A),
+        ["timeline"] = C(0xFF, 0x9F, 0x0A), ["todos"] = C(0x30, 0xD1, 0x58), ["battery"] = C(0x30, 0xD1, 0x58),
+        ["cpu"] = C(0xBF, 0x5A, 0xF2), ["network"] = C(0x40, 0x9C, 0xFF), ["stock"] = C(0x30, 0xD1, 0x58),
+        ["aiUsage"] = C(0xFF, 0x9F, 0x0A), ["unread"] = C(0xFF, 0x37, 0x5F), ["clipboard"] = C(0x64, 0xD2, 0xFF),
+        ["shelf"] = C(0xAC, 0x8E, 0xFF), ["streak"] = C(0xFF, 0x9F, 0x0A), ["screentime"] = C(0x5E, 0x5C, 0xE6),
+        ["mic"] = C(0xFF, 0x45, 0x3A), ["call"] = C(0xFF, 0x45, 0x3A), ["awake"] = C(0xFF, 0x9F, 0x0A),
+    };
+
+    private static Color C(byte r, byte g, byte b) => Color.FromRgb(r, g, b);
+
+    private static Brush IdleBrush(IdleItem item)
+    {
+        var color = item.ValueBrush switch
+        {
+            "BadBrush" => C(0xFF, 0x45, 0x3A),
+            "GoodBrush" => C(0x30, 0xD1, 0x58),
+            _ => IdleColors.GetValueOrDefault(item.Id.Split(':')[0], C(0xF5, 0xF5, 0xF7)),
+        };
+        if (ThemeService.CurrentScheme.IsLight) // bright colours wash out on a light notch: deepen them
+            color = color == C(0xF5, 0xF5, 0xF7) ? C(0x1C, 0x1C, 0x1E) : Color.FromRgb((byte)(color.R * 0.72), (byte)(color.G * 0.72), (byte)(color.B * 0.72));
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
     }
 
     /// <summary>
@@ -1436,7 +1467,9 @@ public partial class NotchWindow : Window
             MaxWidth = 230,
         };
         System.Windows.Documents.Typography.SetNumeralAlignment(text, FontNumeralAlignment.Tabular);
-        text.SetResourceReference(TextBlock.ForegroundProperty, item.ValueBrush);
+        // The value takes the item's colour (dimmed when there's nothing to show: "No more events", "All done").
+        if (item.ValueBrush == "SubTextBrush") text.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+        else text.Foreground = IdleBrush(item);
         return text;
     }
 
@@ -1444,7 +1477,7 @@ public partial class NotchWindow : Window
     private static StackPanel IdleChip(IdleItem item)
     {
         var chip = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        chip.Children.Add(IdleGlyph(item, 13));
+        chip.Children.Add(IdleGlyph(item, 14));
         var value = IdleValue(item, 13, TextAlignment.Left);
         value.Margin = new Thickness(6, 0, 0, 0);
         value.MaxWidth = 160;

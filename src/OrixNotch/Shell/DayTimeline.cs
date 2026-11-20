@@ -33,7 +33,7 @@ public sealed class DayTimeline : FrameworkElement
 
         var mid = ActualHeight / 2;
         var track = Brush("TrackBrush");
-        var accent = Brush("AccentBrush");
+        var accent = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A)); // the timeline's own fixed colour (idle items don't follow the accent)
         dc.DrawRoundedRectangle(track, null, new Rect(0, mid - 1.5, ActualWidth, 3), 1.5, 1.5);
         var x = X(now);
         if (x > 0) dc.DrawRoundedRectangle(accent, null, new Rect(0, mid - 1.5, x, 3), 1.5, 1.5);
