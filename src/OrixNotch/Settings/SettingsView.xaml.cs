@@ -143,10 +143,12 @@ public partial class SettingsView : UserControl, IToolView
         // Show the calendar sync result once it lands (not mid-edit: re-rendering drops focus).
         CalendarFeedService.Instance.Updated += () =>
         {
-            if (_page == "general" && IsVisible && !IsKeyboardFocusWithin) Render();
+            if (_page == "calendar" && IsVisible && !IsKeyboardFocusWithin) Render(); // the feed rows live on Calendar
         };
-        Render();
+        // No Render() here: OnShown renders when the view is presented (it built every page twice on first open).
     }
+
+    private bool _waitingForAiTools;
 
     public void OnShown() => Render();
 
@@ -296,11 +298,13 @@ public partial class SettingsView : UserControl, IToolView
         for (var i = 0; i < rows.Children.Count; i++)
         {
             if (rows.Children[i] is not Grid row) continue;
+            // A Row's title and description sit in its first cell; a tool row starts with its icon, so read it all.
             var text = string.Join(" ", TextsIn(row.Children[0]));
+            if (text.Length == 0) text = string.Join(" ", TextsIn(row));
             var match = text.Contains(query, StringComparison.CurrentCultureIgnoreCase);
             row.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
-            // The divider above a row shows only when a shown row sits above it too.
-            if (i > 0) rows.Children[i - 1].Visibility = match && visible > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // The divider above a row shows only when a shown row sits above it too (lists without dividers: skip).
+            if (i > 0 && rows.Children[i - 1] is not Grid) rows.Children[i - 1].Visibility = match && visible > 0 ? Visibility.Visible : Visibility.Collapsed;
             if (match) visible++;
         }
         return visible;
@@ -408,22 +412,22 @@ public partial class SettingsView : UserControl, IToolView
             {
                 var on = await StartupService.ApplyAsync(v);
                 S.LaunchAtStartup = on;
-                Save();
+                Save(false);
                 if (on != v) Render(); // Windows refused (e.g. disabled in Task Manager): show why
             }));
 
         Row("Open notch", "Open when the pointer rests on the notch, or only when you click it.",
-            Combo(["On Hover", "On Click"], (int)S.OpenMode, i => { S.OpenMode = (OpenMode)i; Save(); }));
+            Combo(["On Hover", "On Click"], (int)S.OpenMode, i => { S.OpenMode = (OpenMode)i; Save(false); }) /* read live: no tab/layout rebuild */);
         Row("Hover delay", "How long the pointer rests on the notch before it opens.",
             Combo(["Instant", "Fast", "Normal", "Slow"], Array.IndexOf(new[] { 0, 80, 150, 400 }, S.HoverDelayMs) is var d and >= 0 ? d : 2,
-                i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(); }));
+                i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(false); }));
 
         Section("MUSIC");
         Row("Lyrics", "Show time-synced lyrics on Now Playing. Songs are looked up on LRCLIB, a free lyrics library.",
             Toggle(S.LyricsEnabled, v => { S.LyricsEnabled = v; Save(false); }));
 
         Section("UNITS");
-        Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; Save(false); }));
+        Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; SaveIdle(); }) /* the idle notch's weather refetches in the new unit */);
     }
 
     private void RenderNotifications()
@@ -1067,12 +1071,18 @@ public partial class SettingsView : UserControl, IToolView
         {
             Page.Children.Add(Hint("Looking for AI tools…"));
             // Detection runs in the background; show the list as soon as it lands.
-            void Detected()
+            // One listener however often the page renders meanwhile (each render used to add another).
+            if (!_waitingForAiTools)
             {
-                IdleInfoService.Instance.AiToolsChanged -= Detected;
-                if (_page == "display") Render();
+                _waitingForAiTools = true;
+                void Detected()
+                {
+                    IdleInfoService.Instance.AiToolsChanged -= Detected;
+                    _waitingForAiTools = false;
+                    if (_page == "display") Render();
+                }
+                IdleInfoService.Instance.AiToolsChanged += Detected;
             }
-            IdleInfoService.Instance.AiToolsChanged += Detected;
             return;
         }
         foreach (var (toolId, toolName, logo) in tools)
@@ -1128,7 +1138,7 @@ public partial class SettingsView : UserControl, IToolView
         Title(SettingsService.FirstRun ? "Welcome! Pick your tools" : "Tabs",
             SettingsService.FirstRun
                 ? "A few tools start switched off: turn on any you want, and move the rest into order with the arrows. "
-                    + "Notifications shown on the notch are kept on this PC for 30 days (Settings → General to turn that off)."
+                    + "Notifications shown on the notch are kept on this PC for 30 days (Settings → Notifications to turn that off)."
                 : "The tools in the notch's bottom bar, and their order.");
 
         Section("QUICK START");
@@ -1141,7 +1151,7 @@ public partial class SettingsView : UserControl, IToolView
         var visible = ToolRegistry.Ordered();
         var list = new StackPanel();
         for (var i = 0; i < visible.Count; i++) list.Children.Add(ToolRow(visible[i], true, i, visible.Count));
-        Page.Children.Add(Group(list));
+        Page.Children.Add(Searchable(Group(list))); // a tool's name finds its show/hide switch
         Page.Children.Add(Hint("Use the arrows, or press and hold a tab in the notch and drag it. Settings always stays at the end of the bar."));
 
         var hidden = ToolRegistry.Ordered(includeHidden: true).Where(t => S.HiddenTools.Contains(t.Id)).ToList();
@@ -1150,7 +1160,7 @@ public partial class SettingsView : UserControl, IToolView
             Section("MORE TOOLS");
             var more = new StackPanel();
             foreach (var tool in hidden) more.Children.Add(ToolRow(tool, false, -1, 0));
-            Page.Children.Add(Group(more));
+            Page.Children.Add(Searchable(Group(more)));
         }
 
         var restore = new Button { Content = "Restore defaults", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
@@ -1319,7 +1329,10 @@ public partial class SettingsView : UserControl, IToolView
             return;
         }
         var gesture = HotkeyService.FromKeyEvent(e);
-        if (gesture is null) return; // still holding modifiers
+        if (gesture is null) return; // still holding modifiers (or only Shift)
+        // One combination, one action: taking it from another action beats "Another app already uses" (it's us).
+        foreach (var other in S.Hotkeys.Where(h => h.Key != _recordingAction && string.Equals(h.Value, gesture, StringComparison.OrdinalIgnoreCase)).Select(h => h.Key).ToList())
+            S.Hotkeys[other] = "";
         S.Hotkeys[_recordingAction] = gesture;
         _recordingAction = null;
         SaveHotkeys();
@@ -1536,7 +1549,7 @@ public partial class SettingsView : UserControl, IToolView
             details.Children.Add(Divider());
             details.Children.Add(InfoRow("Error log", "Useful when reporting an issue", OpenButton(log)));
         }
-        Page.Children.Add(Group(details));
+        Page.Children.Add(Searchable(Group(details))); // Updates, Data folder, Error log turn up in search
 
         Section("PRIVACY");
         var privacy = new StackPanel { Margin = new Thickness(0, 12, 0, 12) };
@@ -1635,7 +1648,7 @@ public partial class SettingsView : UserControl, IToolView
                 lines.Add("```");
             }
         }
-        catch (System.IO.IOException)
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
         {
             // The log is optional.
         }
@@ -1770,6 +1783,13 @@ public partial class SettingsView : UserControl, IToolView
 
     private void Section(string text) =>
         Page.Children.Add(new TextBlock { Text = text, Style = (Style)FindResource("Caps"), FontSize = 11, Margin = new Thickness(4, 20, 0, 8) });
+
+    /// <summary>Lets search filter a card built from row grids other than <see cref="Row"/> (it looks for this tag).</summary>
+    private static Border Searchable(Border card)
+    {
+        card.Tag = "rows";
+        return card;
+    }
 
     private static Border Group(UIElement child)
     {

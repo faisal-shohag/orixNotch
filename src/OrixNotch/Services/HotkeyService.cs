@@ -80,12 +80,14 @@ public static class HotkeyService
                 case "shift": modifiers |= Win32.MOD_SHIFT; break;
                 case "win": modifiers |= Win32.MOD_WIN; break;
                 default:
-                    if (!Enum.TryParse(part, true, out key)) return false;
+                    // "1" is the digit key (Enum.TryParse would read it as the number 1: Key.Cancel).
+                    if (part.Length == 1 && char.IsDigit(part[0])) key = Key.D0 + (part[0] - '0');
+                    else if (int.TryParse(part, out _) || !Enum.TryParse(part, true, out key)) return false;
                     break;
             }
         }
-        // Require a modifier so plain typing never triggers a global hotkey.
-        return key != Key.None && modifiers != 0;
+        // Require Ctrl, Alt or Win so typing never triggers a global hotkey (Shift+A alone would swallow every capital A).
+        return key != Key.None && (modifiers & (Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_WIN)) != 0;
     }
 
     /// <summary>Builds "Ctrl+Alt+N" from a key event; null while only modifiers are held.</summary>
@@ -96,7 +98,7 @@ public static class HotkeyService
             or Key.LWin or Key.RWin) return null;
 
         var mods = Keyboard.Modifiers;
-        if (mods == ModifierKeys.None) return null;
+        if ((mods & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0) return null; // Shift alone isn't enough
         var parts = new List<string>();
         if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
         if (mods.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");

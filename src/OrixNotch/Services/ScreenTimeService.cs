@@ -43,6 +43,7 @@ public sealed class ScreenTimeService
     {
         if (!Enabled) return;
         LoadDay(DateTime.Today);
+        Prune(); // not only at midnight: a PC that's off overnight never sees one
         _timer.Start();
     }
 

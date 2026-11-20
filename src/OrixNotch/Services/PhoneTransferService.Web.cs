@@ -148,9 +148,11 @@ public sealed partial class PhoneTransferService
             });
             return Results.Ok();
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException)
+        // UnauthorizedAccess: a receive folder that can't be written must still end the transfer (or it spins forever).
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException)
         {
-            OnUi(() => transfer.Finish(transfer.Cts.IsCancellationRequested ? "Canceled" : "Stopped", failed: true));
+            var state = transfer.Cts.IsCancellationRequested ? "Canceled" : ex is UnauthorizedAccessException ? "Can't write to the receive folder" : "Stopped";
+            OnUi(() => transfer.Finish(state, failed: true));
             return Results.StatusCode(500);
         }
     }
@@ -160,7 +162,11 @@ public sealed partial class PhoneTransferService
         if (!Allowed(ctx)) return Results.StatusCode(403);
         if (ctx.Request.ContentLength > MaxWebText) return Results.StatusCode(413);
         using var reader = new StreamReader(ctx.Request.Body, Encoding.UTF8);
-        var text = await reader.ReadToEndAsync(ctx.RequestAborted);
+        // A chunked body has no Content-Length: read at most the limit (+1 to tell it was over) instead of to the end.
+        var buffer = new char[MaxWebText + 1];
+        var length = await reader.ReadBlockAsync(buffer.AsMemory(), ctx.RequestAborted);
+        if (length > MaxWebText) return Results.StatusCode(413);
+        var text = new string(buffer, 0, length);
         if (string.IsNullOrWhiteSpace(text)) return Results.BadRequest();
         var peer = PeerName(ctx);
         var firstLine = text.Trim().Split('\n')[0].Trim();
@@ -186,7 +192,8 @@ public sealed partial class PhoneTransferService
             using var reader = new StreamReader(stream);
             _page = reader.ReadToEnd();
         }
-        return _page.Replace("{{NAME}}", WebUtility.HtmlEncode(PcName)).Replace("{{ACCENT}}", AccentHex());
+        // NAME_JS first: the default JSON encoder escapes < > & ' so the name can't close the script or the string.
+        return _page.Replace("{{NAME_JS}}", System.Text.Json.JsonSerializer.Serialize(PcName)).Replace("{{NAME}}", WebUtility.HtmlEncode(PcName)).Replace("{{ACCENT}}", AccentHex());
     }
 
     /// <summary>How the page names this PC (ORIXNOTCH_PC_NAME overrides it, for screenshots).</summary>

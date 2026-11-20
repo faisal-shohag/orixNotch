@@ -72,9 +72,15 @@ public partial class WeatherView : UserControl, IToolView
         Forecast.Visibility = !loading && _hasData ? Visibility.Visible : Visibility.Hidden;
     }
 
+    private (string City, bool Fahrenheit) _fetchedFor;
+
     public void OnShown()
     {
-        if (DateTime.Now - _lastFetch > TimeSpan.FromMinutes(15)) _ = LoadAsync();
+        // The city or °C/°F changed in Settings: refetch now, not when the 15 minutes are up.
+        var wanted = (App.Settings.WeatherCity, App.Settings.UseFahrenheit);
+        if (wanted != _fetchedFor && !CityInput.IsKeyboardFocused) CityInput.Text = wanted.WeatherCity;
+        if (wanted != _fetchedFor) _ = LoadAsync(newPlace: wanted.WeatherCity != _fetchedFor.City);
+        else if (DateTime.Now - _lastFetch > TimeSpan.FromMinutes(15)) _ = LoadAsync();
     }
 
     public void OnHidden()
@@ -86,15 +92,13 @@ public partial class WeatherView : UserControl, IToolView
         if (e.Key != Key.Enter) return;
         var city = CityInput.Text.Trim();
         if (city.Length == 0) return;
-        App.Settings.WeatherCity = city;
-        SettingsService.Save(notify: false);
-        _ = LoadAsync(newPlace: true);
+        _ = LoadAsync(newPlace: true, city); // saved once it's found: a typo mustn't replace a working city
     }
 
     private void OnRefresh(object sender, RoutedEventArgs e) => _ = LoadAsync();
 
     /// <summary>Skeleton on first load or a new city; a plain refresh keeps the current data on screen.</summary>
-    private async Task LoadAsync(bool newPlace = false)
+    private async Task LoadAsync(bool newPlace = false, string? typed = null)
     {
         if (_loading) return;
         _loading = true;
@@ -103,7 +107,7 @@ public partial class WeatherView : UserControl, IToolView
         Status.Text = skeleton ? "Loading…" : "Updating…";
         try
         {
-            var city = App.Settings.WeatherCity;
+            var city = typed ?? App.Settings.WeatherCity;
             if (await OpenMeteo.FindAsync(city) is not { } place)
             {
                 Status.Text = $"City \"{city}\" not found";
@@ -157,6 +161,13 @@ public partial class WeatherView : UserControl, IToolView
             Forecast.ItemsSource = forecast;
 
             _hasData = true;
+            if (city != App.Settings.WeatherCity)
+            {
+                App.Settings.WeatherCity = city;
+                SettingsService.Save(notify: false);
+                IdleInfoService.Instance.Reconfigure(); // the idle notch's weather follows
+            }
+            _fetchedFor = (city, App.Settings.UseFahrenheit);
             _lastFetch = DateTime.Now;
             Status.Text = $"Updated {DateTime.Now:t}";
         }
@@ -181,7 +192,7 @@ public partial class WeatherView : UserControl, IToolView
         }
     }
 
-    private static string Deg(double value) => $"{Math.Round(value):0}°";
+    private static string Deg(double value) => $"{Math.Round(value) + 0.0:0}°"; // + 0.0 turns -0 (from -0.4) into 0: no "-0°"
 
     /// <summary>WMO weather interpretation codes.</summary>
     private static (string Icon, string Text) Describe(int code, bool day) => code switch

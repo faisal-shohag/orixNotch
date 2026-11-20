@@ -45,7 +45,7 @@ public sealed class NotificationHistory
         AiLimitWatcher.Instance.Alert += a =>
         {
             var window = a.Window == "plan" ? "plan" : a.Window;
-            var resets = a.Resets is { } r ? $" Resets {r:ddd h:mm tt}." : "";
+            var resets = a.Resets is { } r ? $" Resets {r:ddd t}." : "";
             Add(new StoredNotification(Guid.NewGuid().ToString("N"), "orixnotch:" + a.ToolId, "AI Usage",
                 $"{a.ToolName} · {window} {a.Percent:0}% used", $"Reached {a.Threshold}% of its {window} limit.{resets}", DateTime.Now, "orixnotch"));
         };
@@ -56,6 +56,7 @@ public sealed class NotificationHistory
         if (!App.Settings.NotifyKeepHistory) return;
         _items.Insert(0, n);
         if (_items.Count > MaxItems) _items.RemoveRange(MaxItems, _items.Count - MaxItems);
+        _items.RemoveAll(x => x.At < DateTime.Now.AddDays(-MaxAgeDays)); // the 30 days hold while the app runs for weeks too
         Save();
         Changed?.Invoke();
     }

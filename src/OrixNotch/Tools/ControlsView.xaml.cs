@@ -61,14 +61,25 @@ public partial class ControlsView : UserControl, IToolView
         RenderApps();
         UpdateTiles();
         _refresh.Start();
-        if (_wifi is null && _bluetooth is null)
+        try
         {
-            _wifi = await SystemToggles.RadioAsync(RadioKind.WiFi);
-            _bluetooth = await SystemToggles.RadioAsync(RadioKind.Bluetooth);
-            foreach (var radio in new[] { _wifi, _bluetooth })
-                if (radio is not null) radio.StateChanged += (_, _) => Dispatcher.BeginInvoke(UpdateTiles);
-            UpdateTiles();
+            await (_radios ??= InitRadiosAsync()); // shown twice before the radios load: still looked up (and hooked) once
         }
+        catch (Exception ex) // async void: radio access can throw (no permission, service off)
+        {
+            App.Log(ex);
+        }
+    }
+
+    private Task? _radios;
+
+    private async Task InitRadiosAsync()
+    {
+        _wifi = await SystemToggles.RadioAsync(RadioKind.WiFi);
+        _bluetooth = await SystemToggles.RadioAsync(RadioKind.Bluetooth);
+        foreach (var radio in new[] { _wifi, _bluetooth })
+            if (radio is not null) radio.StateChanged += (_, _) => Dispatcher.BeginInvoke(UpdateTiles);
+        UpdateTiles();
     }
 
     public void OnHidden()
@@ -115,8 +126,18 @@ public partial class ControlsView : UserControl, IToolView
         };
         button.Click += async (_, _) =>
         {
-            await toggle();
-            UpdateTiles();
+            try
+            {
+                await toggle();
+            }
+            catch (Exception ex) // a radio or dark-mode switch Windows refused: the tile shows the real state
+            {
+                App.Log(ex);
+            }
+            finally
+            {
+                UpdateTiles();
+            }
         };
         var card = new Border { Style = (Style)FindResource("Card"), Padding = new Thickness(0), Margin = new Thickness(3), Child = button };
         Toggles.Children.Add(card);

@@ -218,6 +218,7 @@ public partial class TimerView : UserControl, IEscapeHandler, IToolView
     public void OnShown()
     {
         _shown = true;
+        Pom.SyncDay();
         Update();
     }
 

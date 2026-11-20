@@ -16,12 +16,17 @@ public sealed class Subscription
     /// <summary>The renewal date already announced, so the alert shows once per renewal.</summary>
     public DateTime? Alerted { get; set; }
 
-    public DateTime After(DateTime date) => Cycle switch
+    /// <summary>The day of the month it renews on, set when added: the 31st stays the 31st after a short month
+    /// (AddMonths alone drifts Jan 31 → Feb 28 → Mar 28). Older items without it keep their current day.</summary>
+    public int? Day { get; set; }
+
+    public DateTime After(DateTime date)
     {
-        "Weekly" => date.AddDays(7),
-        "Yearly" => date.AddYears(1),
-        _ => date.AddMonths(1),
-    };
+        if (Cycle == "Weekly") return date.AddDays(7);
+        var next = Cycle == "Yearly" ? date.AddYears(1) : date.AddMonths(1);
+        var day = Math.Min(Day ?? date.Day, DateTime.DaysInMonth(next.Year, next.Month));
+        return new DateTime(next.Year, next.Month, day, 0, 0, 0, date.Kind) + date.TimeOfDay;
+    }
 
     /// <summary>The price spread over a month, for the monthly total.</summary>
     public decimal PerMonth => Cycle switch

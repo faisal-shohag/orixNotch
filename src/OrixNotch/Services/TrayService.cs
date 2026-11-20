@@ -22,7 +22,9 @@ public sealed class TrayService : IDisposable
         };
 
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("Open panel  (Ctrl+Alt+N)", null, (_, _) => window.Expand(activate: true));
+        var open = menu.Items.Add("Open panel", null, (_, _) => window.Expand(activate: true));
+        // The shortcut as set now (it can be changed in Settings), read each time the menu opens.
+        menu.Opening += (_, _) => open.Text = App.Settings.Hotkeys.GetValueOrDefault("toggle") is { Length: > 0 } keys ? $"Open panel  ({keys})" : "Open panel";
         menu.Items.Add("Command palette…", null, (_, _) => window.ShowPalette());
         menu.Items.Add("Start focus", null, (_, _) => PomodoroService.Instance.StartFocus());
         menu.Items.Add("Settings…", null, (_, _) => window.OpenTool(NotchWindow.SettingsId));

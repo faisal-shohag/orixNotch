@@ -291,9 +291,12 @@ public sealed partial class PhoneTransferService : ObservableObject
     private static async Task SaveBodyAsync(HttpContext ctx, string path, PhoneTransfer transfer, CancellationToken ct)
     {
         var part = path + ".part";
+        // CreateNew: the same name sent from two phones at once fails the second instead of mixing both into one file.
+        // Opened before the try, so that failure doesn't delete the other upload's .part.
+        var output = new FileStream(part, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true);
         try
         {
-            await using (var output = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
+            await using (output)
             {
                 var buffer = new byte[1 << 16];
                 int read;
@@ -329,7 +332,7 @@ public sealed partial class PhoneTransferService : ObservableObject
         if (file.Length == 0 || file is "." or "..") file = "file";
         Directory.CreateDirectory(root);
         var path = Path.Combine(root, file);
-        for (var n = 2; File.Exists(path) || File.Exists(path + ".part"); n++)
+        for (var n = 2; File.Exists(path) || Directory.Exists(path) || File.Exists(path + ".part"); n++)
             path = Path.Combine(root, $"{Path.GetFileNameWithoutExtension(file)} ({n}){Path.GetExtension(file)}");
         return path;
     }
@@ -351,7 +354,9 @@ public sealed partial class PhoneTransferService : ObservableObject
 
     private static void OnUi(Action action) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(action);
 
-    private static T OnUi<T>(Func<T> func) => System.Windows.Application.Current.Dispatcher.Invoke(func);
+    // A request still running while the app exits gets a clean cancel (500), not a NullReferenceException.
+    private static T OnUi<T>(Func<T> func) =>
+        (System.Windows.Application.Current?.Dispatcher ?? throw new OperationCanceledException("The app is closing")).Invoke(func);
 
     /// <summary>The address a phone on the same Wi-Fi most likely reaches: a real adapter with a gateway.</summary>
     private static System.Net.IPAddress? BestLocalAddress()

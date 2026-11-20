@@ -146,7 +146,7 @@ public sealed partial class StopwatchService : ObservableObject
     public static StopwatchService Instance { get; } = new();
 
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(250) }; // the text shows whole seconds
-    private DateTime _startedAt;
+    private long _startedAt; // Environment.TickCount64: a clock change or DST must not jump the stopwatch
     private TimeSpan _base;
 
     [ObservableProperty] private bool _isRunning;
@@ -165,7 +165,7 @@ public sealed partial class StopwatchService : ObservableObject
 
     public string LapsText => LapCount == 0 ? "No laps yet" : $"{LapCount} lap{(LapCount == 1 ? "" : "s")}";
 
-    private StopwatchService() => _timer.Tick += (_, _) => Elapsed = _base + (DateTime.Now - _startedAt);
+    private StopwatchService() => _timer.Tick += (_, _) => Elapsed = _base + TimeSpan.FromMilliseconds(Environment.TickCount64 - _startedAt);
 
     partial void OnElapsedChanged(TimeSpan value) => OnPropertyChanged(nameof(ElapsedText));
 
@@ -176,14 +176,14 @@ public sealed partial class StopwatchService : ObservableObject
     {
         if (IsRunning)
         {
-            Elapsed = _base + (DateTime.Now - _startedAt);
+            Elapsed = _base + TimeSpan.FromMilliseconds(Environment.TickCount64 - _startedAt);
             _base = Elapsed;
             _timer.Stop();
             IsRunning = false;
         }
         else
         {
-            _startedAt = DateTime.Now;
+            _startedAt = Environment.TickCount64;
             _timer.Start();
             IsRunning = true;
         }

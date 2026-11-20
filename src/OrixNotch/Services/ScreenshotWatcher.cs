@@ -35,6 +35,16 @@ public sealed class ScreenshotWatcher
                 await Task.Delay(500); // the capture is still being written
                 Application.Current?.Dispatcher.BeginInvoke(() => Taken?.Invoke(e.FullPath));
             };
+            // Buffer overflow or the folder going away kills the watcher silently: log it and start a fresh one.
+            _watcher.Error += (_, e) =>
+            {
+                App.Log(e.GetException());
+                Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    Stop();
+                    Start();
+                });
+            };
         }
         catch (Exception ex)
         {

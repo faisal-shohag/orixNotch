@@ -172,7 +172,7 @@ public partial class NotchWindow
         SetCollapsedTarget();
         SetShove(0); // settle in the middle of the new edge
         StartAnimation();
-        if (!_expanded) ShowNextPeek();
+        if (!_expanded && !_finishingTurn) ShowNextPeek(); // not when Expand() is cutting the bend short
     }
 
     /// <summary>Opening mid-bend: finish it at once.</summary>

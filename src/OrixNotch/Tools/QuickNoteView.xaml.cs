@@ -42,7 +42,7 @@ public sealed partial class NoteEntry : ObservableObject
 
     [JsonIgnore]
     public string When =>
-        Updated.Date == DateTime.Today ? Updated.ToString("h:mm tt")
+        Updated.Date == DateTime.Today ? Updated.ToString("t") /* the user's 12/24-hour clock */
         : Updated.Year == DateTime.Today.Year ? Updated.ToString("MMM d")
         : Updated.ToString("MMM d, yyyy");
 

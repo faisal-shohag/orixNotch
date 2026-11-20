@@ -43,6 +43,8 @@ public sealed class BreakService
     {
         if (App.Settings.BreakReminders.Count > 0) _timer.Start();
         else _timer.Stop();
+        // A kind switched off forgets its count, so switching it back on starts fresh instead of firing at once.
+        foreach (var id in _active.Keys.Where(id => !IsOn(id)).ToList()) _active.Remove(id);
     }
 
     private void Tick()

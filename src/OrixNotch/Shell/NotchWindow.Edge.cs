@@ -329,19 +329,30 @@ public partial class NotchWindow
         SetCollapsedTarget();
         SetShove(0); // settle in the middle of the new edge (the dodge takes over again if the pointer is still near)
         StartAnimation();
-        if (!_expanded) ShowNextPeek(); // an alert that arrived mid-turn
+        if (!_expanded && !_finishingTurn) ShowNextPeek(); // an alert that arrived mid-turn
     }
 
     /// <summary>Opening mid-turn: finish it at once, on the new edge.</summary>
+    // Set while Expand() cuts a turn short: the turn's end mustn't start a queued alert that opening would cancel at once.
+    private bool _finishingTurn;
+
     private void FinishCornerTurnNow()
     {
-        if (_bending)
+        _finishingTurn = true;
+        try
         {
-            FinishBendNow();
-            return;
+            if (_bending)
+            {
+                FinishBendNow();
+                return;
+            }
+            if (!Turning) return;
+            _turnT = 1;
+            EndCornerTurn();
         }
-        if (!Turning) return;
-        _turnT = 1;
-        EndCornerTurn();
+        finally
+        {
+            _finishingTurn = false;
+        }
     }
 }

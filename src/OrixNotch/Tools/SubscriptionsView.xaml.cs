@@ -61,6 +61,7 @@ public partial class SubscriptionsView : UserControl, IToolView
             Currency = LocalCurrency,
             Cycle = (string)CycleBox.SelectedItem,
             Next = next,
+            Day = next.Day,
         });
         NameInput.Clear();
         PriceInput.Clear();

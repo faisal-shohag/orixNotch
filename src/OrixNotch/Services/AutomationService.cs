@@ -31,7 +31,7 @@ public sealed class AutomationService
     {
         var s = App.Settings;
         if (!s.Celebrations || DateTime.Now.Hour < 8) return; // not before the day starts
-        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        var today = DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         foreach (var e in CalendarEvent.LoadAll().Where(e => e.Date.Date == DateTime.Today && e.Title.Contains("birthday", StringComparison.OrdinalIgnoreCase)))
         {
             var key = $"{today}|birthday|{e.Title}";

@@ -86,7 +86,8 @@ public sealed partial class EventReminderService : ObservableObject
         }
         var due = App.Settings.RemindersEnabled
             ? _events
-                .Where(e => e.Date.Date == now.Date && !_dismissed.Contains(Key(e)) && CalendarView.TryParseTime(e.Time, out _))
+                // Yesterday to tomorrow: a 00:05 meeting is reminded at 23:55, and a 23:58 one lingers past midnight.
+                .Where(e => Math.Abs((e.Date.Date - now.Date).TotalDays) <= 1 && !_dismissed.Contains(Key(e)) && CalendarView.TryParseTime(e.Time, out _))
                 .Select(e =>
                 {
                     CalendarView.TryParseTime(e.Time, out var t);
@@ -137,5 +138,11 @@ public sealed partial class EventReminderService : ObservableObject
             Alert?.Invoke(IsNow);
         }
         if (IsNow) _chimedLead.Add(key); // reminder appeared at/after start: don't chime twice
+        // Events at the same time share this chime: one sound per moment, not one for whichever is shown first or last.
+        foreach (var other in due.Where(x => x.Start == pick.Start).Select(x => Key(x.Event)))
+        {
+            if (IsNow) _chimedStart.Add(other);
+            _chimedLead.Add(other);
+        }
     }
 }

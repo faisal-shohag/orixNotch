@@ -133,7 +133,17 @@ public sealed partial class PomodoroService : ObservableObject
     /// <summary>A focus session is counting down (quiet hours treat it as quiet when "Quiet during focus" is on).</summary>
     public bool Focusing => IsRunning && !IsBreak;
 
-    private static string Key(DateTime day) => day.ToString("yyyy-MM-dd");
+    private static string Key(DateTime day) => day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture); // Thai/Hijri calendars would write other years
+
+    private DateTime _countedDay = DateTime.Today;
+
+    /// <summary>"N today" is set at launch and per session: after midnight it must start again from that day's log.</summary>
+    public void SyncDay()
+    {
+        if (_countedDay == DateTime.Today) return;
+        _countedDay = DateTime.Today;
+        Completed = Today().Sessions;
+    }
 
     private FocusDay Today() => _log.TryGetValue(Key(DateTime.Today), out var day) ? day : new FocusDay();
 
@@ -145,6 +155,7 @@ public sealed partial class PomodoroService : ObservableObject
         // A year is plenty for streaks.
         foreach (var old in _log.Keys.Where(k => string.CompareOrdinal(k, Key(DateTime.Today.AddDays(-366))) < 0).ToList()) _log.Remove(old);
         Storage.Save(LogFile, _log);
+        _countedDay = DateTime.Today;
         Completed = day.Sessions;
         if (day.Sessions == 1 && Milestones.Contains(Streak)) StreakReached?.Invoke(Streak); // the day's first session extends it
     }

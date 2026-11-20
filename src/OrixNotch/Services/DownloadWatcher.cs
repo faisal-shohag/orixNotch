@@ -36,6 +36,16 @@ public sealed class DownloadWatcher
                 if (IsPartial(e.OldName) && !IsPartial(e.Name))
                     Application.Current?.Dispatcher.BeginInvoke(() => Finished?.Invoke(e.FullPath));
             };
+            // Buffer overflow or the folder going away kills the watcher silently: log it and start a fresh one.
+            _watcher.Error += (_, e) =>
+            {
+                App.Log(e.GetException());
+                Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    Stop();
+                    Start();
+                });
+            };
         }
         catch (Exception ex)
         {

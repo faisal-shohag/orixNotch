@@ -100,15 +100,30 @@ public partial class StocksView : UserControl, IToolView
         _quotes.Remove(q);
     }
 
+    private bool _refreshing;
+
     private async Task RefreshAsync()
     {
-        Status.Text = "Updating…";
-        await Task.WhenAll(_quotes.ToList().Select(LoadOneAsync));
-        _lastFetch = DateTime.Now;
-        Status.Text = $"Updated {DateTime.Now:t}";
+        // The timer, the Refresh button and opening the tool can overlap: one fetch round at a time.
+        if (_refreshing) return;
+        _refreshing = true;
+        try
+        {
+            Status.Text = "Updating…";
+            var results = await Task.WhenAll(_quotes.ToList().Select(LoadOneAsync));
+            _lastFetch = DateTime.Now;
+            var failed = results.Count(ok => !ok);
+            Status.Text = failed == 0 ? $"Updated {DateTime.Now:t}"
+                : failed == results.Length ? "Offline · couldn't update" : $"Updated {DateTime.Now:t} · {failed} failed";
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
-    private async Task LoadOneAsync(StockQuote current)
+    /// <summary>Fetches one quote; false when it failed (the last good quote stays on screen).</summary>
+    private async Task<bool> LoadOneAsync(StockQuote current)
     {
         StockQuote next;
         try
@@ -136,11 +151,14 @@ public partial class StocksView : UserControl, IToolView
         }
         catch (Exception)
         {
+            // A blip shouldn't wipe a good price and chart: only a symbol that never loaded says "Unavailable".
+            if (current.Closes.Count > 0 || !double.IsNaN(current.Previous)) return false;
             next = StockQuote.Placeholder(current.Symbol, "Unavailable");
         }
 
         var index = _quotes.IndexOf(current);
         if (index < 0) index = _quotes.ToList().FindIndex(q => q.Symbol == current.Symbol);
         if (index >= 0) _quotes[index] = next;
+        return next.Closes.Count > 0 || !double.IsNaN(next.Previous);
     }
 }

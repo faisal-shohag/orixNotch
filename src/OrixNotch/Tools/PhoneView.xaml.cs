@@ -106,7 +106,14 @@ public partial class PhoneView : UserControl, IToolView
     {
         App.Settings.PhoneEnabled = true;
         SettingsService.Save(false);
-        await Phone.SyncAsync();
+        try
+        {
+            await Phone.SyncAsync();
+        }
+        catch (Exception ex) // async void: a failed start must still turn the setting back off below
+        {
+            App.Log(ex);
+        }
         if (!Phone.IsRunning)
         {
             App.Settings.PhoneEnabled = false;
@@ -118,7 +125,14 @@ public partial class PhoneView : UserControl, IToolView
     {
         App.Settings.PhoneEnabled = false;
         SettingsService.Save(false);
-        await Phone.SyncAsync();
+        try
+        {
+            await Phone.SyncAsync();
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
     }
 
     private void OnOpenFolder(object sender, RoutedEventArgs e)

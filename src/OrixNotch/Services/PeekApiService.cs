@@ -35,7 +35,16 @@ public sealed class PeekApiService
 
     public bool Running => _server is not null;
 
-    public string Token => _token ??= LoadToken() ?? NewToken();
+    // Read from Kestrel threads and the UI: one lock, so a first run can't make two different tokens.
+    private readonly object _tokenLock = new();
+
+    public string Token
+    {
+        get
+        {
+            lock (_tokenLock) return _token ??= LoadToken() ?? NewToken();
+        }
+    }
 
     /// <summary>A ready-to-run example for the Settings page.</summary>
     public string CurlExample =>

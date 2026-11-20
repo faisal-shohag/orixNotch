@@ -35,6 +35,10 @@ public partial class SystemMonitorView : UserControl, IToolView
     public void OnShown()
     {
         _daysUntilFull = null;
+        // The last readings are from when the tool was hidden: a rate over that gap would show a minutes-long average,
+        // and the graph would join old history to new. Start fresh.
+        (_lastIdle, _lastKernel, _lastUser, _lastNetSample) = (0, 0, 0, default);
+        _cpuHistory.Clear();
         Sample();
         _timer.Start();
     }

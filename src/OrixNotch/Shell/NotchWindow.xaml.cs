@@ -403,7 +403,7 @@ public partial class NotchWindow : Window
 
     // ---------------------------------------------------------------- quiet hours
 
-    private int _quietMissed;
+    private readonly HashSet<string> _quietMissed = new(); // by key: repeats of one alert (battery updates) count once
     private bool _wasQuiet;
 
     /// <summary>Whether <paramref name="now"/> falls in [from, to); a window like 22:00–07:00 crosses midnight.</summary>
@@ -444,7 +444,7 @@ public partial class NotchWindow : Window
     {
         if (IsUserFeedback(request.Key) || !QuietActive()) return false;
         if (request.Key == ReminderPeekKey && App.Settings.QuietLetRemindersThrough) return false;
-        _quietMissed++;
+        _quietMissed.Add(request.Key);
         return true;
     }
 
@@ -453,10 +453,10 @@ public partial class NotchWindow : Window
         InCall = SystemToggles.InCall();
         UpdateGlow();
         var quiet = QuietActive();
-        if (_wasQuiet && !quiet && _quietMissed > 0)
+        if (_wasQuiet && !quiet && _quietMissed.Count > 0)
         {
-            var n = _quietMissed;
-            _quietMissed = 0;
+            var n = _quietMissed.Count;
+            _quietMissed.Clear();
             EnqueuePeek(new PeekRequest("quiet", () => GlyphTile(AppIcon.Moon),
                 n == 1 ? "1 alert while you were quiet" : $"{n} alerts while you were quiet", "Click to see notifications",
                 TimeSpan.FromSeconds(6), OnClick: () => OpenTool("notifications")));
@@ -540,7 +540,7 @@ public partial class NotchWindow : Window
         {
             var (along, y) = EdgeLocal(p); // touching the notch's own edge brings it back
             var x = Math.Abs(along);
-            var half = _idleW / 2 + 40;
+            var half = Math.Max(_idleW, BodySpan) / 2 + 40; // the pill as drawn now: a wide music pill reveals from its ends too
             if (y <= 1 && x <= half) _revealed = true;
             else if (y > _collapsedH + DodgeBand || x > half + 40) _revealed = false;
         }
@@ -553,7 +553,7 @@ public partial class NotchWindow : Window
         var fade = target > 0 ? Motion.Fast : Motion.Scale(300);
         Pill.BeginAnimation(OpacityProperty, new DoubleAnimation(target, fade));
         // Hidden by choice, mark the spot; hidden for a full-screen video, stay out of sight entirely.
-        if (!Vertical) EdgeHint.Width = Math.Round(_idleW * 0.55);
+        if (!Vertical) EdgeHint.Width = Math.Round(Math.Max(_idleW, BodySpan) * 0.55);
         EdgeHint.BeginAnimation(OpacityProperty, new DoubleAnimation(target == 0 && !_fullscreen && !HiddenForApp ? 0.7 : 0, fade));
     }
 
@@ -609,6 +609,8 @@ public partial class NotchWindow : Window
         {
             if (_peeking)
             {
+                // Opened over an alert (hover, hotkey, tray): it comes back after closing instead of vanishing unread.
+                if (_currentPeek is { } shown && !IsUserFeedback(shown.Key)) _peekQueue.Insert(0, shown);
                 _peeking = false;
                 _currentPeek = null;
                 _peekTimer.Stop();
@@ -623,7 +625,7 @@ public partial class NotchWindow : Window
             {
                 if (EventReminderService.Instance.IsActive) ShowTool("calendar");
                 else if (ContextTool() is { } matched) ShowTool(matched, remember: false);
-                else ShowTool(_activeTool is SettingsId or PaletteId or BriefId or WrapId ? App.Settings.LastTool : _activeTool);
+                else ShowTool(Shown(_activeTool is SettingsId or PaletteId or BriefId or WrapId ? App.Settings.LastTool : _activeTool));
             }
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
@@ -937,8 +939,13 @@ public partial class NotchWindow : Window
     {
         var target = _backTarget ?? App.Settings.LastTool;
         _backTarget = null;
-        ShowTool(target == SettingsId ? ToolRegistry.Ordered()[0].Id : target);
+        ShowTool(target == SettingsId ? FirstTool() : Shown(target));
     }
+
+    /// <summary>A tool hidden in Settings → Tabs since it was last open isn't reopened (it would show with no tab).</summary>
+    private static string Shown(string id) => ToolRegistry.Ordered().Any(t => t.Id == id) ? id : FirstTool();
+
+    private static string FirstTool() => (ToolRegistry.Ordered().FirstOrDefault() ?? ToolRegistry.Ordered(includeHidden: true)[0]).Id;
 
     // ---------------------------------------------------------------- animation
 
@@ -1650,13 +1657,16 @@ public partial class NotchWindow : Window
         // The same alert already showing (volume steps): refresh it in place.
         if (_peeking && _currentPeek?.Key == request.Key)
         {
+            // Everything, not just the text: an empty sub, other buttons (their closures) or a second line change too.
             _currentPeek = request;
-            PeekIconHost.Content = request.Icon();
-            PeekTitle.Text = OneLine(request.Title);
-            PeekSub.Text = OneLine(request.Sub);
+            FillPeek(request);
+            PeekLayer.Height = _peekH;
             _peekTimer.Stop();
             _peekTimer.Interval = request.Duration;
             _peekTimer.Start();
+            _width.Target = PeekW;
+            _height.Target = _peekH;
+            StartAnimation();
             return;
         }
         request.Held = AlertsHeld() && !IsUserFeedback(request.Key); // stale volume steps after a film are noise
@@ -1683,6 +1693,22 @@ public partial class NotchWindow : Window
 
         _currentPeek = next;
         UpdatePeekMore();
+        FillPeek(next);
+        AnimatePeekIn();
+        _peeking = true;
+        UpdateConceal();
+        PeekLayer.Height = _peekH;
+        _peekTimer.Stop();
+        _peekTimer.Interval = next.Duration;
+        _peekTimer.Start();
+        _width.Target = PeekW;
+        _height.Target = _peekH;
+        StartAnimation();
+    }
+
+    /// <summary>Draws an alert's icon, text, buttons and height: a new alert, or one refreshed in place.</summary>
+    private void FillPeek(PeekRequest next)
+    {
         PeekIconHost.Content = next.Icon();
         PeekTitle.Text = OneLine(next.Title);
         PeekSub.Text = OneLine(next.Sub);
@@ -1708,16 +1734,6 @@ public partial class NotchWindow : Window
             PeekActions.Children.Add(button);
         }
         _peekH = SubWraps(PeekSub.Text) ? PeekH2 : PeekH;
-        AnimatePeekIn();
-        _peeking = true;
-        UpdateConceal();
-        PeekLayer.Height = _peekH;
-        _peekTimer.Stop();
-        _peekTimer.Interval = next.Duration;
-        _peekTimer.Start();
-        _width.Target = PeekW;
-        _height.Target = _peekH;
-        StartAnimation();
     }
 
     /// <summary>Multi-line text (chat messages, emails) as one line, so the alert's layout holds.</summary>
@@ -2287,11 +2303,18 @@ public partial class NotchWindow : Window
             count.Text = n > 9 ? "9+" : n.ToString();
             badge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
-        NotificationHistory.Instance.Changed += Update;
-        Update();
         var grid = new Grid();
         grid.Children.Add(icon);
         grid.Children.Add(badge);
+        // Tabs are rebuilt on every settings change: only a badge on screen listens, or each rebuild leaks one more.
+        grid.Loaded += (_, _) =>
+        {
+            NotificationHistory.Instance.Changed -= Update;
+            NotificationHistory.Instance.Changed += Update;
+            Update();
+        };
+        grid.Unloaded += (_, _) => NotificationHistory.Instance.Changed -= Update;
+        Update();
         return grid;
     }
 
@@ -2300,7 +2323,7 @@ public partial class NotchWindow : Window
     {
         var s = App.Settings;
         return s.ContextTools && ForegroundAppWatcher.Instance.Current is { } app && s.AppTools.TryGetValue(app, out var tool)
-            && ToolRegistry.All.Any(t => t.Id == tool) ? tool : null;
+            && ToolRegistry.Ordered().Any(t => t.Id == tool) ? tool : null; // not a tool hidden from the tabs
     }
 
     /// <param name="remember">False for a tool picked for the app in front: the next plain open returns to the last one chosen.</param>
@@ -2386,6 +2409,18 @@ public partial class NotchWindow : Window
     /// on the day's weather, next event, to-dos, AI usage and a stock. Never while quiet, in full screen or in use.
     /// </summary>
     private async void TryMorningBrief()
+    {
+        try
+        {
+            await TryMorningBriefAsync();
+        }
+        catch (Exception ex) // async void: an error here would otherwise only reach the global handler
+        {
+            App.Log(ex);
+        }
+    }
+
+    private async Task TryMorningBriefAsync()
     {
         var s = App.Settings;
         var today = DateTime.Today.ToString("yyyy-MM-dd");
@@ -2594,6 +2629,18 @@ public partial class NotchWindow : Window
 
     /// <summary>Puts a drop on the Shelf, offers it to the phone or hands it to Ask AI, then shows where it went.</summary>
     public async void DeliverDrop(DropPayload payload, DropTarget target)
+    {
+        try
+        {
+            await DeliverDropAsync(payload, target);
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
+    }
+
+    private async Task DeliverDropAsync(DropPayload payload, DropTarget target)
     {
         HideDropChooser(restore: false);
         ShowTool(target switch { DropTarget.Phone => "phone", DropTarget.Ask => "ask", _ => "shelf" });

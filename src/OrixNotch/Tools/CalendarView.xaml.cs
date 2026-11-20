@@ -551,7 +551,18 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             time = TimeSpan.FromHours(hour);
             return true;
         }
-        return TimeSpan.TryParse(raw, out time) && time >= TimeSpan.Zero && time < TimeSpan.FromDays(1);
+        if (TimeSpan.TryParse(raw, out time) && time >= TimeSpan.Zero && time < TimeSpan.FromDays(1)) return true;
+        // The list shows 12-hour times on a 12-hour PC: accept them back ("9pm", "9:30 PM").
+        if (DateTime.TryParseExact(raw.Trim(), ["h:mmtt", "h:mm tt", "htt", "h tt"], System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AllowWhiteSpaces, out var at)
+            || DateTime.TryParse(raw, System.Globalization.CultureInfo.CurrentCulture, System.Globalization.DateTimeStyles.NoCurrentDateDefault, out at)
+               && at.Date == DateTime.MinValue.Date) // a time only, not a date that happens to parse
+        {
+            time = at.TimeOfDay;
+            return true;
+        }
+        time = default;
+        return false;
     }
 
     /// <summary>Event markers under the day number: one dot per event, up to three.</summary>

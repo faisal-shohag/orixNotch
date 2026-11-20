@@ -197,7 +197,7 @@ public partial class AiUsageView : UserControl, IToolView
 
         var weeklyHas = p.WeeklyPercent is not null || weeklyLimit > 0;
         var wpct = p.WeeklyPercent ?? Pct(p.WeeklyTokens, weeklyLimit);
-        var wleft = p.WeeklyResets is { } wr ? $"Resets {wr:ddd h:mm tt}" : $"Today {Tokens(p.TodayTokens)}";
+        var wleft = p.WeeklyResets is { } wr ? $"Resets {wr:ddd t}" : $"Today {Tokens(p.TodayTokens)}";
         var wspare = weeklyHas ? $"{Math.Max(0, 100 - wpct):0}% left" : Tokens(p.WeeklyTokens);
         stack.Children.Add(Meter("Weekly", p.WeeklyTokens, wpct, weeklyHas, wleft, wspare));
 

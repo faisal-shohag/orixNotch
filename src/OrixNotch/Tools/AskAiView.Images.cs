@@ -115,7 +115,14 @@ public partial class AskAiView
     {
         if (!DropPayload.HasImage(e.Data)) return;
         e.Handled = true;
-        if (DropPayload.Read(e.Data) is { } payload) await AcceptDrop(payload);
+        try
+        {
+            if (DropPayload.Read(e.Data) is { } payload) await AcceptDrop(payload);
+        }
+        catch (Exception ex) // async void: an unreadable drop is logged, not thrown at the dispatcher
+        {
+            App.Log(ex);
+        }
     }
 
     /// <summary>Takes a drop: images are attached, text goes into the message box.</summary>

@@ -57,6 +57,18 @@ public sealed class BluetoothWatcher
                         Post(() => OnUpdated(u.Id, connected));
                 };
                 watcher.Removed += (_, u) => Post(() => _devices.Remove(u.Id));
+                // The Bluetooth service restarting aborts the watcher, and connect alerts would stop for good: start over.
+                watcher.Stopped += async (w, _) =>
+                {
+                    if (w.Status != DeviceWatcherStatus.Aborted) return;
+                    await Task.Delay(TimeSpan.FromSeconds(30));
+                    Post(() =>
+                    {
+                        if (!_watchers.Contains(w) || !App.Settings.BluetoothAlerts) return;
+                        Stop();
+                        Start();
+                    });
+                };
                 watcher.Start();
                 _watchers.Add(watcher);
             }

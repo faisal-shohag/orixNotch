@@ -252,6 +252,7 @@ public sealed class IdleInfoService
                 var files = ShelfService.Instance.Items.Count;
                 return files == 0 ? null : new IdleItem(id, AppIcon.ArchiveBox, files == 1 ? "1 file" : $"{files} files", Short: files.ToString(culture));
             case "streak":
+                PomodoroService.Instance.SyncDay();
                 var done = PomodoroService.Instance.Completed;
                 return new IdleItem(id, AppIcon.Fire, done == 1 ? "1 today" : $"{done} today", Short: done.ToString(culture));
             case "avatar":
