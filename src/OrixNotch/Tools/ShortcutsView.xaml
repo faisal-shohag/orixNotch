@@ -18,10 +18,6 @@
                      TextChanged="OnSearchChanged" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
                 <TextBlock x:Name="Status" Style="{StaticResource SubText}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <Button Style="{StaticResource IconButton}" Width="34" Height="34" ToolTip="New shortcut"
-                        Foreground="{DynamicResource SubTextBrush}" Click="OnNew">
-                    <hero:HeroIcon Kind="Plus" Width="14" Height="14" />
-                </Button>
             </StackPanel>
         </Grid>
 
@@ -49,50 +45,9 @@
             </Grid>
         </Border>
 
+        <!-- Launcher tiles: the app's own icon (or a symbol on a coloured tile), its name below; built in code. -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="List">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <UniformGrid Columns="4" VerticalAlignment="Top" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Margin="0,0,6,6" Height="26" Cursor="Hand" Focusable="False" ToolTip="{Binding Target}" Click="OnRun">
-                            <Button.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="Edit" Click="OnEdit" />
-                                    <MenuItem Header="Delete" Click="OnDelete" />
-                                </ContextMenu>
-                            </Button.ContextMenu>
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="Bd" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource SurfaceBrush}" Padding="7,0">
-                                        <ContentPresenter VerticalAlignment="Center" />
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface2Brush}" />
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter TargetName="Bd" Property="Opacity" Value="0.7" />
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                            <StackPanel Orientation="Horizontal">
-                                <Border Width="13" Height="13" CornerRadius="{StaticResource RadiusS}" Background="{DynamicResource AccentBrush}">
-                                    <hero:HeroIcon Kind="Play" Width="8" Height="8" Margin="1,0,0,0" Foreground="{DynamicResource OnAccentBrush}"
-                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                                <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Medium" Margin="7,0,0,0"
-                                           TextTrimming="CharacterEllipsis" MaxWidth="96" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextBrush}" />
-                            </StackPanel>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <UniformGrid x:Name="Tiles" Columns="7" VerticalAlignment="Top" Margin="-4,0,-4,0" />
         </ScrollViewer>
     </Grid>
 </UserControl>
