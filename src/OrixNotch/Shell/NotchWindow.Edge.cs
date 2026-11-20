@@ -27,14 +27,20 @@ public partial class NotchWindow
     /// <summary>On the left or right edge: the notch's span is vertical.</summary>
     private static bool Vertical => Edge is ScreenEdge.Left or ScreenEdge.Right;
 
-    private double _expandedW = 720; // the open panel's width, the depth of an open side notch
+    private double _expandedW = 720;
+
+    /// <summary>The closed side tab's thickness: slimmer than the top notch is tall, just room for its icons.</summary>
+    private double SideDepth => Math.Max(26, _collapsedH - 10);
+
+    /// <summary>How far the closed notch reaches into the screen on the current edge.</summary>
+    private double ClosedDepth => Vertical ? SideDepth : _collapsedH; // the open panel's width, the depth of an open side notch
 
     /// <summary>Closed size for the current activity: a horizontal pill on top/bottom, a thin tab of icons on the sides.</summary>
     private void SetCollapsedTarget()
     {
         if (Vertical)
         {
-            _width.Target = _collapsedH;
+            _width.Target = SideDepth;
             _height.Target = SideTabLength();
         }
         else

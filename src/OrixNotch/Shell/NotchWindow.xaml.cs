@@ -928,7 +928,7 @@ public partial class NotchWindow : Window
 
     private void ApplyGeometry()
     {
-        var w = Math.Max(60, _width.Value);
+        var w = Math.Max(Vertical ? 20 : 60, _width.Value); // the side tab is narrower than any top notch
         var h = Math.Max(20, _height.Value);
 
         // 0 = collapsed, 1 = fully open (to whatever size the current tool wants).
@@ -938,8 +938,8 @@ public partial class NotchWindow : Window
         var span = Vertical ? h : w;
         var peekDepth = Vertical ? PeekW : _peekH;
         var openDepth = Vertical ? _expandedW : _expandedH;
-        var peek = _peeking && !_expanded ? Math.Clamp((depth - _collapsedH) / Math.Max(1, peekDepth - _collapsedH), 0, 1) : 0;
-        var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((depth - _collapsedH) / Math.Max(1, openDepth - _collapsedH), 0, 1);
+        var peek = _peeking && !_expanded ? Math.Clamp((depth - ClosedDepth) / Math.Max(1, peekDepth - ClosedDepth), 0, 1) : 0;
+        var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((depth - ClosedDepth) / Math.Max(1, openDepth - ClosedDepth), 0, 1);
         var floating = Floating;
         var ear = App.Settings.NotchShape == "Notch" ? EarCollapsed + (EarExpanded - EarCollapsed) * p : 0;
         // A floating island is a capsule while closed (radius = half its height), rounding like the others as it opens.
@@ -1291,7 +1291,7 @@ public partial class NotchWindow : Window
         if (!_peeking)
         {
             if (Vertical) RenderSide();
-            var w = Vertical ? _collapsedH : IdleWidth();
+            var w = Vertical ? SideDepth : IdleWidth();
             if (Math.Abs(_width.Target - w) > 0.5)
             {
                 SetCollapsedTarget();
