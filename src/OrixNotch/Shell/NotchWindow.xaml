@@ -124,8 +124,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <ContentControl x:Name="PeekIconHost" Width="40" Height="40" Focusable="False" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" Margin="13,0,10,0" VerticalAlignment="Center">
+                    <ContentControl x:Name="PeekIconHost" Width="40" Height="40" Focusable="False" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" />
+                    <StackPanel x:Name="PeekText" Grid.Column="1" Margin="13,0,10,0" VerticalAlignment="Center">
                         <TextBlock x:Name="PeekTitle" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         <!-- Up to two lines, then "…"; the full text is in the Notifications tool -->
                         <TextBlock x:Name="PeekSub" FontSize="12.5" Foreground="{DynamicResource SubTextBrush}" Margin="0,1,0,0"

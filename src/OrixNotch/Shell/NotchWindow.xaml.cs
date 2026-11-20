@@ -1540,11 +1540,7 @@ public partial class NotchWindow : Window
             PeekActions.Children.Add(button);
         }
         _peekH = SubWraps(PeekSub.Text) ? PeekH2 : PeekH;
-        if (_peeking)
-        {
-            // Already open: swap the content with a quick fade instead of shrinking and growing again.
-            PeekLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, Motion.Base));
-        }
+        AnimatePeekIn();
         _peeking = true;
         UpdateConceal();
         PeekLayer.Height = _peekH;
@@ -1618,6 +1614,25 @@ public partial class NotchWindow : Window
         EndPeek();
         click?.Invoke();
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Each alert arrives: its icon pops in with a small overshoot and its text rises into place (also when it replaces
+    /// one already on screen, so the swap reads as "next" instead of a flicker).
+    /// </summary>
+    private void AnimatePeekIn()
+    {
+        var pop = new ScaleTransform(0.7, 0.7);
+        PeekIconHost.RenderTransform = pop;
+        var grow = new DoubleAnimation(0.7, 1, Motion.Slow) { EasingFunction = Motion.Pop };
+        pop.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+        pop.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+
+        var rise = new TranslateTransform(0, 8);
+        PeekText.RenderTransform = rise;
+        rise.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, Motion.Base) { EasingFunction = Motion.Out });
+        PeekText.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Base) { EasingFunction = Motion.Out });
+        PeekActions.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Motion.Slow) { EasingFunction = Motion.Out });
     }
 
     private void ShowReminderPeek()
