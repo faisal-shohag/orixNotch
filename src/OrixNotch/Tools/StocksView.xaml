@@ -47,14 +47,15 @@
                                 <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding PriceText}" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Right"
                                                Typography.NumeralAlignment="Tabular" />
-                                    <Border Background="{Binding Tint}" CornerRadius="{StaticResource RadiusS}" Padding="8,3" Margin="0,4,0,0"
-                                            HorizontalAlignment="Right">
-                                        <TextBlock Text="{Binding ChangeText}" FontSize="13" FontWeight="SemiBold" Foreground="White"
-                                                   HorizontalAlignment="Center" Typography.NumeralAlignment="Tabular" />
-                                    </Border>
+                                    <!-- Tinted text on a faint wash of the same colour: readable on every scheme (white on grey wasn't). -->
+                                    <Grid Margin="0,4,0,0" HorizontalAlignment="Right">
+                                        <Border Background="{Binding Tint}" CornerRadius="{StaticResource RadiusS}" Opacity="0.16" />
+                                        <TextBlock Text="{Binding ChangeText}" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Tint}"
+                                                   Margin="8,3" HorizontalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                                    </Grid>
                                 </StackPanel>
                                 <Button x:Name="Del" Grid.Column="3" Style="{StaticResource IconButton}" Width="20" Height="20"
-                                        HorizontalAlignment="Right" Click="OnRemove" Visibility="Hidden" Foreground="{DynamicResource SubTextBrush}">
+                                        HorizontalAlignment="Right" Click="OnRemove" Visibility="Hidden" Foreground="{DynamicResource SubTextBrush}" ToolTip="Remove">
                                     <hero:HeroIcon Kind="XMark" Width="12" Height="12" />
                                 </Button>
                             </Grid>

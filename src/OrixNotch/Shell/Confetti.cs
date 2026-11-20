@@ -14,6 +14,7 @@ public static class Confetti
 
     public static void Burst(Canvas canvas, Point from, int pieces = 36)
     {
+        if (Motion.Reduced) return; // pure decoration: skipped when Windows' animation effects are off
         var random = Random.Shared;
         for (var i = 0; i < pieces; i++)
         {

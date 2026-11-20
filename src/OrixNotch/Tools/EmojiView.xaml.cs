@@ -94,11 +94,30 @@ public partial class EmojiView : UserControl
         if (rows.Count > 0) Rows.ScrollIntoView(rows[0]);
     }
 
+    private System.Windows.Threading.DispatcherTimer? _statusClear;
+
+    // Like Clipboard and Shortcuts: the confirmation goes away instead of lingering until the next copy.
+    private void ClearStatusSoon()
+    {
+        if (_statusClear is null)
+        {
+            _statusClear = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _statusClear.Tick += (_, _) =>
+            {
+                _statusClear.Stop();
+                Status.Text = "";
+            };
+        }
+        _statusClear.Stop();
+        _statusClear.Start();
+    }
+
     private void OnEmojiClick(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not EmojiEntry entry) return;
         ClipboardService.Instance.CopyQuiet(entry.Char);
         Status.Text = $"Copied: {entry.Name}";
+        ClearStatusSoon();
 
         _recent.Remove(entry.Char);
         _recent.Insert(0, entry.Char);

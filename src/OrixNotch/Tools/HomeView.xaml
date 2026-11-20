@@ -199,13 +199,13 @@
                             </StackPanel>
 
                             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" IsEnabled="{Binding HasSession}">
-                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding PreviousCommand}" VerticalAlignment="Center">
+                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding PreviousCommand}" VerticalAlignment="Center" ToolTip="Previous">
                                     <hero:HeroIcon Kind="Backward" Width="18" Height="18" />
                                 </Button>
                                 <Button Style="{StaticResource PlayButton}" Margin="16,0" Command="{Binding PlayPauseCommand}">
                                     <hero:HeroIcon x:Name="PlayIcon" Kind="Play" Width="18" Height="18" />
                                 </Button>
-                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding NextCommand}" VerticalAlignment="Center">
+                                <Button Style="{StaticResource IconButton}" Width="34" Height="34" Command="{Binding NextCommand}" VerticalAlignment="Center" ToolTip="Next">
                                     <hero:HeroIcon Kind="Forward" Width="18" Height="18" />
                                 </Button>
                             </StackPanel>

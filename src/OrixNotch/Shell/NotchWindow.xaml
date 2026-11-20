@@ -153,7 +153,7 @@
                 <Grid x:Name="ExpandedLayer" Opacity="0" Visibility="Collapsed">
                     <Grid x:Name="Header" Height="30" VerticalAlignment="Top" Margin="18,16,14,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="BackButton" Style="{StaticResource IconButton}" Width="26" Height="26" Margin="-4,0,6,0"
+                            <Button x:Name="BackButton" Style="{StaticResource IconButton}" Width="26" Height="26" Margin="-4,0,6,0" ToolTip="Back"
                                     Foreground="{DynamicResource SubTextBrush}" Visibility="Collapsed" Click="OnBackClick">
                                 <hero:HeroIcon Kind="ChevronLeft" Width="17" Height="17" />
                             </Button>

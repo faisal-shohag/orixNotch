@@ -44,7 +44,7 @@ public partial class TeleprompterView : UserControl, IToolView
     {
         InitializeComponent();
         _grip = new ResizeGrip(this, Grip, () => App.Settings.PrompterHeight, v => App.Settings.PrompterHeight = v,
-            MinPrompterHeight, MaxPrompterHeight, @default: 203, width: 690);
+            MinPrompterHeight, MaxPrompterHeight, @default: 203); // the registered width: 690 made it spring 720 → 690 on every show
         var s = App.Settings;
         SpeedSlider.Value = s.PrompterSpeed;
         SizeSlider.Value = s.PrompterFontSize;

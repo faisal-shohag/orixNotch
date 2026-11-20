@@ -107,6 +107,7 @@ public partial class WeatherView : UserControl, IToolView
             if (await OpenMeteo.FindAsync(city) is not { } place)
             {
                 Status.Text = $"City \"{city}\" not found";
+                Field.ShowError(CityInput);
                 return;
             }
             var (name, country, lat, lon) = (place.Name, place.Country, place.Lat, place.Lon);

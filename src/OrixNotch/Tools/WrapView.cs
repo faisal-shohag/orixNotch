@@ -17,13 +17,14 @@ public sealed class WrapView : UserControl
 {
     private readonly UniformGrid _cards = new() { Rows = 1, Columns = 4 };
     private readonly Border _shot; // what "Save image" renders: the cards on the notch's own background
+    private readonly Button _save;
 
     public WrapView()
     {
         _shot = new Border { Child = _cards, Padding = new Thickness(0, 4, 0, 4) };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 5, 0) };
         buttons.Children.Add(Button("Details", () => NotchWindow.Instance?.OpenTool("screentime")));
-        var save = Button("Save image", SaveImage);
+        var save = _save = Button("Save image", SaveImage);
         save.Style = (Style)FindResource("AccentButton");
         save.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(save);
@@ -101,6 +102,15 @@ public sealed class WrapView : UserControl
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             App.Log(ex);
+            // Say so on the button for a moment, rather than nothing happening.
+            _save.Content = "Couldn't save";
+            var reset = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+            reset.Tick += (_, _) =>
+            {
+                reset.Stop();
+                _save.Content = "Save image";
+            };
+            reset.Start();
         }
     }
 }

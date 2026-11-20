@@ -131,7 +131,7 @@ public static class SmoothCaret
         private void Glide(DependencyProperty property, double to)
         {
             if (Math.Abs((double)_shift.GetValue(property) - to) < 0.5) return;
-            var anim = new DoubleAnimation(to, TimeSpan.FromMilliseconds(GlideMs))
+            var anim = new DoubleAnimation(to, Motion.Scale(GlideMs)) // jumps when animations are off
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
             };

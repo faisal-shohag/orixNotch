@@ -13,13 +13,11 @@ namespace OrixNotch.Tools;
 
 public sealed class StockQuote
 {
-    private static readonly Brush Neutral = Frozen(Color.FromRgb(0x8E, 0x8E, 0x93));
-
     public string Symbol { get; init; } = "";
     public string Name { get; init; } = "";
     public string PriceText { get; init; } = "–";
     public string ChangeText { get; init; } = "…";
-    public Brush Tint { get; init; } = Neutral;
+    public Brush Tint { get; init; } = ThemeService.Get("SubTextBrush"); // no change yet: the theme's grey
     public IReadOnlyList<double> Closes { get; init; } = [];
     public double Previous { get; init; } = double.NaN;
 
@@ -41,13 +39,6 @@ public sealed class StockQuote
             Closes = closes,
             Previous = previous,
         };
-    }
-
-    private static Brush Frozen(Color c)
-    {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
     }
 }
 

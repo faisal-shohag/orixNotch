@@ -29,7 +29,9 @@
     <SolidColorBrush x:Key="ThumbBrush" Color="#40F5F5F7" />
     <SolidColorBrush x:Key="AccentBrush" Color="#FF8A3D" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#30FF8A3D" />
-    <SolidColorBrush x:Key="OnAccentBrush" Color="#111113" />    <SolidColorBrush x:Key="GoodBrush" Color="#32D74B" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="#111113" />
+    <SolidColorBrush x:Key="GoodBrush" Color="#32D74B" />
+    <SolidColorBrush x:Key="StarBrush" Color="#FFB800" />
     <SolidColorBrush x:Key="BadBrush" Color="#FF453A" />
     <!-- Syntax colors for code blocks (dark defaults; ThemeService swaps in light ones). -->
     <SolidColorBrush x:Key="CodeKeywordBrush" Color="#FF7B72" />
@@ -81,6 +83,8 @@
 
     <!-- Icon-only button; put a HeroIcon (Shell/HeroIcon) in Content -->
     <Style x:Key="IconButton" TargetType="Button">
+        <!-- Icon-only: screen readers read the tooltip as the name (string tooltips; a set Name still wins). -->
+        <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="Width" Value="30" />
         <Setter Property="Height" Value="30" />
@@ -228,6 +232,8 @@
 
     <!-- Tool tab in the header; Content is a HeroIcon -->
     <Style x:Key="TabButton" TargetType="RadioButton">
+        <!-- Icon-only: screen readers read the tooltip as the name (string tooltips; a set Name still wins). -->
+        <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
         <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
         <Setter Property="Width" Value="35" />
         <Setter Property="Height" Value="28" />

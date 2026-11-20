@@ -38,6 +38,7 @@ public sealed class LevelBar : Grid
         SizeChanged += (_, _) => Layout();
         MouseLeftButtonDown += (_, e) =>
         {
+            Focus();
             CaptureMouse();
             SetFromPointer(e);
             e.Handled = true;
@@ -47,6 +48,22 @@ public sealed class LevelBar : Grid
         MouseWheel += (_, e) =>
         {
             Set(_value + Math.Sign(e.Delta) * 0.05, notify: true);
+            e.Handled = true;
+        };
+        // Keyboard too, like a slider: arrows step 5%, Home/End go to the ends.
+        Focusable = true;
+        KeyDown += (_, e) =>
+        {
+            double? to = e.Key switch
+            {
+                Key.Left or Key.Down => _value - 0.05,
+                Key.Right or Key.Up => _value + 0.05,
+                Key.Home => 0,
+                Key.End => 1,
+                _ => null,
+            };
+            if (to is not { } next) return;
+            Set(next, notify: true);
             e.Handled = true;
         };
     }

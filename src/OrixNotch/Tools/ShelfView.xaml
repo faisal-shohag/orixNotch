@@ -63,7 +63,7 @@
                                         </StackPanel>
                                         <Button x:Name="RemoveBtn" Style="{StaticResource IconButton}" Width="20" Height="20"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
-                                                Background="{DynamicResource HoverBrush}" Visibility="Hidden" Click="OnRemove">
+                                                Background="{DynamicResource HoverBrush}" Visibility="Hidden" Click="OnRemove" ToolTip="Remove from shelf">
                                             <hero:HeroIcon Kind="XMark" Width="11" Height="11" />
                                         </Button>
                                     </Grid>

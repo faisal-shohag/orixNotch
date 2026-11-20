@@ -155,6 +155,26 @@ public partial class QuickNoteView : UserControl, IToolView
             Select(_notes[Math.Min(index, _notes.Count - 1)]);
         }
         Save();
+        OfferUndo(note, index);
+    }
+
+    /// <summary>A note is gone in one click: the status line offers it back until the next edit replaces the line.</summary>
+    private void OfferUndo(NoteEntry note, int index)
+    {
+        var undo = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run("Undo")) { TextDecorations = null, Cursor = Cursors.Hand };
+        undo.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "AccentBrush");
+        undo.Click += (_, _) =>
+        {
+            if (_notes.Contains(note)) return;
+            _notes.Insert(Math.Min(index, _notes.Count), note);
+            _dirty = true;
+            Select(note); // also drops the empty note left in its place
+            Save();
+            Editor.Focus();
+        };
+        Status.Inlines.Clear();
+        Status.Inlines.Add(new System.Windows.Documents.Run("Note deleted · "));
+        Status.Inlines.Add(undo);
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)

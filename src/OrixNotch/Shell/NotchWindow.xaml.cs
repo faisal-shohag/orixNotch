@@ -1267,7 +1267,7 @@ public partial class NotchWindow : Window
         TrackShift.X = 0;
         TrackText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var overflow = TrackText.DesiredSize.Width - TitleSlot.ActualWidth;
-        if (overflow <= 2 || _expanded || !PillShown) return;
+        if (overflow <= 2 || _expanded || !PillShown || Motion.Reduced) return; // animations off: the title stays put
         var travel = TimeSpan.FromSeconds(overflow / 28);
         var hold = TimeSpan.FromSeconds(1.6);
         var slide = new DoubleAnimationUsingKeyFrames { RepeatBehavior = RepeatBehavior.Forever };
@@ -2076,7 +2076,7 @@ public partial class NotchWindow : Window
         var breathe = false;
         if (App.Settings.NotchGlow)
         {
-            if (InCall) (color, breathe) = (Color.FromRgb(0xFF, 0x45, 0x3A), true);
+            if (InCall) (color, breathe) = ((ThemeService.Get("BadBrush") as SolidColorBrush)?.Color ?? Colors.Red, true);
             else if (PomodoroService.Instance.Focusing) (color, breathe) = (ThemeService.CurrentAccent.Mean, true);
             else if (NowPlayingService.Instance.IsPlaying && NowPlayingService.Instance.ArtTint is { } tint) color = tint;
         }
@@ -2129,6 +2129,7 @@ public partial class NotchWindow : Window
             _eq.Stop(this);
             return;
         }
+        if (Motion.Reduced) return; // animations off: the bars stand still
         if (App.Settings.ReactivePill && !BatterySaver() && VolumeService.Instance.Peak() is not null) _eqLive.Start();
         else _eq.Begin(this, true);
     }
