@@ -131,7 +131,7 @@ public sealed class AppSettings
     public string? LastSeenVersion { get; set; }    // the "Updated to …" alert shows once per version
     public List<string> SeenNew { get; set; } = new(); // "page|row title" whose "New" chip has been seen
 
-    public string ThemeScheme { get; set; } = "midnight";
+    public string ThemeScheme { get; set; } = "system"; // new installs follow Windows (Coral / Coral Light); saved values win
     public string ThemeAccent { get; set; } = "auto"; // "auto" = the scheme's own accent
     public bool Celebrations { get; set; } = true;  // confetti on an empty to-do list, focus streaks, birthdays
     public List<string> Celebrated { get; set; } = new(); // "yyyy-MM-dd|what" already celebrated

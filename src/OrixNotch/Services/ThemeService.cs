@@ -55,6 +55,9 @@ public static class ThemeService
 {
     public static IReadOnlyList<ColorScheme> Schemes { get; } =
     [
+        // The default pair: slate and white cards with a coral accent; "System" picks one by Windows' light/dark mode.
+        new("coral", "Coral", C("#22262F"), C("#2A2F39"), C("#323844"), C("#3C4350"), C("#F4F5F7"), C("#8B909A"), false, "coral"),
+        new("coral-light", "Coral Light", C("#FFFFFF"), C("#FBF3F1"), C("#F3E7E3"), C("#EADBD6"), C("#1F2430"), C("#868B95"), true, "coral"),
         new("midnight", "Midnight", C("#000000"), C("#121214"), C("#1C1C1F"), C("#28282C"), C("#F5F5F7"), C("#8A8A90"), false, "orange"),
         new("graphite", "Graphite", C("#1B1B1D"), C("#242427"), C("#2D2D31"), C("#38383D"), C("#F2F2F4"), C("#94949A"), false, "blue"),
         new("slate", "Slate", C("#161A20"), C("#1F242C"), C("#283039"), C("#333C47"), C("#EEF1F5"), C("#8F99A6"), false, "sky"),
@@ -78,6 +81,7 @@ public static class ThemeService
 
     public static IReadOnlyList<AccentColor> Accents { get; } =
     [
+        new("coral", "Coral", C("#E8442A")),
         new("orange", "Orange", C("#FF8A3D")),
         new("amber", "Amber", C("#FFC233")),
         new("lime", "Lime", C("#A3E635")),
@@ -107,8 +111,13 @@ public static class ThemeService
 
     public static event Action? Changed;
 
+    /// <summary>Scheme setting that follows Windows' light/dark app mode: Coral Light or Coral.</summary>
+    public const string SystemScheme = "system";
+
     public static ColorScheme CurrentScheme =>
-        Schemes.FirstOrDefault(s => s.Id == App.Settings.ThemeScheme) ?? Schemes[0];
+        App.Settings.ThemeScheme == SystemScheme
+            ? Schemes.First(s => s.Id == (SystemToggles.DarkMode ? "coral" : "coral-light"))
+            : Schemes.FirstOrDefault(s => s.Id == App.Settings.ThemeScheme) ?? Schemes[0];
 
     /// <summary>Accent setting that follows the scheme's own accent.</summary>
     public const string AutoAccent = "auto";
@@ -290,6 +299,9 @@ public static class ThemeService
     public static void WatchWallpaper() =>
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, e) =>
         {
+            // Windows' light/dark switch arrives as a General change: the System scheme follows it.
+            if (e.Category == Microsoft.Win32.UserPreferenceCategory.General && App.Settings.ThemeScheme == SystemScheme)
+                Application.Current?.Dispatcher.BeginInvoke(Apply);
             if (e.Category != Microsoft.Win32.UserPreferenceCategory.Desktop || !App.Settings.GlassWallpaperTint) return;
             _wallpaperRead = false;
             Application.Current?.Dispatcher.BeginInvoke(Apply);
@@ -347,7 +359,7 @@ public static class ThemeService
         var accent = get("accent");
         var size = get("size");
         return new(
-            Schemes.Any(x => x.Id == scheme) ? scheme : current.Scheme,
+            scheme == SystemScheme || Schemes.Any(x => x.Id == scheme) ? scheme : current.Scheme,
             accent == AutoAccent || Accents.Any(x => x.Id == accent) ? accent : current.Accent,
             get("glass") is "1" or "0" ? get("glass") == "1" : current.Glass,
             double.TryParse(get("strength"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var st)

@@ -784,6 +784,8 @@ public partial class SettingsView : UserControl, IToolView
 
         Section("COLOR SCHEME");
         var schemes = new WrapPanel();
+        schemes.Children.Add(SchemeCard(ThemeService.Schemes.First(s => s.Id == (SystemToggles.DarkMode ? "coral" : "coral-light")),
+            ThemeService.SystemScheme, "System"));
         foreach (var scheme in ThemeService.Schemes.Where(s => !s.IsGradient)) schemes.Children.Add(SchemeCard(scheme));
         Page.Children.Add(schemes);
 
@@ -1957,9 +1959,11 @@ public partial class SettingsView : UserControl, IToolView
         return button;
     }
 
-    private FrameworkElement SchemeCard(ColorScheme scheme)
+    /// <param name="id">The setting this card picks; "system" shows the scheme Windows' mode picks right now.</param>
+    private FrameworkElement SchemeCard(ColorScheme scheme, string? id = null, string? name = null)
     {
-        var selected = scheme.Id == ThemeService.CurrentScheme.Id;
+        id ??= scheme.Id;
+        var selected = S.ThemeScheme == ThemeService.SystemScheme ? id == ThemeService.SystemScheme : id == ThemeService.CurrentScheme.Id;
         var preview = new Grid { Height = 58, Width = 104 };
         preview.Children.Add(new Border { Background = scheme.PreviewBrush(), CornerRadius = Radii.S });
         preview.Children.Add(new System.Windows.Shapes.Path
@@ -1982,8 +1986,8 @@ public partial class SettingsView : UserControl, IToolView
 
         var card = new StackPanel { Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand, Background = Brushes.Transparent };
         card.Children.Add(frame);
-        card.Children.Add(new TextBlock { Text = scheme.Name, FontSize = 10.5, FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) });
-        card.MouseLeftButtonUp += (_, _) => ThemeService.SetScheme(scheme.Id);
+        card.Children.Add(new TextBlock { Text = name ?? scheme.Name, FontSize = 10.5, FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) });
+        card.MouseLeftButtonUp += (_, _) => ThemeService.SetScheme(id);
         return card;
     }
 
