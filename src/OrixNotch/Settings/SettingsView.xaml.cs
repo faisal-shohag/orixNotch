@@ -1089,6 +1089,19 @@ public partial class SettingsView : UserControl, IToolView
         heroCard.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         Page.Children.Add(heroCard);
 
+        Section("HELP");
+        var report = new StackPanel { Orientation = Orientation.Horizontal };
+        report.Children.Add(new Button { Content = "Copy details", Height = RowControlHeight, Margin = new Thickness(0, 0, 6, 0) }
+            .Also(b => b.Click += (_, _) => ClipboardService.Instance.CopyQuiet(Diagnostics())));
+        report.Children.Add(new Button { Content = "Report", Style = (Style)FindResource("AccentButton"), Height = RowControlHeight }
+            .Also(b => b.Click += (_, _) => OpenUrl(RepoUrl + "/issues/new?labels=bug&title=" + Uri.EscapeDataString("Problem: ")
+                + "&body=" + Uri.EscapeDataString("**What happened?**\n\n\n**What did you expect?**\n\n\n" + Diagnostics()))));
+        Row("Report a problem", "Opens a GitHub issue with your version, Windows and the app's recent errors filled in. You see everything before you send it; nothing is sent on its own.", report);
+        Row("Request a tool", "Missing something on the notch? Tell us what you'd use it for.",
+            new Button { Content = "Request", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                OpenUrl(RepoUrl + "/issues/new?labels=tool-request&title=" + Uri.EscapeDataString("Tool request: ")
+                    + "&body=" + Uri.EscapeDataString("**What should it do?**\n\n\n**When would you use it?**\n\n"))));
+
         Section("DETAILS");
         var details = new StackPanel();
         details.Children.Add(InfoRow("Version", version));
@@ -1175,6 +1188,54 @@ public partial class SettingsView : UserControl, IToolView
         chip.SetResourceReference(Border.BackgroundProperty, accent ? "AccentSoftBrush" : "Surface2Brush");
         label.SetResourceReference(TextBlock.ForegroundProperty, accent ? "AccentBrush" : "SubTextBrush");
         return chip;
+    }
+
+    /// <summary>
+    /// What a bug report needs: version, Windows, how it was installed, and the last errors from error.log with the
+    /// user's folder replaced by %USERPROFILE% (paths there often contain their name).
+    /// </summary>
+    private static string Diagnostics()
+    {
+        var lines = new List<string>
+        {
+            "**Details**",
+            $"- OrixNotch {UpdateService.CurrentVersion} ({(StartupService.IsPackaged ? "Microsoft Store" : "desktop")}, {(Environment.Is64BitProcess ? "x64" : "x86")})",
+            $"- Windows {Environment.OSVersion.Version}",
+        };
+        try
+        {
+            var log = Storage.PathOf("error.log");
+            if (System.IO.File.Exists(log))
+            {
+                var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                // Short enough to fit in a GitHub "new issue" link.
+                var tail = System.IO.File.ReadLines(log).Where(l => l.Trim().Length > 0).TakeLast(12)
+                    .Select(l => l.Replace(profile, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase))
+                    .Select(l => l.Length > 160 ? l[..160] + "…" : l);
+                lines.Add("");
+                lines.Add("**Recent errors**");
+                lines.Add("```");
+                lines.AddRange(tail);
+                lines.Add("```");
+            }
+        }
+        catch (System.IO.IOException)
+        {
+            // The log is optional.
+        }
+        return string.Join("\n", lines);
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
     }
 
     private static Button LinkButton(string text, AppIcon icon, string url, bool primary = false)
