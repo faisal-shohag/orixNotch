@@ -156,6 +156,14 @@ public partial class NotchWindow : Window
             EnqueuePeek(new PeekRequest("awake", () => GlyphTile(AppIcon.Coffee),
                 on ? "Keep awake on" : "Keep awake off", on ? "The PC and screen won't sleep" : "", TimeSpan.FromSeconds(2)));
         BluetoothWatcher.Instance.Changed += ShowBluetoothPeek;
+        BluetoothWatcher.Instance.Battery += (device, level) =>
+        {
+            // Only refresh the connect alert still on screen or waiting; a late reading shouldn't pop a new one.
+            var key = "bt:" + device;
+            if (!App.Settings.BluetoothAlerts || (_currentPeek?.Key != key && _peekQueue.All(r => r.Key != key))) return;
+            EnqueuePeek(new PeekRequest(key, () => GlyphTile(AppIcon.Bluetooth), device, $"Connected · {level}% battery",
+                TimeSpan.FromSeconds(3)));
+        };
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
