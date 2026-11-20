@@ -1343,7 +1343,10 @@ public partial class NotchWindow : Window
                 grid.Children.Add(new Ellipse { Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill } });
             return grid;
         }
-        return new HeroIcon { Kind = item.Glyph ?? AppIcon.Info, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center, Foreground = IdleBrush(item) };
+        var glyphBrush = !ThemeService.IsDefaultScheme && item.ValueBrush == "TextBrush"
+            ? Application.Current.Resources["SubTextBrush"] as Brush // other schemes: a quiet grey icon beside the value
+            : IdleBrush(item);
+        return new HeroIcon { Kind = item.Glyph ?? AppIcon.Info, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center, Foreground = glyphBrush };
     }
 
     /// <summary>
@@ -1366,6 +1369,9 @@ public partial class NotchWindow : Window
 
     private static Brush IdleBrush(IdleItem item)
     {
+        // Another scheme was picked: the idle notch takes that scheme's look (grey icon, its text colour) instead.
+        if (!ThemeService.IsDefaultScheme)
+            return Application.Current.Resources[item.ValueBrush] as Brush ?? Brushes.White;
         var color = item.ValueBrush switch
         {
             "BadBrush" => C(0xFF, 0x45, 0x3A),
@@ -2226,6 +2232,17 @@ public partial class NotchWindow : Window
         EnqueuePeek(new PeekRequest("theme", () => GlyphTile(AppIcon.Palette), "New look applied",
             $"{name}{(look.Glass ? " glass" : "")}", TimeSpan.FromSeconds(8),
             Actions: [new PeekAction(AppIcon.Backward, "Undo", () => ThemeService.ApplyLook(before))]));
+    }
+
+    /// <summary>Appearance › Reset theme: back to the default look, with Undo on the alert.</summary>
+    public void ResetTheme()
+    {
+        var before = ThemeService.Current();
+        var look = ThemeService.DefaultLook();
+        if (look == before) return;
+        ThemeService.ApplyLook(look);
+        EnqueuePeek(new PeekRequest("theme", () => GlyphTile(AppIcon.Palette), "Theme reset", "Back to the default look",
+            TimeSpan.FromSeconds(8), Actions: [new PeekAction(AppIcon.Backward, "Undo", () => ThemeService.ApplyLook(before))]));
     }
 
     public const string PaletteId = "palette";

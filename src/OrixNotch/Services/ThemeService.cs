@@ -114,6 +114,12 @@ public static class ThemeService
     /// <summary>Scheme setting that follows Windows' light/dark app mode: Coral Light or Coral.</summary>
     public const string SystemScheme = "system";
 
+    /// <summary>On the default theme (System, Coral or Coral Light): the idle notch shows its items in their own colours.</summary>
+    public static bool IsDefaultScheme => App.Settings.ThemeScheme is SystemScheme or "coral" or "coral-light";
+
+    /// <summary>Back to the default theme: System scheme, its own accent, no glass.</summary>
+    public static Look DefaultLook() => new(SystemScheme, AutoAccent, false, 0.6, false, App.Settings.NotchSize);
+
     public static ColorScheme CurrentScheme =>
         App.Settings.ThemeScheme == SystemScheme
             ? Schemes.First(s => s.Id == (SystemToggles.DarkMode ? "coral" : "coral-light"))
