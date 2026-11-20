@@ -135,6 +135,41 @@ public sealed class VolumeService
         }
     }
 
+    private IAudioMeterInformation? _meter;
+    private DateTime _meterOpened;
+
+    /// <summary>
+    /// The speakers' current peak level, 0–1 (what's playing right now), or null without an output device. Reopened
+    /// every few seconds so a switch to headphones is followed.
+    /// </summary>
+    public float? Peak()
+    {
+        try
+        {
+            if (_meter is null || DateTime.Now - _meterOpened > TimeSpan.FromSeconds(5))
+            {
+                _meterOpened = DateTime.Now;
+                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                if (enumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out var device) != 0) return null;
+                var iid = typeof(IAudioMeterInformation).GUID;
+                if (device.Activate(ref iid, 23, IntPtr.Zero, out var obj) != 0) return null;
+                _meter = (IAudioMeterInformation)obj;
+            }
+            return _meter.GetPeakValue(out var peak) == 0 ? peak : null;
+        }
+        catch (COMException)
+        {
+            _meter = null;
+            return null;
+        }
+    }
+
+    [ComImport, Guid("C02216F6-8C67-4B5B-9D00-D008E73E0064"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioMeterInformation
+    {
+        [PreserveSig] int GetPeakValue(out float peak); // first in the vtable (endpointvolume.h); the only one we call
+    }
+
     /// <summary>Mutes or unmutes the default microphone; <see cref="MicChanged"/> follows from Core Audio.</summary>
     public void ToggleMic()
     {

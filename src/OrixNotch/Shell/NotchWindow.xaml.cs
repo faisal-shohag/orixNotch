@@ -200,6 +200,7 @@ public partial class NotchWindow : Window
         HotkeyService.Triggered += OnHotkey;
 
         BuildEqualizer();
+        _eqLive.Tick += (_, _) => TickEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
             if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool is not (SettingsId or PaletteId or BriefId or WrapId)) MoveTabIndicator(_activeTool, animate: false);
@@ -1885,8 +1886,45 @@ public partial class NotchWindow : Window
     {
         if (on == _eqRunning) return;
         _eqRunning = on;
-        if (on) _eq.Begin(this, true);
-        else _eq.Stop(this);
+        _eqLive.Stop();
+        if (!on)
+        {
+            _eq.Stop(this);
+            return;
+        }
+        if (App.Settings.ReactivePill && !BatterySaver() && VolumeService.Instance.Peak() is not null) _eqLive.Start();
+        else _eq.Begin(this, true);
+    }
+
+    // Live bars: the speakers' peak level ~30 times a second, each bar at its own phase so they don't move as one.
+    private readonly DispatcherTimer _eqLive = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+    private readonly double[] _eqLevels = new double[5];
+
+    private void TickEqualizer()
+    {
+        var bars = new[] { Bar1, Bar2, Bar3, Bar4, Bar5 };
+        var peak = Math.Sqrt(VolumeService.Instance.Peak() ?? 0); // square root: quiet passages still move
+        var t = Environment.TickCount64 / 1000.0;
+        for (var i = 0; i < bars.Length; i++)
+        {
+            var wobble = 0.65 + 0.35 * Math.Sin(t * (5 + i * 1.7) + i);
+            var target = Math.Clamp(0.22 + peak * wobble, 0.22, 1);
+            // Rise fast, fall slower, like a VU meter.
+            _eqLevels[i] += (target - _eqLevels[i]) * (target > _eqLevels[i] ? 0.6 : 0.2);
+            if (bars[i].RenderTransform is ScaleTransform scale) scale.ScaleY = _eqLevels[i];
+        }
+    }
+
+    private static bool BatterySaver()
+    {
+        try
+        {
+            return Windows.System.Power.PowerManager.EnergySaverStatus == Windows.System.Power.EnergySaverStatus.On;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     // ---------------------------------------------------------------- tools

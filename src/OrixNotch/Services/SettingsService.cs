@@ -133,6 +133,7 @@ public sealed class AppSettings
 
     public string ThemeScheme { get; set; } = "midnight";
     public string ThemeAccent { get; set; } = "auto"; // "auto" = the scheme's own accent
+    public bool ReactivePill { get; set; } = true;   // the closed notch's music bars follow the sound (not on battery saver)
     public bool AlbumAccent { get; set; }             // while music plays, the accent follows the cover
     public bool Glass { get; set; }                    // see-through, tinted notch with a glass sheen
     public double GlassStrength { get; set; } = 0.6;   // 0 = nearly clear, 1 = nearly opaque tint
