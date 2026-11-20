@@ -16,6 +16,12 @@ public sealed class ScreenshotWatcher
 
     private FileSystemWatcher? _watcher;
 
+    public void Stop()
+    {
+        _watcher?.Dispose();
+        _watcher = null;
+    }
+
     public void Start()
     {
         if (_watcher is not null) return;

@@ -291,7 +291,7 @@ public partial class TeleprompterView : UserControl, IToolView
     {
         if (!IsLoaded) return;
         App.Settings.PrompterSpeed = e.NewValue; // a running scroll eases to the new speed
-        SettingsService.Save(notify: false);
+        SettingsService.SaveSoon(); // every slider step
     }
 
     private void OnSizeChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -299,7 +299,7 @@ public partial class TeleprompterView : UserControl, IToolView
         if (!IsLoaded) return;
         App.Settings.PrompterFontSize = Math.Round(e.NewValue);
         ApplyFont();
-        SettingsService.Save(notify: false);
+        SettingsService.SaveSoon(); // every slider step
     }
 
     private void OnOpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -308,7 +308,7 @@ public partial class TeleprompterView : UserControl, IToolView
         App.Settings.PrompterOpacity = e.NewValue;
         NotchWindow.Instance?.SetBackgroundOpacity(e.NewValue);
         UpdateFades();
-        SettingsService.Save(notify: false);
+        SettingsService.SaveSoon(); // every slider step
     }
 
     private void OnMirror(object sender, RoutedEventArgs e)

@@ -136,6 +136,7 @@ public sealed class VolumeService
     }
 
     private IAudioMeterInformation? _meter;
+    private IMMDeviceEnumerator? _meterEnumerator;
     private DateTime _meterOpened;
 
     /// <summary>
@@ -149,11 +150,21 @@ public sealed class VolumeService
             if (_meter is null || DateTime.Now - _meterOpened > TimeSpan.FromSeconds(5))
             {
                 _meterOpened = DateTime.Now;
-                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-                if (enumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out var device) != 0) return null;
-                var iid = typeof(IAudioMeterInformation).GUID;
-                if (device.Activate(ref iid, 23, IntPtr.Zero, out var obj) != 0) return null;
-                _meter = (IAudioMeterInformation)obj;
+                // Called 30 times a second: release each reopen's COM objects now rather than leaving them to the GC.
+                if (_meter is not null) Marshal.ReleaseComObject(_meter);
+                _meter = null;
+                _meterEnumerator ??= (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                if (_meterEnumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out var device) != 0) return null;
+                try
+                {
+                    var iid = typeof(IAudioMeterInformation).GUID;
+                    if (device.Activate(ref iid, 23, IntPtr.Zero, out var obj) != 0) return null;
+                    _meter = (IAudioMeterInformation)obj;
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(device);
+                }
             }
             return _meter.GetPeakValue(out var peak) == 0 ? peak : null;
         }

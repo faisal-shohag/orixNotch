@@ -49,6 +49,9 @@ public sealed class ForegroundAppWatcher
     /// </summary>
     public void Recheck() => Update(Win32.GetForegroundWindow());
 
+    private uint _lastPid;
+    private string? _lastName;
+
     private void Update(IntPtr hwnd)
     {
         string? name = null; // no foreground window (the last one just closed): nothing is in front
@@ -56,7 +59,9 @@ public sealed class ForegroundAppWatcher
         {
             Win32.GetWindowThreadProcessId(hwnd, out var pid);
             if (pid == OwnPid) return;
-            if (pid != 0) name = NameOf((int)pid);
+            // Polled every 2 s: the same window in front needn't open its process again.
+            if (pid != 0) name = pid == _lastPid ? _lastName : NameOf((int)pid);
+            (_lastPid, _lastName) = (pid, name);
         }
         if (name == Current) return;
         Current = name;

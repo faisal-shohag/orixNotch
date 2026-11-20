@@ -14,6 +14,8 @@ namespace OrixNotch.Tools;
 public partial class NotificationsView : UserControl, IToolView
 {
     private const int CollapsedBodyLines = 3;
+    private const int Page = 50; // up to 300 are kept; the first screenfuls are what gets read
+    private int _shown = Page;
     private readonly HashSet<string> _expanded = new();
 
 
@@ -29,6 +31,7 @@ public partial class NotificationsView : UserControl, IToolView
     public void OnShown()
     {
         ApplyHeight();
+        _shown = Page;
         // Relative times ("5m") go stale while hidden, so redraw on every open.
         Render();
         NotificationHistory.Instance.MarkRead();
@@ -53,7 +56,7 @@ public partial class NotificationsView : UserControl, IToolView
 
         List.Children.Clear();
         DateTime? day = null;
-        foreach (var n in items)
+        foreach (var n in items.Take(_shown))
         {
             if (n.At.Date != day)
             {
@@ -61,6 +64,16 @@ public partial class NotificationsView : UserControl, IToolView
                 List.Children.Add(DayHeader(n.At.Date));
             }
             List.Children.Add(Card(n));
+        }
+        if (items.Count > _shown)
+        {
+            var more = new Button { Content = $"Show {Math.Min(Page, items.Count - _shown)} more", Margin = new Thickness(0, 6, 0, 4), HorizontalAlignment = HorizontalAlignment.Center };
+            more.Click += (_, _) =>
+            {
+                _shown += Page;
+                Render();
+            };
+            List.Children.Add(more);
         }
     }
 

@@ -69,6 +69,7 @@ public sealed class IdleInfoService
     private long _lastIdle, _lastKernel, _lastUser;
     private double _cpu;
     private long _lastRx = -1;
+    private NetworkInterface[]? _nics;
     private DateTime _lastRxAt;
     private double _rxPerSec;
     private int _openTodos;
@@ -91,14 +92,19 @@ public sealed class IdleInfoService
     private IdleInfoService()
     {
         _tick.Tick += (_, _) => Update();
+        // An adapter came or went: list them again, and restart the rate so the change in total isn't a spike.
+        NetworkChange.NetworkAddressChanged += (_, _) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => (_nics, _lastRx) = (null, -1));
         Reconfigure();
     }
 
-    private static HashSet<string> Selected => App.Settings.IdleItems.ToHashSet();
+    private HashSet<string> _selected = new();
+    private bool _forceChanged;
 
     /// <summary>Call after the selection changes in Settings.</summary>
     public void Reconfigure()
     {
+        _selected = App.Settings.IdleItems.ToHashSet();
+        _forceChanged = true; // layout / format settings change the drawing even when the items don't
         _lastFiles = _lastWeb = _lastAi = DateTime.MinValue; // refetch what's newly selected
         if (App.Settings.IdleItems.Count > 0) _tick.Start();
         else _tick.Stop();
@@ -107,7 +113,7 @@ public sealed class IdleInfoService
 
     private void Update()
     {
-        var sel = Selected;
+        var sel = _selected;
         var now = DateTime.Now;
 
         if (sel.Contains("cpu")) SampleCpu();
@@ -130,10 +136,14 @@ public sealed class IdleInfoService
         }
         if (sel.Contains("stock") && now.Second % 6 == 0) _tickerIndex++; // cycle tickers
 
-        Items = Catalog.Select(c => c.Id).Where(sel.Contains)
+        var items = Catalog.Select(c => c.Id).Where(sel.Contains)
             .SelectMany(id => id == "aiUsage" ? BuildAi() : [Build(id)])
             .OfType<IdleItem>()
             .ToList();
+        // Most seconds nothing changed: don't make the notch rebuild its idle row for nothing.
+        if (!_forceChanged && items.SequenceEqual(Items)) return;
+        _forceChanged = false;
+        Items = items;
         Changed?.Invoke();
     }
 
@@ -232,10 +242,9 @@ public sealed class IdleInfoService
                     change >= 0 ? "GoodBrush" : "BadBrush", Short: $"{arrow}{Math.Abs(change):0.0}");
             }
             case "screentime":
-                return ScreenTimeService.Instance.Enabled
-                    ? new IdleItem(id, AppIcon.Hourglass, ScreenTimeService.Format(ScreenTimeService.Instance.Total(DateTime.Today)),
-                        Short: ShortDuration(ScreenTimeService.Instance.Total(DateTime.Today)))
-                    : null;
+                if (!ScreenTimeService.Instance.Enabled) return null;
+                var screen = ScreenTimeService.Instance.Total(DateTime.Today);
+                return new IdleItem(id, AppIcon.Hourglass, ScreenTimeService.Format(screen), Short: ShortDuration(screen));
             case "unread":
                 var unread = NotificationHistory.Instance.Unread;
                 return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new", Short: unread.ToString(culture));
@@ -335,10 +344,12 @@ public sealed class IdleInfoService
         long rx = 0;
         try
         {
-            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            // Listing the adapters each second is costly; only re-list after Windows reports an address change.
+            _nics ??= NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)).ToArray();
+            foreach (var nic in _nics)
             {
-                if (nic.OperationalStatus != OperationalStatus.Up ||
-                    nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel) continue;
+                if (nic.OperationalStatus != OperationalStatus.Up) continue;
                 rx += nic.GetIPv4Statistics().BytesReceived;
             }
         }
@@ -378,16 +389,22 @@ public sealed class IdleInfoService
     /// <summary>Start times of today's timed events (Day timeline).</summary>
     public IReadOnlyList<TimeSpan> TodayEvents { get; private set; } = [];
 
+    private (string City, double Lat, double Lon)? _geo;
+
     private async Task FetchWeatherAsync()
     {
         try
         {
             var city = App.Settings.WeatherCity;
-            using var geo = JsonDocument.Parse(await Http.Client.GetStringAsync(
-                $"https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name={Uri.EscapeDataString(city)}"));
-            if (!geo.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0) return;
-            var lat = results[0].GetProperty("latitude").GetDouble();
-            var lon = results[0].GetProperty("longitude").GetDouble();
+            // A city doesn't move: geocode it once, not on every 10-minute refresh.
+            if (_geo?.City != city)
+            {
+                using var geo = JsonDocument.Parse(await Http.Client.GetStringAsync(
+                    $"https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name={Uri.EscapeDataString(city)}"));
+                if (!geo.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0) return;
+                _geo = (city, results[0].GetProperty("latitude").GetDouble(), results[0].GetProperty("longitude").GetDouble());
+            }
+            var (_, lat, lon) = _geo.Value;
             var unit = App.Settings.UseFahrenheit ? "&temperature_unit=fahrenheit" : "";
             using var doc = JsonDocument.Parse(await Http.Client.GetStringAsync(FormattableString.Invariant(
                 $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&forecast_days=2&timezone=auto{unit}")));

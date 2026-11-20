@@ -48,15 +48,24 @@ public static class CodeHighlighter
     public static IEnumerable<(string Text, CodeToken Kind)> Tokenize(string code, string language)
     {
         var lang = Get(language);
+        var runs = new List<(string, CodeToken)>();
         var at = 0;
-        foreach (Match m in lang.Pattern.Matches(code))
+        try
         {
-            if (m.Length == 0) continue;
-            if (m.Index > at) yield return (code[at..m.Index], CodeToken.Plain);
-            yield return (m.Value, KindOf(m));
-            at = m.Index + m.Length;
+            foreach (Match m in lang.Pattern.Matches(code))
+            {
+                if (m.Length == 0) continue;
+                if (m.Index > at) runs.Add((code[at..m.Index], CodeToken.Plain));
+                runs.Add((m.Value, KindOf(m)));
+                at = m.Index + m.Length;
+            }
         }
-        if (at < code.Length) yield return (code[at..], CodeToken.Plain);
+        catch (RegexMatchTimeoutException)
+        {
+            // Pathological input (a huge unclosed comment mid-stream): show the rest plain rather than freeze.
+        }
+        if (at < code.Length) runs.Add((code[at..], CodeToken.Plain));
+        return runs;
     }
 
     /// <summary>Human-readable name for a fence label ("ts" → "TypeScript").</summary>
@@ -110,10 +119,12 @@ public static class CodeHighlighter
     private static Language Get(string language)
     {
         var key = Normalize(language);
+        // Every other label ("text", "diff", "output", …) shares the C-like pattern: one compiled regex, not one per label.
+        if (key is not ("json" or "yaml" or "html" or "xml" or "css" or "sql" or "bash" or "powershell" or "py" or "ruby" or "php")) key = "";
         lock (Cache)
         {
             if (Cache.TryGetValue(key, out var cached)) return cached;
-            var lang = new Language(key, new Regex(PatternFor(key), RegexOptions.Compiled | RegexOptions.Multiline));
+            var lang = new Language(key, new Regex(PatternFor(key), RegexOptions.Compiled | RegexOptions.Multiline, TimeSpan.FromMilliseconds(250)));
             Cache[key] = lang;
             return lang;
         }

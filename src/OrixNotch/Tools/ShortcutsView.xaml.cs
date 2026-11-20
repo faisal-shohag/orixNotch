@@ -34,20 +34,30 @@ public partial class ShortcutsView : UserControl, IEscapeHandler
         return q.Length == 0 || item.Name.Contains(q, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void OnSearchChanged(object sender, TextChangedEventArgs e) => Render();
+    private void OnSearchChanged(object sender, TextChangedEventArgs e) => ApplySearch();
 
-    /// <summary>The tiles: every shortcut matching the search, then a "New" tile.</summary>
+    /// <summary>The tiles: every shortcut, then a "New" tile; the search only hides them.</summary>
     private void Render()
     {
         Tiles.Children.Clear();
-        foreach (var item in Service.Items.Where(Matches)) Tiles.Children.Add(Tile(item));
-        if (Search.Text.Trim().Length == 0) Tiles.Children.Add(NewTile());
+        foreach (var item in Service.Items) Tiles.Children.Add(Tile(item));
+        Tiles.Children.Add(NewTile());
+        ApplySearch();
+    }
+
+    // Typing filters the built tiles instead of rebuilding them (each tile looks up its icon and checks the disk).
+    private void ApplySearch()
+    {
+        var searching = Search.Text.Trim().Length > 0;
+        foreach (var tile in Tiles.Children.OfType<FrameworkElement>())
+            tile.Visibility = (tile.Tag is ShortcutItem item ? Matches(item) : !searching) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private Button Tile(ShortcutItem item)
     {
         var button = TileButton(ShortcutIcon(item), item.Name);
         button.ToolTip = string.IsNullOrEmpty(item.Arguments) ? item.Target : $"{item.Target} {item.Arguments}";
+        button.Tag = item;
         button.Click += (_, _) => Run(item);
         var menu = new ContextMenu();
         var edit = new MenuItem { Header = "Edit" };

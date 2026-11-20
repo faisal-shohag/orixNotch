@@ -130,8 +130,10 @@ public partial class SettingsView : UserControl, IToolView
             {
                 if (_page == pageId) return;
                 _page = pageId;
-                if (SearchBox.Text.Length > 0) SearchBox.Clear(); // re-renders, now on this page
-                else Render(resetScroll: true);
+                if (SearchBox.Text.Length > 0) SearchBox.Clear(); // search is debounced: render this page now
+                _searchDelay?.Stop();
+                _query = "";
+                Render(resetScroll: true);
             };
             Nav.Children.Add(nav);
         }
@@ -229,12 +231,25 @@ public partial class SettingsView : UserControl, IToolView
 
     private string _query = "";
 
+    private System.Windows.Threading.DispatcherTimer? _searchDelay;
+
+    // Search renders every page: wait for a pause in typing instead of rebuilding them all per keystroke.
     private void OnSearchChanged(object sender, TextChangedEventArgs e)
     {
-        var query = SearchBox.Text.Trim();
-        if (query == _query) return;
-        _query = query;
-        Render(resetScroll: true);
+        if (_searchDelay is null)
+        {
+            _searchDelay = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _searchDelay.Tick += (_, _) =>
+            {
+                _searchDelay.Stop();
+                var query = SearchBox.Text.Trim();
+                if (query == _query) return;
+                _query = query;
+                Render(resetScroll: true);
+            };
+        }
+        _searchDelay.Stop();
+        _searchDelay.Start();
     }
 
     /// <summary>
@@ -303,7 +318,21 @@ public partial class SettingsView : UserControl, IToolView
     }
 
     /// <summary>Apps with an open window right now, for "Hide for these apps": (process name, friendly name).</summary>
+    private static List<(string Name, string Label)>? _runningApps;
+    private static long _runningAppsAt;
+
+    // Three pages list running apps, and every toggle (and search) re-renders: scan processes at most every few seconds.
     private static List<(string Name, string Label)> RunningApps()
+    {
+        if (_runningApps is null || Environment.TickCount64 - _runningAppsAt > 3000)
+        {
+            _runningApps = ScanRunningApps();
+            _runningAppsAt = Environment.TickCount64;
+        }
+        return _runningApps;
+    }
+
+    private static List<(string Name, string Label)> ScanRunningApps()
     {
         var apps = new Dictionary<string, string>();
         foreach (var process in Process.GetProcesses())
@@ -455,11 +484,11 @@ public partial class SettingsView : UserControl, IToolView
         Row("Volume on the notch", "Show the volume level on the notch when it changes. Windows still shows its own volume pop-up too.",
             Toggle(S.VolumeHud, v => { S.VolumeHud = v; Save(false); }));
         Row("Bluetooth devices", "Show on the notch when paired headphones, a mouse or other Bluetooth device connects or disconnects.",
-            Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); }));
+            Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); NotchWindow.ApplyDeviceWatchers(); }));
         Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
-            Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); }));
+            Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); NotchWindow.ApplyDeviceWatchers(); }));
         Row("Screenshots", "Show a preview on the notch when you take a screenshot (Win + PrtScn, Snipping Tool). Click it to put it on the Shelf.",
-            Toggle(S.ScreenshotAlerts, v => { S.ScreenshotAlerts = v; Save(false); }));
+            Toggle(S.ScreenshotAlerts, v => { S.ScreenshotAlerts = v; Save(false); NotchWindow.ApplyDeviceWatchers(); }));
 
         Row("Announce new songs", "Pop the new song's art and title out of the notch for a moment when the track changes.",
             Toggle(S.TrackPeek, v => { S.TrackPeek = v; Save(false); }));

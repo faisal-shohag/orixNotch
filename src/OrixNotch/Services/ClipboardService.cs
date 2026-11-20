@@ -109,6 +109,7 @@ public sealed class ClipItem
 public sealed class ClipboardService
 {
     private const string FileName = "clipboard.json";
+    private const int MaxText = 1_000_000;
 
     // Formats password managers and other apps set to opt out of clipboard monitoring.
     private const string ExcludeFormat = "ExcludeClipboardContentFromMonitorProcessing";
@@ -170,6 +171,8 @@ public sealed class ClipboardService
         else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
+            // A copied log or dump would sit in memory and be rewritten to disk on every later copy.
+            if (text.Length > MaxText) return;
             var trimmed = text.Trim();
             var isLink = !trimmed.Contains(' ') && Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
                          (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
@@ -198,6 +201,28 @@ public sealed class ClipboardService
 
         Items.Insert(0, item);
         Trim();
+        SaveSoon();
+    }
+
+    private DispatcherTimer? _saveDelay;
+
+    /// <summary>Copies come in bursts: write the history once things settle, not on every copy. <see cref="Flush"/> at exit.</summary>
+    private void SaveSoon()
+    {
+        if (_saveDelay is null)
+        {
+            _saveDelay = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _saveDelay.Tick += (_, _) => Flush();
+        }
+        _saveDelay.Stop();
+        _saveDelay.Start();
+    }
+
+    /// <summary>Writes a pending history save now.</summary>
+    public void Flush()
+    {
+        if (_saveDelay is not { IsEnabled: true }) return;
+        _saveDelay.Stop();
         Save();
     }
 
@@ -315,5 +340,9 @@ public sealed class ClipboardService
         }
     }
 
-    private void Save() => Storage.Save(FileName, Items.ToList());
+    private void Save()
+    {
+        _saveDelay?.Stop(); // this save covers any pending one
+        Storage.Save(FileName, Items.ToList());
+    }
 }

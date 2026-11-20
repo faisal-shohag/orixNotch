@@ -43,6 +43,7 @@ public sealed class NotificationWatcher
     private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly Dictionary<string, (string Name, ImageSource? Icon)> _apps = new(StringComparer.OrdinalIgnoreCase);
     private bool _busy;
+    private string? _lastError;
 
     // Listener state
     private readonly HashSet<uint> _seenIds = new();
@@ -108,10 +109,13 @@ public sealed class NotificationWatcher
             }
             else ProblemSettingsUri = "ms-settings:privacy-notifications";
             foreach (var n in found) Publish(n);
+            _lastError = null;
         }
         catch (Exception ex)
         {
-            App.Log(ex);
+            // A failure that repeats every poll is logged once, not every 2 s.
+            if (ex.Message != _lastError) App.Log(ex);
+            _lastError = ex.Message;
         }
         finally
         {
@@ -178,8 +182,7 @@ public sealed class NotificationWatcher
         using var db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = DbPath,
-            Mode = SqliteOpenMode.ReadOnly,
-            Cache = SqliteCacheMode.Shared,
+            Mode = SqliteOpenMode.ReadOnly, // pooled (the default), so the 2 s poll reuses one open handle
         }.ToString());
         try
         {
@@ -187,8 +190,9 @@ public sealed class NotificationWatcher
         }
         catch (SqliteException ex)
         {
-            Problem = "Couldn't open Windows notification history.";
-            App.Log(ex);
+            const string problem = "Couldn't open Windows notification history.";
+            if (Problem != problem) App.Log(ex); // once, not every 2 s for as long as it fails
+            Problem = problem;
             return result;
         }
         Problem = null;

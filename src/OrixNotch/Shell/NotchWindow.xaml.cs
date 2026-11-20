@@ -120,6 +120,7 @@ public partial class NotchWindow : Window
             UpdateConceal();
             FollowPointerScreen();
             if (!(_dodging && _animating)) Repel(_repelTimer.Interval.TotalSeconds); // the frame loop owns it while dodging
+            PaceRepel();
         };
         _guardTimer.Tick += (_, _) => Guard();
 
@@ -146,7 +147,15 @@ public partial class NotchWindow : Window
         PomodoroService.Instance.PropertyChanged += OnActivityChanged;
         CountdownService.Instance.PropertyChanged += OnActivityChanged;
         StopwatchService.Instance.PropertyChanged += OnActivityChanged;
-        NotchActivityService.Instance.PropertyChanged += (_, _) => UpdateActivity();
+        NotchActivityService.Instance.PropertyChanged += (_, e) =>
+        {
+            // A running timer changes Text and Progress every tick: Text is bound in XAML, Progress only moves the arc.
+            if (e.PropertyName == nameof(NotchActivityService.Progress))
+            {
+                if (TimerPart.Visibility == Visibility.Visible) MiniArc.Data = BuildMiniArc(NotchActivityService.Instance.Progress);
+            }
+            else if (e.PropertyName != nameof(NotchActivityService.Text)) UpdateActivity();
+        };
         EventReminderService.Instance.Alert += _ => ShowReminderPeek();
         NotificationWatcher.Instance.Arrived += ShowNotificationPeek;
         AiLimitWatcher.Instance.Alert += ShowAiLimitPeek;
@@ -204,7 +213,7 @@ public partial class NotchWindow : Window
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
-        ProfileService.Changed += () => _idleAvatarLoaded = false;
+        ProfileService.Changed += () => { _idleAvatarLoaded = false; OnIdleChanged(); };
         _peekTimer.Tick += (_, _) => EndPeek();
         _trackTimer.Tick += (_, _) => ShowTrackPeek();
         // A reminder already due at launch fired its alert before we subscribed: show it once we're up.
@@ -218,7 +227,7 @@ public partial class NotchWindow : Window
         TabBar.RenderTransform = _tabRise;
         NowPlayingService.Instance.PropertyChanged += (_, _) => UpdateGlow();
         PomodoroService.Instance.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PomodoroService.IsRunning)) UpdateGlow(); };
-        ThemeService.Changed += () => { _glowColor = null; UpdateGlow(); };
+        ThemeService.Changed += () => { _glowColor = null; UpdateGlow(); OnIdleChanged(); }; // idle colours are resolved once per render
         _eqLive.Tick += (_, _) => TickEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
@@ -253,9 +262,7 @@ public partial class NotchWindow : Window
         ApplyGlass();
         ApplyCaptureAffinity();
         VolumeService.Instance.Start();
-        BluetoothWatcher.Instance.Start();
-        DownloadWatcher.Instance.Start();
-        ScreenshotWatcher.Instance.Start();
+        ApplyDeviceWatchers();
         ScreenTimeService.Instance.Start();
         AutomationService.Instance.Start();
         Dispatcher.BeginInvoke(SubscriptionService.Instance.Start, DispatcherPriority.ContextIdle); // its alerts once the notch is up
@@ -377,7 +384,11 @@ public partial class NotchWindow : Window
         // A listed app set to "Hide completely" hides it too, except while an alert it lets through is showing.
         var hide = _exclusive || HiddenForApp && App.Settings.HideForAppsMode == "Hidden" && !_peeking;
         var target = hide ? Visibility.Hidden : Visibility.Visible;
-        if (Visibility != target) Visibility = target;
+        if (Visibility != target)
+        {
+            Visibility = target;
+            UpdatePillMotion();
+        }
         if (!hide)
             Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0,
                 Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
@@ -470,6 +481,17 @@ public partial class NotchWindow : Window
     private bool _revealed;            // the pointer touched the top edge over the hidden notch
     private double _opacityTarget = 1;
 
+    /// <summary>The closed pill can be seen: not faded out and not hidden for a game or a listed app.</summary>
+    private bool PillShown => _opacityTarget > 0 && Visibility == Visibility.Visible;
+
+    /// <summary>The endless pill animations (equalizer, marquee) run only while someone can see them.</summary>
+    private void UpdatePillMotion()
+    {
+        var music = NotchActivityService.Instance.Kind == NotchActivityKind.Music;
+        SetEqualizer(!_expanded && music && PillShown);
+        if (music) UpdateMarquee();
+    }
+
     /// <summary>One of the apps in Settings → General "Hide for these apps" is in front.</summary>
     private bool HiddenForApp =>
         !_expanded && ForegroundAppWatcher.Instance.Current is { } app && App.Settings.HideForApps.Contains(app);
@@ -522,6 +544,7 @@ public partial class NotchWindow : Window
         var target = conceal && !_revealed ? 0.0 : 1.0;
         if (_opacityTarget == target) return;
         _opacityTarget = target;
+        UpdatePillMotion();
         var fade = target > 0 ? Motion.Fast : Motion.Scale(300);
         Pill.BeginAnimation(OpacityProperty, new DoubleAnimation(target, fade));
         // Hidden by choice, mark the spot; hidden for a full-screen video, stay out of sight entirely.
@@ -566,12 +589,14 @@ public partial class NotchWindow : Window
     /// <summary>Opens the notch on a tool (or settings).</summary>
     public void OpenTool(string id)
     {
-        Expand(activate: true);
+        Expand(activate: true, present: false);
         if (id == SettingsId) ShowSettings();
         else ShowTool(id);
     }
 
-    public void Expand(bool activate)
+    /// <param name="present">False when the caller shows its own view right after: the last tool isn't shown (and
+    /// its <see cref="IToolView.OnShown"/> polling started) only to be swapped out at once.</param>
+    public void Expand(bool activate, bool present = true)
     {
         FinishCornerTurnNow(); // opening mid-turn: finish it on the new edge first
         if (Visibility != Visibility.Visible) Visibility = Visibility.Visible;
@@ -589,9 +614,12 @@ public partial class NotchWindow : Window
             _idleRotate.Stop();
             _repelTimer.Stop();
             SetShove(0);
-            if (EventReminderService.Instance.IsActive) ShowTool("calendar");
-            else if (ContextTool() is { } matched) ShowTool(matched, remember: false);
-            else ShowTool(_activeTool is SettingsId or PaletteId or BriefId or WrapId ? App.Settings.LastTool : _activeTool);
+            if (present)
+            {
+                if (EventReminderService.Instance.IsActive) ShowTool("calendar");
+                else if (ContextTool() is { } matched) ShowTool(matched, remember: false);
+                else ShowTool(_activeTool is SettingsId or PaletteId or BriefId or WrapId ? App.Settings.LastTool : _activeTool);
+            }
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
             _leaveTimer.Start();
@@ -684,6 +712,19 @@ public partial class NotchWindow : Window
     /// that reaches the notch without approaching from a side doesn't move it, so hover-open works.
     /// </summary>
     /// <returns>True while the pointer is being dodged (keeps the per-frame loop running).</returns>
+    /// <summary>
+    /// The pointer watch only needs frame-like rate when the pointer is near the notch and something uses it
+    /// (dodge, hide/reveal, follow-pointer monitor); otherwise it idles, instead of waking 25 times a second forever.
+    /// </summary>
+    private void PaceRepel()
+    {
+        var used = App.Settings.RepelCursor || App.Settings.MonitorIndex == -2 || Concealable();
+        var near = used && (_dodging || Turning || Win32.GetCursorPos(out var p) && EdgeLocal(p) is var (along, away)
+            && away < 300 && Math.Abs(along) < BodySpan / 2 + 300);
+        var ms = !used ? 500 : near ? 40 : 120;
+        if (_repelTimer.Interval.TotalMilliseconds != ms) _repelTimer.Interval = TimeSpan.FromMilliseconds(ms);
+    }
+
     private bool Repel(double dt)
     {
         if (Turning) return true; // the corner turn drives the notch until it's on the new edge
@@ -974,7 +1015,10 @@ public partial class NotchWindow : Window
         Body.Margin = Vertical ? new Thickness(0, EarExpanded, 0, EarExpanded) : new Thickness(EarExpanded, 0, EarExpanded, 0);
         Body.Width = w;
         Body.Height = h;
-        Body.Clip = new RectangleGeometry(new Rect(0, 0, w, h), radius, radius);
+        // Runs every frame of an open/close: move one clip instead of allocating a new geometry each time.
+        if (Body.Clip is not RectangleGeometry clip || clip.IsFrozen) Body.Clip = clip = new RectangleGeometry();
+        clip.Rect = new Rect(0, 0, w, h);
+        clip.RadiusX = clip.RadiusY = radius;
         var gap = floating ? IslandGap : 0;
         Pill.Margin = Edge switch
         {
@@ -1195,7 +1239,7 @@ public partial class NotchWindow : Window
             if (_currentPeek?.Key == ReminderPeekKey) EndPeek();
         }
 
-        SetEqualizer(!_expanded && music);
+        SetEqualizer(!_expanded && music && PillShown);
 
         if (Vertical) RenderSide();
         if (!_expanded && !_peeking)
@@ -1222,7 +1266,7 @@ public partial class NotchWindow : Window
         TrackShift.X = 0;
         TrackText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var overflow = TrackText.DesiredSize.Width - TitleSlot.ActualWidth;
-        if (overflow <= 2 || _expanded) return;
+        if (overflow <= 2 || _expanded || !PillShown) return;
         var travel = TimeSpan.FromSeconds(overflow / 28);
         var hold = TimeSpan.FromSeconds(1.6);
         var slide = new DoubleAnimationUsingKeyFrames { RepeatBehavior = RepeatBehavior.Forever };
@@ -1323,7 +1367,7 @@ public partial class NotchWindow : Window
             UpdateActivity();
             return;
         }
-        RenderIdle();
+        if (!Vertical) RenderIdle(); // the side tab doesn't show the idle row
         UpdateIdleRotation();
         if (!_peeking)
         {
@@ -2045,6 +2089,15 @@ public partial class NotchWindow : Window
 
     public void RefreshGlow() => UpdateGlow();
 
+    /// <summary>The device watchers only feed their alerts: run each only while its alert is on (Settings → Alerts).</summary>
+    public static void ApplyDeviceWatchers()
+    {
+        var s = App.Settings;
+        if (s.BluetoothAlerts) BluetoothWatcher.Instance.Start(); else BluetoothWatcher.Instance.Stop();
+        if (s.DownloadAlerts) DownloadWatcher.Instance.Start(); else DownloadWatcher.Instance.Stop();
+        if (s.ScreenshotAlerts) ScreenshotWatcher.Instance.Start(); else ScreenshotWatcher.Instance.Stop();
+    }
+
     private void UpdateGlow()
     {
         Color? color = null;
@@ -2111,10 +2164,11 @@ public partial class NotchWindow : Window
     // Live bars: the speakers' peak level ~30 times a second, each bar at its own phase so they don't move as one.
     private readonly DispatcherTimer _eqLive = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly double[] _eqLevels = new double[5];
+    private System.Windows.Shapes.Rectangle[]? _bars;
 
     private void TickEqualizer()
     {
-        var bars = new[] { Bar1, Bar2, Bar3, Bar4, Bar5 };
+        var bars = _bars ??= [Bar1, Bar2, Bar3, Bar4, Bar5];
         var peak = Math.Sqrt(VolumeService.Instance.Peak() ?? 0); // square root: quiet passages still move
         var t = Environment.TickCount64 / 1000.0;
         for (var i = 0; i < bars.Length; i++)
@@ -2337,7 +2391,7 @@ public partial class NotchWindow : Window
     /// <summary>The end-of-day wrap: today's screen time, focus and to-dos, with "Save image".</summary>
     public void ShowWrap()
     {
-        Expand(activate: true);
+        Expand(activate: true, present: false);
         _backTarget = null;
         Present(WrapId, $"Your day · {DateTime.Today:ddd, MMM d}", 720, 128, () => new Tools.WrapView(), showTabs: false);
         (_views[WrapId] as Tools.WrapView)?.Show();
@@ -2367,7 +2421,7 @@ public partial class NotchWindow : Window
         SettingsService.Save(notify: false);
         var items = await IdleInfoService.Instance.SnapshotAsync("weather", "nextEvent", "todos", "aiUsage", "stock");
         if (_expanded || _peeking || items.Count == 0) return;
-        Expand(activate: false); // no focus taken: you may already be typing
+        Expand(activate: false, present: false); // no focus taken: you may already be typing
         _awaitingCursor = true;   // stays open until the timer ends, or the pointer visits and leaves
         var hour = DateTime.Now.Hour;
         var greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -2385,7 +2439,7 @@ public partial class NotchWindow : Window
     /// <summary>Opens the notch on the command palette ("timer 10", "todo …", "20 usd to eur", tool names…).</summary>
     public void ShowPalette()
     {
-        Expand(activate: true);
+        Expand(activate: true, present: false);
         _backTarget = null;
         Present(PaletteId, "Command", 720, 220, () => new Tools.CommandPaletteView(), showTabs: false);
     }
@@ -2529,6 +2583,7 @@ public partial class NotchWindow : Window
 
     private void OnSettingsChanged()
     {
+        ApplyDeviceWatchers(); // a profile or imported settings can switch the alerts
         ApplyNotchSize();
         BuildTabs();
         Place();

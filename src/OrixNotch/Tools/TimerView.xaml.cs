@@ -8,7 +8,7 @@ using OrixNotch.Services;
 
 namespace OrixNotch.Tools;
 
-public partial class TimerView : UserControl, IEscapeHandler
+public partial class TimerView : UserControl, IEscapeHandler, IToolView
 {
     private const string CustomLabel = "Custom…";
     private readonly List<int> _timerOptions = new(); // minutes behind each Timer list item (before "Custom…")
@@ -213,7 +213,22 @@ public partial class TimerView : UserControl, IEscapeHandler
         }
     }
 
-    private void OnServiceChanged(object? sender, PropertyChangedEventArgs e) => Update();
+    private bool _shown;
+
+    public void OnShown()
+    {
+        _shown = true;
+        Update();
+    }
+
+    public void OnHidden() => _shown = false;
+
+    // Services tick while the tool is hidden (and for modes not on screen): only the visible one redraws.
+    private void OnServiceChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        object active = _mode switch { Mode.Pomodoro => Pom, Mode.Timer => Ctd, _ => Sw };
+        if (_shown && sender == active) Update();
+    }
 
     private void BuildDots()
     {

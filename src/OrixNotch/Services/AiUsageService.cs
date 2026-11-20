@@ -178,137 +178,201 @@ public static partial class AiUsageService
         }
     }
 
-    private static IEnumerable<string> ReadLines(string path)
+    /// <summary>
+    /// Parsed entries per log file, kept between reads. The limit watcher reads every 5 minutes, and a month of logs can be
+    /// hundreds of MB: an unchanged file isn't read again, and a growing one (the live session) only from where the last
+    /// read stopped. A file that shrank was rewritten and is read from the start.
+    /// </summary>
+    private sealed class LogCache<T>(Func<string, T?> parse) where T : struct
     {
-        // Logs are being appended to while we read, so share the file.
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        while (reader.ReadLine() is { } line) yield return line;
+        private readonly Dictionary<string, (long Offset, List<T> Items)> _files = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The entries of every file, in order; files no longer listed are forgotten.</summary>
+        public List<List<T>> ReadAll(List<string> paths)
+        {
+            lock (_files)
+            {
+                foreach (var gone in _files.Keys.Except(paths, StringComparer.OrdinalIgnoreCase).ToList()) _files.Remove(gone);
+                var all = new List<List<T>>(paths.Count);
+                foreach (var path in paths)
+                {
+                    try
+                    {
+                        all.Add(Read(path));
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // deleted or locked while we looked: skip it this time
+                    }
+                }
+                return all;
+            }
+        }
+
+        private List<T> Read(string path)
+        {
+            _files.TryGetValue(path, out var cached);
+            var (offset, items) = (cached.Offset, cached.Items ?? []);
+            // Logs are being appended to while we read, so share the file.
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (stream.Length < offset) (offset, items) = (0, []);
+            if (stream.Length == offset) return items;
+            stream.Position = offset;
+            // Whole lines only: a partly written last line is left for the next read.
+            var buffer = new byte[1 << 20];
+            var filled = 0;
+            int read;
+            while ((read = stream.Read(buffer, filled, buffer.Length - filled)) > 0)
+            {
+                filled += read;
+                var newline = Array.LastIndexOf(buffer, (byte)'\n', filled - 1);
+                if (newline < 0)
+                {
+                    if (filled == buffer.Length) Array.Resize(ref buffer, buffer.Length * 2); // one very long line
+                    continue;
+                }
+                foreach (var line in System.Text.Encoding.UTF8.GetString(buffer, 0, newline).Split('\n'))
+                    if (parse(line) is { } item) items.Add(item);
+                offset += newline + 1;
+                filled -= newline + 1;
+                Buffer.BlockCopy(buffer, newline + 1, buffer, 0, filled);
+            }
+            _files[path] = (offset, items);
+            return items;
+        }
+    }
+
+    /// <summary>One Claude Code response: <see cref="Id"/> is a hash of its ids (0 when it has none), for counting it once.</summary>
+    private readonly record struct ClaudeEntry(long Id, DateTime Time, string Model, long Tokens, decimal Cost);
+
+    private static readonly LogCache<ClaudeEntry> ClaudeLogs = new(ParseClaudeLine);
+
+    private static ClaudeEntry? ParseClaudeLine(string line)
+    {
+        if (!line.Contains("\"usage\"", StringComparison.Ordinal)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("message", out var msg) || msg.ValueKind != JsonValueKind.Object) return null;
+            if (!msg.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) return null;
+            var model = msg.TryGetProperty("model", out var m) ? m.GetString() ?? "" : "";
+            if (model.StartsWith('<')) return null; // synthetic entries
+
+            var id = (msg.TryGetProperty("id", out var mid) ? mid.GetString() : null) +
+                     (root.TryGetProperty("requestId", out var rid) ? rid.GetString() : null);
+
+            if (!root.TryGetProperty("timestamp", out var ts) ||
+                !DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var utc)) return null;
+
+            long Get(string name) => u.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : 0;
+            var input = Get("input_tokens");
+            var output = Get("output_tokens");
+            var cacheWrite = Get("cache_creation_input_tokens");
+            var cacheRead = Get("cache_read_input_tokens");
+            return new ClaudeEntry(id.Length > 0 ? Fnv64(id) : 0, utc.ToLocalTime(), string.Intern(model),
+                input + output + cacheWrite, Cost(model, input, output, cacheWrite, cacheRead));
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return null; // partially written or odd line
+        }
+    }
+
+    /// <summary>64-bit FNV-1a: stands in for the id string so a month of entries doesn't keep every id in memory.</summary>
+    private static long Fnv64(string text)
+    {
+        var hash = 14695981039346656037UL;
+        foreach (var c in text) hash = (hash ^ c) * 1099511628211UL;
+        return (long)hash;
     }
 
     private static ProviderUsage? LoadClaude()
     {
-        var files = RecentFiles(Path.Combine(Home, ".claude", "projects"), 31);
-        if (!files.Any()) return null;
+        var files = RecentFiles(Path.Combine(Home, ".claude", "projects"), 31).ToList();
+        if (files.Count == 0) return null;
 
         var usage = new ProviderUsage { Id = "claude", Name = "Claude Code", HasCost = true, Logo = BrandLogo.Claude };
-        var seen = new HashSet<string>();
+        var seen = new HashSet<long>();
         var now = DateTime.Now;
         var sessionStart = DateTime.MaxValue;
 
-        foreach (var file in files)
-        {
-            IEnumerable<string> lines;
-            try
+        foreach (var entries in ClaudeLogs.ReadAll(files))
+            foreach (var e in entries)
             {
-                lines = ReadLines(file).ToList();
-            }
-            catch
-            {
-                continue;
-            }
-
-            foreach (var line in lines)
-            {
-                if (!line.Contains("\"usage\"", StringComparison.Ordinal)) continue;
-                try
+                // Each response can be logged more than once; count it once.
+                if (e.Id != 0 && !seen.Add(e.Id)) continue;
+                Add(usage, e.Time, now, e.Tokens, e.Cost);
+                if (now - e.Time <= TimeSpan.FromHours(5))
                 {
-                    using var doc = JsonDocument.Parse(line);
-                    var root = doc.RootElement;
-                    if (!root.TryGetProperty("message", out var msg) || msg.ValueKind != JsonValueKind.Object) continue;
-                    if (!msg.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) continue;
-                    var model = msg.TryGetProperty("model", out var m) ? m.GetString() ?? "" : "";
-                    if (model.StartsWith('<')) continue; // synthetic entries
-
-                    // Each response can be logged more than once; count it once.
-                    var id = (msg.TryGetProperty("id", out var mid) ? mid.GetString() : null) +
-                             (root.TryGetProperty("requestId", out var rid) ? rid.GetString() : null);
-                    if (id.Length > 0 && !seen.Add(id)) continue;
-
-                    if (!root.TryGetProperty("timestamp", out var ts) ||
-                        !DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var utc)) continue;
-                    var time = utc.ToLocalTime();
-
-                    long Get(string name) => u.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : 0;
-                    var input = Get("input_tokens");
-                    var output = Get("output_tokens");
-                    var cacheWrite = Get("cache_creation_input_tokens");
-                    var cacheRead = Get("cache_read_input_tokens");
-                    var tokens = input + output + cacheWrite;
-                    var cost = Cost(model, input, output, cacheWrite, cacheRead);
-
-                    Add(usage, time, now, tokens, cost);
-                    if (now - time <= TimeSpan.FromHours(5))
-                    {
-                        if (time < sessionStart) sessionStart = time;
-                        var label = ModelLabel(model);
-                        usage.SessionModels[label] = usage.SessionModels.TryGetValue(label, out var prior) ? prior + tokens : tokens;
-                    }
-                }
-                catch (JsonException)
-                {
-                    // partially written line
+                    if (e.Time < sessionStart) sessionStart = e.Time;
+                    var label = ModelLabel(e.Model);
+                    usage.SessionModels[label] = usage.SessionModels.TryGetValue(label, out var prior) ? prior + e.Tokens : e.Tokens;
                 }
             }
-        }
 
         usage.SessionStarted = sessionStart == DateTime.MaxValue ? null : sessionStart;
         return usage;
     }
 
+    /// <summary>One Codex token_count line: its tokens (null without usage info) and the rate-limit snapshot it carried.</summary>
+    private readonly record struct CodexEntry(DateTime Time, long? Tokens, bool HasLimits,
+        (double?, DateTime?) Session, (double?, DateTime?) Weekly);
+
+    private static readonly LogCache<CodexEntry> CodexLogs = new(ParseCodexLine);
+
+    private static CodexEntry? ParseCodexLine(string line)
+    {
+        if (!line.Contains("token_count", StringComparison.Ordinal)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("timestamp", out var ts) ||
+                !DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var utc)) return null;
+            var time = utc.ToLocalTime();
+
+            var hasLimits = payload.TryGetProperty("rate_limits", out var limits) && limits.ValueKind == JsonValueKind.Object;
+            var session = hasLimits ? CodexWindow(limits, "primary", time) : default;
+            var weekly = hasLimits ? CodexWindow(limits, "secondary", time) : default;
+
+            long? tokens = null;
+            if (payload.TryGetProperty("info", out var info) && info.ValueKind == JsonValueKind.Object &&
+                info.TryGetProperty("last_token_usage", out var last))
+                tokens = (last.TryGetProperty("input_tokens", out var i) ? i.GetInt64() : 0) +
+                         (last.TryGetProperty("output_tokens", out var o) ? o.GetInt64() : 0);
+            return new CodexEntry(time, tokens, hasLimits, session, weekly);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return null;
+        }
+    }
+
     private static ProviderUsage? LoadCodex()
     {
-        var files = RecentFiles(Path.Combine(Home, ".codex", "sessions"), 31);
-        if (!files.Any()) return null;
+        var files = RecentFiles(Path.Combine(Home, ".codex", "sessions"), 31).ToList();
+        if (files.Count == 0) return null;
 
         var usage = new ProviderUsage { Id = "codex", Name = "Codex · ChatGPT", HasCost = false, Logo = BrandLogo.OpenAi };
         var now = DateTime.Now;
         var sessionStart = DateTime.MaxValue;
         var limitsAt = DateTime.MinValue;
-        foreach (var file in files)
-        {
-            IEnumerable<string> lines;
-            try
+        foreach (var entries in CodexLogs.ReadAll(files))
+            foreach (var e in entries)
             {
-                lines = ReadLines(file).ToList();
-            }
-            catch
-            {
-                continue;
-            }
-
-            foreach (var line in lines)
-            {
-                if (!line.Contains("token_count", StringComparison.Ordinal)) continue;
-                try
+                // Newest rate-limit snapshot wins: primary = 5-hour window, secondary = weekly.
+                if (e.HasLimits && e.Time > limitsAt)
                 {
-                    using var doc = JsonDocument.Parse(line);
-                    var root = doc.RootElement;
-                    if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object) continue;
-                    if (!root.TryGetProperty("timestamp", out var ts) ||
-                        !DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var utc)) continue;
-                    var time = utc.ToLocalTime();
-
-                    // Newest rate-limit snapshot wins: primary = 5-hour window, secondary = weekly.
-                    if (time > limitsAt && payload.TryGetProperty("rate_limits", out var limits) && limits.ValueKind == JsonValueKind.Object)
-                    {
-                        limitsAt = time;
-                        (usage.SessionPercent, usage.SessionResets) = CodexWindow(limits, "primary", time);
-                        (usage.WeeklyPercent, usage.WeeklyResets) = CodexWindow(limits, "secondary", time);
-                    }
-
-                    if (!payload.TryGetProperty("info", out var info) || info.ValueKind != JsonValueKind.Object ||
-                        !info.TryGetProperty("last_token_usage", out var last)) continue;
-                    var tokens = (last.TryGetProperty("input_tokens", out var i) ? i.GetInt64() : 0) +
-                                 (last.TryGetProperty("output_tokens", out var o) ? o.GetInt64() : 0);
-                    Add(usage, time, now, tokens, 0);
-                    if (now - time <= TimeSpan.FromHours(5) && time < sessionStart) sessionStart = time;
+                    limitsAt = e.Time;
+                    (usage.SessionPercent, usage.SessionResets) = e.Session;
+                    (usage.WeeklyPercent, usage.WeeklyResets) = e.Weekly;
                 }
-                catch (JsonException)
-                {
-                }
+                if (e.Tokens is not { } tokens) continue;
+                Add(usage, e.Time, now, tokens, 0);
+                if (now - e.Time <= TimeSpan.FromHours(5) && e.Time < sessionStart) sessionStart = e.Time;
             }
-        }
         usage.SessionStarted = sessionStart == DateTime.MaxValue ? null : sessionStart;
         // A snapshot whose window has already reset says nothing about current usage.
         if (usage.SessionResets is { } sr && sr <= now) (usage.SessionPercent, usage.SessionResets) = (0, null);

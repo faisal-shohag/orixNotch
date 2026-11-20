@@ -25,6 +25,14 @@ public sealed class BluetoothWatcher
     private readonly Dictionary<string, (string Name, bool Connected, Guid? Container)> _devices = new();
     private readonly List<DeviceWatcher> _watchers = new();
 
+    public void Stop()
+    {
+        foreach (var watcher in _watchers)
+            if (watcher.Status is DeviceWatcherStatus.Started or DeviceWatcherStatus.EnumerationCompleted) watcher.Stop();
+        _watchers.Clear();
+        _devices.Clear();
+    }
+
     public void Start()
     {
         if (_watchers.Count > 0) return;

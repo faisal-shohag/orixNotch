@@ -131,6 +131,8 @@ public partial class NotchWindow
         BeginAnimation(TabScrollProperty, null);
     }
 
+    private (bool Left, bool Right, double F) _tabFadeKey;
+
     /// <summary>Fades whichever end still has tabs past it; none when everything fits.</summary>
     private void UpdateTabFade()
     {
@@ -143,6 +145,9 @@ public partial class NotchWindow
         var left = TabScroller.HorizontalOffset > 0.5;
         var right = TabScroller.HorizontalOffset < TabScroller.ScrollableWidth - 0.5;
         var f = TabFade / w;
+        // Called every frame of a glide: only build a new mask when the ends or the width change.
+        if (TabScroller.OpacityMask is not null && _tabFadeKey == (left, right, f)) return;
+        _tabFadeKey = (left, right, f);
         TabScroller.OpacityMask = new LinearGradientBrush(new GradientStopCollection
         {
             new(left ? Colors.Transparent : Colors.Black, 0),

@@ -240,7 +240,28 @@ public static class SettingsService
 
     public static void Save(bool notify = true)
     {
+        _saveDelay?.Stop(); // covers a pending SaveSoon
         Storage.Save(FileName, Current);
         if (notify) Changed?.Invoke();
+    }
+
+    private static System.Windows.Threading.DispatcherTimer? _saveDelay;
+
+    /// <summary>For values that change continuously (a slider being dragged): one write once it settles. <see cref="Flush"/> at exit.</summary>
+    public static void SaveSoon()
+    {
+        if (_saveDelay is null)
+        {
+            _saveDelay = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+            _saveDelay.Tick += (_, _) => Save(notify: false);
+        }
+        _saveDelay.Stop();
+        _saveDelay.Start();
+    }
+
+    /// <summary>Writes a pending <see cref="SaveSoon"/> now.</summary>
+    public static void Flush()
+    {
+        if (_saveDelay is { IsEnabled: true }) Save(notify: false);
     }
 }

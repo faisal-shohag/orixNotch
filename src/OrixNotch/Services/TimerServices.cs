@@ -122,7 +122,7 @@ public sealed partial class StopwatchService : ObservableObject
 {
     public static StopwatchService Instance { get; } = new();
 
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(250) }; // the text shows whole seconds
     private DateTime _startedAt;
     private TimeSpan _base;
 

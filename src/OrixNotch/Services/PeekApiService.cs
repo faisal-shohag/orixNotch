@@ -19,6 +19,8 @@ namespace OrixNotch.Services;
 /// </summary>
 public sealed class PeekApiService
 {
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web); // built once: options cache their metadata
+
     public static PeekApiService Instance { get; } = new();
 
     private const string TokenFile = "peek-token.bin";
@@ -103,7 +105,7 @@ public sealed class PeekApiService
         PeekBody? body;
         try
         {
-            body = await JsonSerializer.DeserializeAsync<PeekBody>(ctx.Request.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            body = await JsonSerializer.DeserializeAsync<PeekBody>(ctx.Request.Body, WebJson);
         }
         catch (Exception ex) when (ex is JsonException or BadHttpRequestException)
         {

@@ -73,6 +73,8 @@ public partial class App : Application
         _tray?.Dispose();
         ShelfService.Instance.Save();
         ScreenTimeService.Instance.Save();
+        ClipboardService.Instance.Flush();
+        SettingsService.Flush();
         _ = PhoneTransferService.Instance.StopAsync(); // sockets close with the process anyway
         _ = PeekApiService.Instance.StopAsync();
         _mutex?.ReleaseMutex();

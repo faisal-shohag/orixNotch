@@ -24,8 +24,19 @@ public sealed class CalendarEvent
     [JsonIgnore] public bool IsSubscribed => Feed is not null;
 
     /// <summary>Events added here plus those from subscribed calendars and AI limit resets.</summary>
-    public static List<CalendarEvent> LoadAll() =>
-        [.. Storage.Load<List<CalendarEvent>>("events.json"), .. Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName), .. Generated()];
+    /// <remarks>Read every few seconds (idle notch, reminders, automations): the files are re-parsed only after they change.
+    /// The events are shared between callers, so treat them as read-only.</remarks>
+    public static List<CalendarEvent> LoadAll() => [.. Cached(FileName, ref _own), .. Cached(CalendarFeedService.FileName, ref _feedCache), .. Generated()];
+
+    private const string FileName = "events.json";
+    private static (DateTime Stamp, List<CalendarEvent> Events)? _own, _feedCache;
+
+    private static List<CalendarEvent> Cached(string name, ref (DateTime Stamp, List<CalendarEvent> Events)? cache)
+    {
+        var stamp = System.IO.File.GetLastWriteTimeUtc(Storage.PathOf(name)); // Storage.Save replaces the file, so a save always moves this
+        if (cache is not { } c || c.Stamp != stamp) cache = (stamp, Storage.Load<List<CalendarEvent>>(name));
+        return cache.Value.Events;
+    }
 
     /// <summary>Read-only events made from other tools: AI limit resets and subscription renewals.</summary>
     public static IEnumerable<CalendarEvent> Generated() => AiResets().Concat(SubscriptionService.Instance.Events());
@@ -144,6 +155,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
         var text = ThemeService.Get("TextBrush");
         var hover = ThemeService.Get("HoverBrush");
         var accentColor = ThemeService.CurrentAccent.Mean;
+        var perDay = All.GroupBy(e => e.Date.Date).ToDictionary(g => g.Key, g => g.Count()); // once, not per cell
 
         for (var i = 0; i < 42; i++)
         {
@@ -152,7 +164,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             var isToday = day.Date == DateTime.Today;
             var inMonth = day.Month == _month.Month;
             var weekend = day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-            var count = All.Count(e => e.Date.Date == day.Date);
+            var count = perDay.GetValueOrDefault(day.Date);
 
             var label = new TextBlock
             {

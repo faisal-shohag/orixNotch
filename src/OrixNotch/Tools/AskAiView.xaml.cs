@@ -413,6 +413,16 @@ public partial class AskAiView : UserControl, IToolView
         var cts = _cts = new CancellationTokenSource();
         UpdateSendState();
         var text = "";
+        var reply = new System.Text.StringBuilder();
+        long drawnAt = 0;
+        void Flush()
+        {
+            text = reply.ToString();
+            if (text.Length == 0) return;
+            RevealCard(card);
+            RenderReply(body, text);
+            ChatScroll.ScrollToEnd();
+        }
         var failed = false;
         try
         {
@@ -420,11 +430,13 @@ public partial class AskAiView : UserControl, IToolView
             var turns = ModelReadsImages ? _conversation.ToList() : _conversation.Select(t => t with { Images = null }).ToList();
             await foreach (var chunk in AiService.StreamReplyAsync(turns, cts.Token))
             {
-                text += chunk;
-                if (text.Length > 0) RevealCard(card);
-                RenderReply(body, text);
-                ChatScroll.ScrollToEnd();
+                reply.Append(chunk);
+                // Each draw rebuilds the whole reply and re-highlights its code: per chunk that grows quadratically.
+                if (Environment.TickCount64 - drawnAt < 60) continue;
+                drawnAt = Environment.TickCount64;
+                Flush();
             }
+            Flush();
         }
         catch (OperationCanceledException) when (chatId != _chatId)
         {
@@ -432,6 +444,7 @@ public partial class AskAiView : UserControl, IToolView
         }
         catch (OperationCanceledException)
         {
+            Flush();
             if (text.Length == 0) body.Children.Clear();
             body.Children.Add(Note("Stopped"));
         }

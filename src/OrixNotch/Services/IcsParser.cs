@@ -229,18 +229,20 @@ public static class IcsParser
         return new Stamp(DateTime.SpecifyKind(wall, DateTimeKind.Unspecified), zone, false);
     }
 
-    private static TimeZoneInfo FindZone(string tzid)
+    // Looked up for every stamp of every event; an unknown id (Outlook's "Customized Time Zone") throws each time.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, TimeZoneInfo> Zones = new();
+
+    private static TimeZoneInfo FindZone(string tzid) => Zones.GetOrAdd(tzid.Trim('"'), static id =>
     {
-        tzid = tzid.Trim('"');
         try
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(tzid); // Windows names (Outlook) and IANA ids (Google, iCloud)
+            return TimeZoneInfo.FindSystemTimeZoneById(id); // Windows names (Outlook) and IANA ids (Google, iCloud)
         }
         catch (Exception)
         {
             return TimeZoneInfo.Local;
         }
-    }
+    });
 
     private static DateTime ToUtc(Stamp s)
     {
@@ -293,19 +295,21 @@ public static class IcsParser
     /// <summary>Joins folded lines (a continuation starts with a space or tab).</summary>
     private static IEnumerable<string> Unfold(string ics)
     {
-        string? pending = null;
+        var pending = new System.Text.StringBuilder(); // a long DESCRIPTION folds into hundreds of pieces
+        var has = false;
         foreach (var raw in ics.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
-            if (line.Length > 0 && line[0] is ' ' or '\t' && pending is not null)
+            if (line.Length > 0 && line[0] is ' ' or '\t' && has)
             {
-                pending += line[1..];
+                pending.Append(line, 1, line.Length - 1);
                 continue;
             }
-            if (pending is not null) yield return pending;
-            pending = line;
+            if (has) yield return pending.ToString();
+            pending.Clear().Append(line);
+            has = true;
         }
-        if (pending is not null) yield return pending;
+        if (has) yield return pending.ToString();
     }
 
     /// <summary>NAME;PARAM=x;PARAM="y:z":value → name, params, value (the first ':' outside quotes splits).</summary>
