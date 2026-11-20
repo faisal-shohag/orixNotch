@@ -20,7 +20,8 @@ public sealed class StockQuote
     public string PriceText { get; init; } = "–";
     public string ChangeText { get; init; } = "…";
     public Brush Tint { get; init; } = Neutral;
-    public PointCollection Points { get; init; } = new();
+    public IReadOnlyList<double> Closes { get; init; } = [];
+    public double Previous { get; init; } = double.NaN;
 
     public static StockQuote Placeholder(string symbol, string name = "Loading…") =>
         new() { Symbol = symbol, Name = name };
@@ -37,21 +38,9 @@ public sealed class StockQuote
             ChangeText = $"{(change >= 0 ? "+" : "")}{pct:0.00}%",
             // Theme brushes so the pill keeps contrast on light schemes; picked up again on the next refresh.
             Tint = ThemeService.Get(change > 0 ? "GoodBrush" : change < 0 ? "BadBrush" : "SubTextBrush"),
-            Points = Sparkline(closes, previous, 120, 24),
+            Closes = closes,
+            Previous = previous,
         };
-    }
-
-    private static PointCollection Sparkline(IReadOnlyList<double> values, double baseline, double w, double h)
-    {
-        var points = new PointCollection();
-        if (values.Count < 2) return points;
-        var min = Math.Min(values.Min(), baseline);
-        var max = Math.Max(values.Max(), baseline);
-        var range = Math.Max(1e-9, max - min);
-        for (var i = 0; i < values.Count; i++)
-            points.Add(new Point(w * i / (values.Count - 1), h - (values[i] - min) / range * h));
-        points.Freeze();
-        return points;
     }
 
     private static Brush Frozen(Color c)

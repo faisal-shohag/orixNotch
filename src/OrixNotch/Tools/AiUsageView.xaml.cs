@@ -307,24 +307,12 @@ public partial class AiUsageView : UserControl, IToolView
         return grid;
     }
 
+    /// <summary>The last 14 days of tokens, in the app's one chart style (Shell/LineChart).</summary>
     private static FrameworkElement Trend(long[] daily)
     {
-        var max = Math.Max(1, daily.Max());
-        var grid = new UniformGrid { Rows = 1, Height = 22 };
-        for (var i = 0; i < daily.Length; i++)
-        {
-            var bar = new Border
-            {
-                Height = Math.Max(2, 22.0 * daily[i] / max),
-                VerticalAlignment = VerticalAlignment.Bottom,
-                CornerRadius = new CornerRadius(1.5),
-                Margin = new Thickness(1, 0, 1, 0),
-                Opacity = i == daily.Length - 1 ? 1 : 0.55,
-            };
-            bar.SetResourceReference(Border.BackgroundProperty, i == daily.Length - 1 ? "AccentBrush" : "SubTextBrush");
-            grid.Children.Add(bar);
-        }
-        return grid;
+        var chart = new LineChart { Height = 24, Values = daily.Select(d => (double)d).ToArray() };
+        chart.SetResourceReference(LineChart.StrokeProperty, "AccentBrush");
+        return chart;
     }
 
     private static string Tokens(long n) => n switch
