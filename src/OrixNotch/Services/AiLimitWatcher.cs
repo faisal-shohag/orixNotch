@@ -4,7 +4,9 @@ using OrixNotch.Shell;
 namespace OrixNotch.Services;
 
 /// <summary>One "you're close to your limit" alert for an AI tool's session or weekly window.</summary>
-public sealed record AiLimitAlert(string ToolId, string ToolName, BrandLogo Logo, string Window, double Percent, int Threshold, DateTime? Resets);
+/// <param name="Full">When it will be full at the pace of the last hour; null when it lasts until it resets (or pace unknown).</param>
+public sealed record AiLimitAlert(string ToolId, string ToolName, BrandLogo Logo, string Window, double Percent, int Threshold, DateTime? Resets,
+    DateTime? Full = null);
 
 /// <summary>
 /// Checks AI tool usage every few minutes and raises <see cref="Alert"/> once when a tool's session or
@@ -24,6 +26,9 @@ public sealed class AiLimitWatcher
     public (DateTime At, List<ProviderUsage> Usage)? Latest { get; private set; }
 
     public event Action<AiLimitAlert>? Alert;
+
+    // Recent readings per "tool|window", for the pace in the alert. In memory: a restart just starts over.
+    private readonly Dictionary<string, List<(DateTime At, double Percent)>> _history = new();
 
     private AiLimitWatcher()
     {
@@ -73,6 +78,7 @@ public sealed class AiLimitWatcher
                 foreach (var (window, percent, resets) in Windows(u))
                 {
                     if (percent is not { } pct) continue;
+                    var readings = Record($"{u.Id}|{window}", now, pct);
                     var threshold = Thresholds.Select(t => TestMode ? (t == 80 ? 1 : 2) : t).Where(t => pct >= t).DefaultIfEmpty(0).Max();
                     if (threshold == 0) continue;
                     // Without a reset time, a window is identified by the day (session) or week it was seen in.
@@ -83,7 +89,9 @@ public sealed class AiLimitWatcher
                     alerted.Add(key);
                     // A higher threshold already covers the lower one for this window.
                     fired.RemoveAll(a => a.ToolId == u.Id && a.Window == window);
-                    fired.Add(new AiLimitAlert(u.Id, name, u.Logo, window, pct, threshold, resets));
+                    var full = Project(readings, now);
+                    fired.Add(new AiLimitAlert(u.Id, name, u.Logo, window, pct, threshold, resets,
+                        full is { } f && (resets is not { } rs || f < rs) ? f : null));
                 }
             }
             if (fired.Count > 0 || pruned > 0) SettingsService.Save(notify: false);
@@ -98,6 +106,45 @@ public sealed class AiLimitWatcher
             _checking = false;
         }
     }
+
+    private List<(DateTime At, double Percent)> Record(string key, DateTime now, double percent)
+    {
+        if (!_history.TryGetValue(key, out var list)) _history[key] = list = new();
+        if (list.Count > 0 && percent < list[^1].Percent) list.Clear(); // the window reset
+        list.Add((now, percent));
+        list.RemoveAll(r => now - r.At > TimeSpan.FromHours(1));
+        return list;
+    }
+
+    /// <summary>
+    /// When the window reaches 100% at the pace of these readings (a least-squares line through them), or null when
+    /// there's too little to go on (under 10 minutes of readings) or usage isn't rising.
+    /// </summary>
+    public static DateTime? Project(IReadOnlyList<(DateTime At, double Percent)> readings, DateTime now)
+    {
+        if (readings.Count < 2 || readings[^1].At - readings[0].At < TimeSpan.FromMinutes(10)) return null;
+        var t0 = readings[0].At;
+        var xs = readings.Select(r => (r.At - t0).TotalMinutes).ToArray();
+        var ys = readings.Select(r => r.Percent).ToArray();
+        double mx = xs.Average(), my = ys.Average();
+        var den = xs.Sum(x => (x - mx) * (x - mx));
+        var slope = den == 0 ? 0 : xs.Zip(ys).Sum(p => (p.First - mx) * (p.Second - my)) / den; // % per minute
+        if (slope <= 0.001) return null;
+        var minutes = (100 - readings[^1].Percent) / slope;
+        return minutes > 7 * 24 * 60 ? null : now.AddMinutes(Math.Max(0, minutes));
+    }
+
+#if DEBUG
+    static AiLimitWatcher()
+    {
+        var t = new DateTime(2026, 1, 1, 12, 0, 0);
+        // 60% → 80% over 20 minutes: 1%/min, so 20 more minutes to 100%.
+        var rising = new List<(DateTime, double)> { (t, 60), (t.AddMinutes(10), 70), (t.AddMinutes(20), 80) };
+        System.Diagnostics.Debug.Assert(Project(rising, t.AddMinutes(20)) == t.AddMinutes(40));
+        System.Diagnostics.Debug.Assert(Project([(t, 80), (t.AddMinutes(20), 80)], t.AddMinutes(20)) is null); // flat
+        System.Diagnostics.Debug.Assert(Project([(t, 70), (t.AddMinutes(5), 80)], t.AddMinutes(5)) is null);   // too short
+    }
+#endif
 
     /// <summary>The limited windows a tool reports: session and weekly, or the first metered bar (Cursor, Antigravity).</summary>
     private static IEnumerable<(string Window, double? Percent, DateTime? Resets)> Windows(ProviderUsage u)

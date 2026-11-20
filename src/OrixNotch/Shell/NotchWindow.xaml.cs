@@ -1633,7 +1633,8 @@ public partial class NotchWindow : Window
             : r.Date == DateTime.Today ? $"Resets {r:t}"
             : r.Date == DateTime.Today.AddDays(1) ? $"Resets tomorrow {r:t}"
             : $"Resets {r:ddd h:mm tt}";
-        var pace = a.Percent >= 95 ? $"{Math.Max(0, 100 - a.Percent):0}% left" : "Pace yourself";
+        var pace = a.Full is { } full ? $"Full by {full:t} at this pace"
+            : a.Percent >= 95 ? $"{Math.Max(0, 100 - a.Percent):0}% left" : "Pace yourself";
         var sub = resets is null ? pace : $"{pace} · {resets}";
         EnqueuePeek(new PeekRequest($"ailimit:{a.ToolId}:{a.Window}", () => LogoTile(a.Logo), title, sub,
             TimeSpan.FromSeconds(6), OnClick: () => OpenTool("aiusage")));
