@@ -36,7 +36,7 @@ public partial class SettingsView : UserControl, IToolView
     private static readonly Dictionary<string, string[]> NewRows = new()
     {
         ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
-        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front"],
+        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Command palette", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
@@ -614,6 +614,10 @@ public partial class SettingsView : UserControl, IToolView
             }));
         Row("Subscription renewals", "An alert 2 days before something in the Subscriptions tool renews.",
             Toggle(S.SubscriptionAlerts, v => { S.SubscriptionAlerts = v; Save(false); }));
+
+        Section("MORNING");
+        Row("Morning brief", "When you first unlock your PC each day, the notch opens for a few seconds on the weather, your next event, open to-dos, AI usage and a stock. Not during quiet hours.",
+            Toggle(S.MorningBrief, v => { S.MorningBrief = v; Save(false); }));
 
         Section("OPEN THE RIGHT TOOL");
         Row("Match the app in front", "Opening the notch shows the tool you picked for the app you're using, like AI Usage in your code editor.",

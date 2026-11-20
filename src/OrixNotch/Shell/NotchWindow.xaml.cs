@@ -196,7 +196,7 @@ public partial class NotchWindow : Window
         BuildEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
-            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool is not (SettingsId or PaletteId)) MoveTabIndicator(_activeTool, animate: false);
+            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool is not (SettingsId or PaletteId or BriefId)) MoveTabIndicator(_activeTool, animate: false);
         };
         WireTabScroll();
         BuildTabs();
@@ -235,6 +235,12 @@ public partial class NotchWindow : Window
         Dispatcher.BeginInvoke(SubscriptionService.Instance.Start, DispatcherPriority.ContextIdle); // its alerts once the notch is up
         ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
         ForegroundAppWatcher.Instance.Start();
+        // Morning brief: a few seconds after the first unlock of the day, or after starting at sign-in.
+        SystemEvents.SessionSwitch += (_, e) =>
+        {
+            if (e.Reason == SessionSwitchReason.SessionUnlock) Dispatcher.BeginInvoke(() => After(TimeSpan.FromSeconds(3), TryMorningBrief));
+        };
+        After(TimeSpan.FromSeconds(20), TryMorningBrief);
         _guardTimer.Start();
         _repelTimer.Start();
     }
@@ -551,7 +557,7 @@ public partial class NotchWindow : Window
             SetShove(0);
             if (EventReminderService.Instance.IsActive) ShowTool("calendar");
             else if (ContextTool() is { } matched) ShowTool(matched, remember: false);
-            else ShowTool(_activeTool is SettingsId or PaletteId ? App.Settings.LastTool : _activeTool);
+            else ShowTool(_activeTool is SettingsId or PaletteId or BriefId ? App.Settings.LastTool : _activeTool);
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
             _leaveTimer.Start();
@@ -1876,7 +1882,7 @@ public partial class NotchWindow : Window
         if (tools.Count == 0) tools = [ToolRegistry.All[0]];
 
         var previousActive = _activeTool;
-        if (_activeTool is not (SettingsId or PaletteId) && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
+        if (_activeTool is not (SettingsId or PaletteId or BriefId) && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
 
         // Settings isn't in the scrolling strip: it's pinned at the right end (SettingsTabHost).
         SettingsTabHost.Child ??= MakeTab(SettingsId, "Settings", AppIcon.Gear);
@@ -1997,6 +2003,46 @@ public partial class NotchWindow : Window
     }
 
     public const string PaletteId = "palette";
+    public const string BriefId = "brief";
+
+    private static void After(TimeSpan delay, Action action)
+    {
+        var timer = new DispatcherTimer { Interval = delay };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            action();
+        };
+        timer.Start();
+    }
+
+    /// <summary>
+    /// Automations › Morning brief: once a day, at the first unlock (or at launch), the notch opens for a few seconds
+    /// on the day's weather, next event, to-dos, AI usage and a stock. Never while quiet, in full screen or in use.
+    /// </summary>
+    private async void TryMorningBrief()
+    {
+        var s = App.Settings;
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        if (!s.MorningBrief || s.BriefShown == today || _expanded || _peeking || QuietActive() || AlertsHeld()) return;
+        s.BriefShown = today;
+        SettingsService.Save(notify: false);
+        var items = await IdleInfoService.Instance.SnapshotAsync("weather", "nextEvent", "todos", "aiUsage", "stock");
+        if (_expanded || _peeking || items.Count == 0) return;
+        Expand(activate: false); // no focus taken: you may already be typing
+        _awaitingCursor = true;   // stays open until the timer ends, or the pointer visits and leaves
+        var hour = DateTime.Now.Hour;
+        var greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+        Present(BriefId, $"{greeting}, {ProfileService.FirstName}", 720, 110, () => new Tools.MorningBriefView(), showTabs: false);
+        (_views[BriefId] as Tools.MorningBriefView)?.Show(items, i => IdleGlyph(i, 14));
+        var close = new DispatcherTimer { Interval = TimeSpan.FromSeconds(9) };
+        close.Tick += (_, _) =>
+        {
+            close.Stop();
+            if (_expanded && _activeTool == BriefId && !IsCursorOverPill() && !_pinned) Collapse();
+        };
+        close.Start();
+    }
 
     /// <summary>Opens the notch on the command palette ("timer 10", "todo …", "20 usd to eur", tool names…).</summary>
     public void ShowPalette()

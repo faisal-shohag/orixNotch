@@ -133,6 +133,21 @@ public sealed class IdleInfoService
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// These items fetched now, whether or not the idle notch shows them (the morning brief). Network data that
+    /// doesn't arrive within a few seconds is left out.
+    /// </summary>
+    public async Task<List<IdleItem>> SnapshotAsync(params string[] ids)
+    {
+        LoadFiles();
+        var fetches = new List<Task>();
+        if (ids.Contains("weather")) fetches.Add(FetchWeatherAsync());
+        if (ids.Contains("stock")) fetches.Add(FetchStocksAsync());
+        if (ids.Contains("aiUsage")) fetches.Add(FetchAiAsync());
+        await Task.WhenAny(Task.WhenAll(fetches), Task.Delay(TimeSpan.FromSeconds(6)));
+        return ids.SelectMany(id => id == "aiUsage" ? BuildAi() : [Build(id)]).OfType<IdleItem>().ToList();
+    }
+
     /// <summary>Forces a refresh of the file-backed items (to-dos / events) on the next tick.</summary>
     public void InvalidateFiles() => _lastFiles = DateTime.MinValue;
 
