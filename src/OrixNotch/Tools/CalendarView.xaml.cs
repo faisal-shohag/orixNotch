@@ -23,10 +23,16 @@ public sealed class CalendarEvent
 
     /// <summary>Events added here plus those from subscribed calendars and AI limit resets.</summary>
     public static List<CalendarEvent> LoadAll() =>
-        [.. Storage.Load<List<CalendarEvent>>("events.json"), .. Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName), .. AiResets()];
+        [.. Storage.Load<List<CalendarEvent>>("events.json"), .. Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName), .. Generated()];
+
+    /// <summary>Read-only events made from other tools: AI limit resets and subscription renewals.</summary>
+    public static IEnumerable<CalendarEvent> Generated() => AiResets().Concat(SubscriptionService.Instance.Events());
 
     /// <summary><see cref="Feed"/> of the AI limit resets: read-only, and they never fire a reminder.</summary>
     public const string AiFeed = "ai";
+
+    /// <summary><see cref="Feed"/> of subscription renewals (all-day, read-only).</summary>
+    public const string SubscriptionFeed = "subs";
 
     /// <summary>
     /// When each AI tool's weekly limit resets, from the last usage read (none until the AI limit watcher has read
@@ -49,7 +55,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
     private const string FileName = "events.json";
     private readonly List<CalendarEvent> _events = Storage.Load<List<CalendarEvent>>(FileName); // the user's own (editable)
     private List<CalendarEvent> _feed = Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName); // subscribed (read-only)
-    private IEnumerable<CalendarEvent> All => _events.Concat(_feed).Concat(CalendarEvent.AiResets());
+    private IEnumerable<CalendarEvent> All => _events.Concat(_feed).Concat(CalendarEvent.Generated());
     private DateTime _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime _selected = DateTime.Today;
 

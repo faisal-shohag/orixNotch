@@ -95,4 +95,5 @@ public enum AppIcon
     Coffee,
     EyeOff,
     Hourglass,
+    CreditCard,
 }

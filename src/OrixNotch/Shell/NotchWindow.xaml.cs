@@ -166,6 +166,10 @@ public partial class NotchWindow : Window
         };
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
         ScreenshotWatcher.Instance.Taken += ShowScreenshotPeek;
+        SubscriptionService.Instance.Renewing += (sub, days) =>
+            EnqueuePeek(new PeekRequest("sub:" + sub.Id, () => GlyphTile(AppIcon.CreditCard),
+                days == 0 ? $"{sub.Name} renews today" : days == 1 ? $"{sub.Name} renews tomorrow" : $"{sub.Name} renews in {days} days",
+                $"{sub.PriceLabel} · cancel before then if you don't need it", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("subscriptions")));
         ScreenTimeService.Instance.Summary += (seconds, top) =>
             EnqueuePeek(new PeekRequest("screentime", () => GlyphTile(AppIcon.Hourglass), $"{ScreenTimeService.Format(seconds)} on screen today",
                 top is null ? "Click for details" : $"Most of it in {top}", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("screentime")));
@@ -221,6 +225,7 @@ public partial class NotchWindow : Window
         DownloadWatcher.Instance.Start();
         ScreenshotWatcher.Instance.Start();
         ScreenTimeService.Instance.Start();
+        Dispatcher.BeginInvoke(SubscriptionService.Instance.Start, DispatcherPriority.ContextIdle); // its alerts once the notch is up
         ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
         ForegroundAppWatcher.Instance.Start();
         _guardTimer.Start();
