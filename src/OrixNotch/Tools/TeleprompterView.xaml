@@ -100,6 +100,10 @@
                         ToolTip="Mirror text" Foreground="{DynamicResource SubTextBrush}" Click="OnMirror">
                     <hero:HeroIcon Kind="ArrowsLeftRight" Width="14" Height="14" />
                 </Button>
+                <Button x:Name="CaptureButton" Style="{StaticResource IconButton}" Width="28" Height="28" Margin="4,0,0,0"
+                        Click="OnCapture">
+                    <hero:HeroIcon Kind="EyeOff" Width="14" Height="14" />
+                </Button>
             </StackPanel>
         </Grid>
 

@@ -50,6 +50,7 @@ public partial class TeleprompterView : UserControl, IToolView
         SizeSlider.Value = s.PrompterFontSize;
         OpacitySlider.Value = s.PrompterOpacity;
         Mirror.ScaleX = s.PrompterMirror ? -1 : 1;
+        ShowCaptureState();
 
         Service.PropertyChanged += OnServiceChanged;
         Service.Restarted += () =>
@@ -315,6 +316,21 @@ public partial class TeleprompterView : UserControl, IToolView
         App.Settings.PrompterMirror = !App.Settings.PrompterMirror;
         Mirror.ScaleX = App.Settings.PrompterMirror ? -1 : 1;
         SettingsService.Save(notify: false);
+    }
+
+    /// <summary>The script stays readable to you but leaves screen shares and recordings (the global "Hide from screenshots").</summary>
+    private void OnCapture(object sender, RoutedEventArgs e)
+    {
+        App.Settings.HideFromCapture = !App.Settings.HideFromCapture;
+        SettingsService.Save(); // notify: the notch re-applies its capture affinity
+        ShowCaptureState();
+    }
+
+    private void ShowCaptureState()
+    {
+        var hidden = App.Settings.HideFromCapture;
+        CaptureButton.ToolTip = hidden ? "Hidden from screen sharing and recordings: only you see it" : "Hide from screen sharing and recordings";
+        CaptureButton.SetResourceReference(ForegroundProperty, hidden ? "AccentBrush" : "SubTextBrush");
     }
 
     private void OnGripDown(object sender, MouseButtonEventArgs e)
