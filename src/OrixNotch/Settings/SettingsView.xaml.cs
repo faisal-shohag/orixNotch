@@ -627,7 +627,17 @@ public partial class SettingsView : UserControl, IToolView
                     if (itemId == "aiUsage") Render(); // show / hide the AI tool choices below
                 }));
             if (id == "aiUsage" && S.IdleItems.Contains("aiUsage")) AiToolChoices();
+            if (id == "clock2" && S.IdleItems.Contains("clock2")) SecondClockChoice();
         }
+    }
+
+    private void SecondClockChoice()
+    {
+        var zones = TimeZoneInfo.GetSystemTimeZones();
+        var index = zones.Select(z => z.Id).ToList().IndexOf(S.SecondClockZone);
+        // Not picked yet (-1): the item stays hidden until it is.
+        Row("Time zone", "The second clock shows this time zone, named after its main city.",
+            Combo(zones.Select(z => z.DisplayName), index, i => { S.SecondClockZone = zones[i].Id; SaveIdle(); }, 300));
     }
 
     /// <summary>Under "AI usage": Auto (closest to limit) or a checklist of the detected tools.</summary>
@@ -675,7 +685,12 @@ public partial class SettingsView : UserControl, IToolView
     private static readonly Dictionary<string, string> IdleDescriptions = new()
     {
         ["clock"] = "Current time.",
+        ["clock2"] = "The time somewhere else, such as a teammate's city. Pick the time zone below.",
         ["date"] = "Weekday and date.",
+        ["sun"] = "The next sunrise or sunset in your Weather city.",
+        ["timeline"] = "Today on one line: the time gone by, your events and now.",
+        ["mic"] = "Shows only while your microphone is muted.",
+        ["awake"] = "Shows only while Keep awake is on.",
         ["weather"] = "Temperature for your Weather city. Updates every 10 minutes.",
         ["nextEvent"] = "Today's next calendar event and its time.",
         ["todos"] = "How many to-dos are still open.",

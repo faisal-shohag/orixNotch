@@ -24,8 +24,10 @@ public sealed class IdleInfoService
     public static readonly (string Id, string Name)[] Catalog =
     [
         ("clock", "Clock"),
+        ("clock2", "Second clock"),
         ("date", "Date"),
         ("weather", "Weather"),
+        ("sun", "Sunrise & sunset"),
         ("nextEvent", "Next event"),
         ("timeline", "Day timeline"),
         ("todos", "Open to-dos"),
@@ -67,6 +69,8 @@ public sealed class IdleInfoService
     private CalendarEvent? _nextEvent;
     private TimeSpan _nextAt;
     private (AppIcon Icon, string Temp)? _weather;
+    /// <summary>Today's and tomorrow's sunrise / sunset in the Weather city's local time, and its UTC offset.</summary>
+    private (TimeSpan Offset, List<(DateTime At, bool Rise)> Events)? _sun;
     private readonly Dictionary<string, (double Price, double ChangePct)> _quotes = new();
     private int _tickerIndex;
     /// <summary>AI tools that report a usage percentage or local token counts, in AI Usage order.</summary>
@@ -107,10 +111,10 @@ public sealed class IdleInfoService
             _lastFiles = now;
             LoadFiles();
         }
-        if ((sel.Contains("weather") || sel.Contains("stock")) && now - _lastWeb > TimeSpan.FromMinutes(10))
+        if ((sel.Contains("weather") || sel.Contains("sun") || sel.Contains("stock")) && now - _lastWeb > TimeSpan.FromMinutes(10))
         {
             _lastWeb = now;
-            if (sel.Contains("weather")) _ = FetchWeatherAsync();
+            if (sel.Contains("weather") || sel.Contains("sun")) _ = FetchWeatherAsync();
             if (sel.Contains("stock")) _ = FetchStocksAsync();
         }
         if (sel.Contains("aiUsage") && now - _lastAi > TimeSpan.FromMinutes(5))
@@ -138,6 +142,29 @@ public sealed class IdleInfoService
         {
             case "clock":
                 return new IdleItem(id, AppIcon.Clock, now.ToString("t", culture));
+            case "clock2":
+            {
+                if (App.Settings.SecondClockZone.Length == 0) return null;
+                TimeZoneInfo zone;
+                try
+                {
+                    zone = TimeZoneInfo.FindSystemTimeZoneById(App.Settings.SecondClockZone);
+                }
+                catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+                {
+                    return null;
+                }
+                var city = SettingsService.CityFromTimeZone(zone.Id, RegionInfo.CurrentRegion.TwoLetterISORegionName) ?? zone.StandardName;
+                return new IdleItem(id, AppIcon.Globe, $"{city} {TimeZoneInfo.ConvertTime(now, zone).ToString("t", culture)}");
+            }
+            case "sun":
+            {
+                if (_sun is not { } sun) return null;
+                var cityNow = DateTime.UtcNow + sun.Offset; // the times are the Weather city's own local times
+                var next = sun.Events.Where(e => e.At > cityNow).OrderBy(e => e.At).FirstOrDefault();
+                return next.At == default ? null
+                    : new IdleItem(id, next.Rise ? AppIcon.Sun : AppIcon.Moon, $"{(next.Rise ? "Sunrise" : "Sunset")} {next.At.ToString("t", culture)}");
+            }
             case "date":
                 return new IdleItem(id, AppIcon.CalendarDays, now.ToString("ddd, MMM d", culture));
             case "weather":
@@ -313,10 +340,16 @@ public sealed class IdleInfoService
             var lon = results[0].GetProperty("longitude").GetDouble();
             var unit = App.Settings.UseFahrenheit ? "&temperature_unit=fahrenheit" : "";
             using var doc = JsonDocument.Parse(await Http.Client.GetStringAsync(FormattableString.Invariant(
-                $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,is_day&timezone=auto{unit}")));
+                $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&forecast_days=2&timezone=auto{unit}")));
             var cur = doc.RootElement.GetProperty("current");
             _weather = (WeatherIcon(cur.GetProperty("weather_code").GetInt32(), cur.GetProperty("is_day").GetInt32() == 1),
                 $"{Math.Round(cur.GetProperty("temperature_2m").GetDouble()):0}°");
+            var daily = doc.RootElement.GetProperty("daily");
+            var events = new List<(DateTime At, bool Rise)>();
+            foreach (var (key, rise) in new[] { ("sunrise", true), ("sunset", false) })
+                foreach (var t in daily.GetProperty(key).EnumerateArray())
+                    if (DateTime.TryParse(t.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)) events.Add((at, rise));
+            _sun = (TimeSpan.FromSeconds(doc.RootElement.GetProperty("utc_offset_seconds").GetInt32()), events);
         }
         catch
         {

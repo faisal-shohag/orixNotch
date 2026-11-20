@@ -120,7 +120,7 @@ public partial class WeatherView : UserControl, IToolView
 
             var unit = App.Settings.UseFahrenheit ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : "";
             var url = FormattableString.Invariant(
-                $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7{unit}");
+                $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto&forecast_days=7{unit}");
             using var doc = JsonDocument.Parse(await Http.Client.GetStringAsync(url));
             var root = doc.RootElement;
             var cur = root.GetProperty("current");
@@ -132,6 +132,11 @@ public partial class WeatherView : UserControl, IToolView
             var (icon, desc) = Describe(code, isDay);
 
             PlaceText.Text = country is null ? name : $"{name}, {country}";
+            static string Clock(JsonElement t) => DateTime.TryParse(t.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+                ? at.ToString("t", CultureInfo.CurrentCulture) : "";
+            var rise = Clock(daily.GetProperty("sunrise")[0]);
+            var set = Clock(daily.GetProperty("sunset")[0]);
+            if (rise.Length > 0 && set.Length > 0) PlaceText.Text += $"  ·  ↑ {rise}  ↓ {set}"; // sunrise / sunset in the city's own time
             CurrentIcon.Text = icon;
             TempText.Text = Deg(cur.GetProperty("temperature_2m").GetDouble());
             DescText.Text = desc;
