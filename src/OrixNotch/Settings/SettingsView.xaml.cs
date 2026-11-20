@@ -38,7 +38,7 @@ public partial class SettingsView : UserControl, IToolView
         ["general"] = ["Add a daily goal", "Rest your eyes", "Stand up", "Drink water", "Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief", "Quiet during focus"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper", "Music bars follow the sound", "Share this look", "Celebrations", "Glow", "Reset theme"],
-        ["display"] = ["Shape", "Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
+        ["display"] = ["Position", "Shape", "Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Command palette", "Explain selected text", "Start focus", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
     };
@@ -912,6 +912,11 @@ public partial class SettingsView : UserControl, IToolView
         var selected = S.MonitorIndex == -2 ? 1 : S.MonitorIndex >= 0 && S.MonitorIndex < screens.Length ? S.MonitorIndex + 2 : 0;
         Row("Show notch on", "Which monitor hosts the notch. Follow the pointer moves it to whichever display you're using.",
             Combo(names, selected, i => { S.MonitorIndex = i switch { 0 => -1, 1 => -2, _ => i - 2 }; Save(); }, 210));
+
+        string[] edges = ["Top", "Bottom", "Left", "Right"];
+        Row("Position", "Which screen edge the notch sits on. At the bottom it stays above the taskbar. On the left or right it is a slim tab of icons; alerts and the panel open sideways.",
+            Combo(["Top", "Bottom", "Left", "Right"], Math.Max(0, Array.IndexOf(edges, S.NotchEdge)),
+                i => { S.NotchEdge = edges[i]; Save(); }, 160));
 
         Section("SHAPE");
         string[] shapes = ["Notch", "Tab", "Island", "Pill"];

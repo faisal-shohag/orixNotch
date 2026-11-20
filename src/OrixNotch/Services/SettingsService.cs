@@ -145,6 +145,9 @@ public sealed class AppSettings
     /// <summary>"Notch" (ears into the edge), "Tab" (attached, no ears), "Island" (floating capsule), "Pill" (slim floating capsule).</summary>
     public string NotchShape { get; set; } = "Notch";
 
+    /// <summary>"Top", "Bottom", "Left" or "Right": the screen edge the notch sits on.</summary>
+    public string NotchEdge { get; set; } = "Top";
+
     /// <summary>Small, Default, Large or ExtraLarge — size of the closed notch.</summary>
     public string NotchSize { get; set; } = "Default";
 

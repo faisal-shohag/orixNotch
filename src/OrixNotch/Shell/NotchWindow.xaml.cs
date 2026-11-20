@@ -354,14 +354,12 @@ public partial class NotchWindow : Window
         var screen = CurrentScreen();
         _placedOn = screen.DeviceName;
         var dpi = VisualTreeHelper.GetDpi(this);
-        var w = (int)Math.Round(Width * dpi.DpiScaleX);
-        var h = (int)Math.Round(Height * dpi.DpiScaleY);
-        var x = screen.Bounds.Left + (screen.Bounds.Width - w) / 2;
-        var y = screen.Bounds.Top;
+        var (x, y, w, h, maxShove) = EdgePlacement(screen, dpi);
         (_homeX, _homeY) = (x, y);
-        _maxShove = screen.Bounds.Width / dpi.DpiScaleX / 2;
-        _shovePx = (int)Math.Round(_shove.Value * dpi.DpiScaleX);
-        Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, x + _shovePx, y, w, h, Win32.SWP_NOACTIVATE);
+        _maxShove = maxShove;
+        ApplyEdgeLayout();
+        _shovePx = (int)Math.Round(_shove.Value * (Vertical ? dpi.DpiScaleY : dpi.DpiScaleX));
+        Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, x + (Vertical ? 0 : _shovePx), y + (Vertical ? _shovePx : 0), w, h, Win32.SWP_NOACTIVATE);
     }
 
     /// <summary>Keeps the notch above other topmost windows and out of the way of fullscreen apps.</summary>
@@ -512,9 +510,8 @@ public partial class NotchWindow : Window
         var conceal = Concealable();
         if (conceal && Win32.GetCursorPos(out var p))
         {
-            var dpi = VisualTreeHelper.GetDpi(this);
-            var x = Math.Abs(p.X - (_homeX + Width * dpi.DpiScaleX / 2)) / dpi.DpiScaleX;
-            var y = (p.Y - _homeY) / dpi.DpiScaleY;
+            var (along, y) = EdgeLocal(p); // touching the notch's own edge brings it back
+            var x = Math.Abs(along);
             var half = _idleW / 2 + 40;
             if (y <= 1 && x <= half) _revealed = true;
             else if (y > _collapsedH + DodgeBand || x > half + 40) _revealed = false;
@@ -527,7 +524,7 @@ public partial class NotchWindow : Window
         var fade = target > 0 ? Motion.Fast : Motion.Scale(300);
         Pill.BeginAnimation(OpacityProperty, new DoubleAnimation(target, fade));
         // Hidden by choice, mark the spot; hidden for a full-screen video, stay out of sight entirely.
-        EdgeHint.Width = Math.Round(_idleW * 0.55);
+        if (!Vertical) EdgeHint.Width = Math.Round(_idleW * 0.55);
         EdgeHint.BeginAnimation(OpacityProperty, new DoubleAnimation(target == 0 && !_fullscreen && !HiddenForApp ? 0.7 : 0, fade));
     }
 
@@ -552,8 +549,7 @@ public partial class NotchWindow : Window
         CollapsedLayer.Height = _collapsedH;
         if (!_expanded)
         {
-            _width.Target = ActivityWidth();
-            _height.Target = _collapsedH;
+            SetCollapsedTarget();
             StartAnimation();
         }
     }
@@ -625,8 +621,7 @@ public partial class NotchWindow : Window
         _expanded = false;
         _leaveTimer.Stop();
         _repelTimer.Start();
-        _height.Target = _collapsedH;
-        _width.Target = ActivityWidth();
+        SetCollapsedTarget();
         HideDropChooser(restore: false);
         if (ToolHost.Content is IToolView view) view.OnHidden();
         if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
@@ -701,11 +696,9 @@ public partial class NotchWindow : Window
 
         // Pointer relative to the notch's home centre, in DIPs, from screen coordinates: the window
         // is moving under us, and its cached position (PointFromScreen) can trail the last move.
-        var dpi = VisualTreeHelper.GetDpi(this);
-        var x = (p.X - (_homeX + Width * dpi.DpiScaleX / 2)) / dpi.DpiScaleX;
-        var y = (p.Y - _homeY) / dpi.DpiScaleY;
-        var half = Body.ActualWidth / 2;
-        var inBand = y >= -8 && y <= Body.ActualHeight + DodgeBand;
+        var (x, y) = EdgeLocal(p); // along the edge, and away from it
+        var half = BodySpan / 2;
+        var inBand = y >= -8 && y <= BodyDepth + DodgeBand;
         var beside = Math.Abs(x - _shove.Value) > half;
 
         if (!inBand)
@@ -797,11 +790,13 @@ public partial class NotchWindow : Window
     private void MoveWindowBy(double dip)
     {
         if (_hwnd == IntPtr.Zero) return;
-        var px = (int)Math.Round(dip * VisualTreeHelper.GetDpi(this).DpiScaleX);
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var px = (int)Math.Round(dip * (Vertical ? dpi.DpiScaleY : dpi.DpiScaleX));
         if (px == _shovePx) return;
         _shovePx = px;
         // Position only: no z-order, activation, size or owner-redraw work, so a move costs DWM a recomposite and nothing more.
-        Win32.SetWindowPos(_hwnd, IntPtr.Zero, _homeX + px, _homeY, 0, 0,
+        // The notch slides along its edge: sideways on the top or bottom, up and down on the left or right.
+        Win32.SetWindowPos(_hwnd, IntPtr.Zero, _homeX + (Vertical ? 0 : px), _homeY + (Vertical ? px : 0), 0, 0,
             Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOREDRAW);
     }
 
@@ -938,12 +933,17 @@ public partial class NotchWindow : Window
 
         // 0 = collapsed, 1 = fully open (to whatever size the current tool wants).
         // While an alert is showing the notch only grows to PeekH: track that separately.
-        var peek = _peeking && !_expanded ? Math.Clamp((h - _collapsedH) / (_peekH - _collapsedH), 0, 1) : 0;
-        var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((h - _collapsedH) / Math.Max(1, _expandedH - _collapsedH), 0, 1);
+        // Progress is measured by how far the notch reaches into the screen (its depth), on any edge.
+        var depth = Vertical ? w : h;
+        var span = Vertical ? h : w;
+        var peekDepth = Vertical ? PeekW : _peekH;
+        var openDepth = Vertical ? _expandedW : _expandedH;
+        var peek = _peeking && !_expanded ? Math.Clamp((depth - _collapsedH) / Math.Max(1, peekDepth - _collapsedH), 0, 1) : 0;
+        var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((depth - _collapsedH) / Math.Max(1, openDepth - _collapsedH), 0, 1);
         var floating = Floating;
         var ear = App.Settings.NotchShape == "Notch" ? EarCollapsed + (EarExpanded - EarCollapsed) * p : 0;
         // A floating island is a capsule while closed (radius = half its height), rounding like the others as it opens.
-        var closedRadius = floating ? h / 2 : RadiusCollapsed;
+        var closedRadius = floating ? depth / 2 : RadiusCollapsed;
         var radius = closedRadius + (RadiusExpanded - closedRadius) * p + (RadiusPeek - closedRadius) * peek;
 
         MoveWindowBy(_shove.Value);
@@ -954,16 +954,32 @@ public partial class NotchWindow : Window
         if (shape == _shapeDrawn) return;
         _shapeDrawn = shape;
 
-        Pill.Width = w + 2 * EarExpanded;
-        Pill.Height = h;
-        Body.Margin = new Thickness(EarExpanded, 0, EarExpanded, 0);
+        // The ears run along the edge: room for them on both ends of the span.
+        Pill.Width = Vertical ? w : w + 2 * EarExpanded;
+        Pill.Height = Vertical ? h + 2 * EarExpanded : h;
+        Body.Margin = Vertical ? new Thickness(0, EarExpanded, 0, EarExpanded) : new Thickness(EarExpanded, 0, EarExpanded, 0);
         Body.Width = w;
         Body.Height = h;
         Body.Clip = new RectangleGeometry(new Rect(0, 0, w, h), radius, radius);
-        Pill.Margin = new Thickness(0, floating ? IslandGap : 0, 0, 0);
-        Shape.Data = floating
-            ? new RectangleGeometry(new Rect(EarExpanded, 0, w, h), Math.Min(radius, h / 2), Math.Min(radius, h / 2))
-            : NotchGeometry(w, h, ear, radius, EarExpanded - ear);
+        var gap = floating ? IslandGap : 0;
+        Pill.Margin = Edge switch
+        {
+            ScreenEdge.Bottom => new Thickness(0, 0, 0, gap),
+            ScreenEdge.Left => new Thickness(gap, 0, 0, 0),
+            ScreenEdge.Right => new Thickness(0, 0, gap, 0),
+            _ => new Thickness(0, gap, 0, 0),
+        };
+        var r = Math.Min(radius, depth / 2);
+        Geometry outline = floating
+            ? new RectangleGeometry(Vertical ? new Rect(0, EarExpanded, w, h) : new Rect(EarExpanded, 0, w, h), r, r)
+            : NotchGeometry(span, depth, ear, radius, EarExpanded - ear); // drawn for a top notch...
+        if (!floating && Edge != ScreenEdge.Top)
+        {
+            outline = outline.Clone(); // ...then turned onto the actual edge
+            outline.Transform = EdgeTransform(depth);
+            outline.Freeze();
+        }
+        Shape.Data = outline;
         if (GlassSheen.Visibility == Visibility.Visible) GlassSheen.Data = GlassGlow.Data = Shape.Data;
 
         // Content materialises out of a blur as the notch opens (and dissolves back on close).
@@ -985,7 +1001,9 @@ public partial class NotchWindow : Window
 
         // The minimal Pill keeps its closed content quieter.
         CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1) * (App.Settings.NotchShape == "Pill" ? 0.75 : 1);
-        CollapsedLayer.Visibility = p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedLayer.Visibility = !Vertical && p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
+        SideLayer.Opacity = CollapsedLayer.Opacity;
+        SideLayer.Visibility = Vertical && p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
         PeekLayer.Opacity = Math.Clamp((peek - 0.5) * 2, 0, 1);
         PeekLayer.Visibility = _peeking && peek > 0.5 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -1142,9 +1160,10 @@ public partial class NotchWindow : Window
 
         SetEqualizer(!_expanded && music);
 
+        if (Vertical) RenderSide();
         if (!_expanded && !_peeking)
         {
-            _width.Target = ActivityWidth();
+            SetCollapsedTarget();
             StartAnimation();
         }
     }
@@ -1271,10 +1290,11 @@ public partial class NotchWindow : Window
         UpdateIdleRotation();
         if (!_peeking)
         {
-            var w = IdleWidth();
+            if (Vertical) RenderSide();
+            var w = Vertical ? _collapsedH : IdleWidth();
             if (Math.Abs(_width.Target - w) > 0.5)
             {
-                _width.Target = w;
+                SetCollapsedTarget();
                 StartAnimation();
             }
         }
@@ -1313,9 +1333,10 @@ public partial class NotchWindow : Window
             ((TranslateTransform)slot.RenderTransform).BeginAnimation(TranslateTransform.YProperty,
                 new DoubleAnimation(7, 0, Motion.Slow) { BeginTime = begin, EasingFunction = ease });
         }
+        if (Vertical) RenderSide();
         if (!_expanded && !_peeking)
         {
-            _width.Target = IdleWidth();
+            SetCollapsedTarget();
             StartAnimation();
         }
     }
@@ -1654,8 +1675,7 @@ public partial class NotchWindow : Window
         PeekLayer.BeginAnimation(OpacityProperty, null);
         PeekLayer.Visibility = Visibility.Collapsed;
         if (_expanded) return;
-        _width.Target = ActivityWidth();
-        _height.Target = _collapsedH;
+        SetCollapsedTarget();
         StartAnimation();
         if (HiddenForApp) Guard(); // "Hide completely" let this alert through; hide again now it's done
     }
@@ -2397,6 +2417,7 @@ public partial class NotchWindow : Window
         ToolHost.Width = w;
         ToolHost.Height = h;
         _expandedH = chrome + h;
+        _expandedW = w + 2 * SidePad;
         if (!_expanded) return h;
         _width.Target = w + 2 * SidePad;
         _height.Target = _expandedH;

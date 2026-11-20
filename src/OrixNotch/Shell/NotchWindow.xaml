@@ -116,6 +116,9 @@
                 </Grid>
 
                 <!-- Alert: the notch grows for a few seconds for a reminder or a Windows notification (filled in code) -->
+                <!-- Left/right edge, closed: a narrow tab of icons stacked along the edge (NotchWindow.Edge.cs) -->
+                <StackPanel x:Name="SideLayer" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+
                 <Grid x:Name="PeekLayer" Margin="18,0,12,0" VerticalAlignment="Stretch" Visibility="Collapsed" Opacity="0"
                       Background="Transparent" Cursor="Hand" MouseLeftButtonUp="OnPeekClick"
                       MouseEnter="OnPeekHover" MouseLeave="OnPeekHover">
