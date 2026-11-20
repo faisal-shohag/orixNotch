@@ -261,6 +261,9 @@ public sealed class ClipboardService
         Save();
     }
 
+    /// <summary>Skips history for a moment: a copy OrixNotch makes on your behalf (Explain selected text).</summary>
+    public void IgnoreFor(TimeSpan time) => _ignoreUntil = DateTime.Now + time;
+
     /// <summary>Copies text without recording it in history (used by Emoji, Converter, …).</summary>
     public void CopyQuiet(string text)
     {

@@ -304,6 +304,25 @@ public partial class AskAiView : UserControl, IToolView
         if (SendButton.IsEnabled && _cts is null) OnSend(this, new RoutedEventArgs());
     }
 
+    /// <summary>Hotkey "Explain selected text". No text (nothing selected): the box is primed instead.</summary>
+    public void Explain(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            SetInput("Explain: ");
+            return;
+        }
+        UpdateSendState();
+        if (!Input.IsEnabled || _cts is not null)
+        {
+            SetInput($"Explain this: {text}"); // no key yet, or a reply is still streaming
+            return;
+        }
+        var preview = text.ReplaceLineEndings(" ");
+        _ = SendAsync($"Explain this clearly and briefly:\n\n{text}",
+            display: $"Explain: “{(preview.Length > 80 ? preview[..79] + "…" : preview)}”");
+    }
+
     private void SetInput(string text)
     {
         Input.Text = text;

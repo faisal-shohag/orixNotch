@@ -288,6 +288,9 @@ public partial class NotchWindow : Window
             case "ocr":
                 OcrService.Instance.Start();
                 break;
+            case "explain":
+                _ = ExplainSelectionAsync();
+                break;
             case "palette":
                 if (_expanded && _activeTool == PaletteId) Collapse();
                 else ShowPalette();
@@ -2000,6 +2003,14 @@ public partial class NotchWindow : Window
             App.Settings.LastTool = def.Id;
             SettingsService.Save(notify: false);
         }
+    }
+
+    /// <summary>Hotkey "Explain selected text": copy the selection while its app is still in front, then ask.</summary>
+    private async Task ExplainSelectionAsync()
+    {
+        var text = await SelectionService.CopyAsync();
+        OpenTool("ask");
+        View<Tools.AskAiView>("ask")?.Explain(text);
     }
 
     public const string PaletteId = "palette";

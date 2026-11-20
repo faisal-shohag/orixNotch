@@ -37,6 +37,14 @@ internal static class Win32
     [DllImport("user32.dll")]
     public static extern bool AllowSetForegroundWindow(uint processId);
 
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+
+    public const uint KEYEVENTF_KEYUP = 0x2;
+
+    [DllImport("user32.dll")]
+    public static extern uint GetClipboardSequenceNumber();
+
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
 
