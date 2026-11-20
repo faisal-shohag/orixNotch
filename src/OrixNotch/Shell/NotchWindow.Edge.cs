@@ -29,8 +29,8 @@ public partial class NotchWindow
 
     private double _expandedW = 720;
 
-    /// <summary>The closed side tab's thickness: slimmer than the top notch is tall, just room for its icons.</summary>
-    private double SideDepth => Math.Max(26, _collapsedH - 10);
+    /// <summary>The closed side tab's thickness: the same as the top notch's height.</summary>
+    private double SideDepth => Math.Max(36, _collapsedH);
 
     /// <summary>How far the closed notch reaches into the screen on the current edge.</summary>
     private double ClosedDepth => Vertical ? SideDepth : _collapsedH; // the open panel's width, the depth of an open side notch
