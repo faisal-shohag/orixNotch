@@ -699,6 +699,7 @@ public partial class SettingsView : UserControl, IToolView
         ["network"] = "Download speed.",
         ["stock"] = "Your Stocks tickers, one after another, with today's change.",
         ["aiUsage"] = "Plan usage from the AI Usage tool, or today's tokens for OpenCode.",
+        ["unread"] = "Notifications that arrived since you last opened the Notifications tool. Hidden when there are none.",
         ["clipboard"] = "Number of items in clipboard history.",
         ["shelf"] = "Files waiting on the Shelf. Hidden when empty.",
         ["streak"] = "Pomodoro focus sessions finished today.",

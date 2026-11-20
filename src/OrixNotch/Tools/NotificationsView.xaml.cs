@@ -31,6 +31,7 @@ public partial class NotificationsView : UserControl, IToolView
         ApplyHeight();
         // Relative times ("5m") go stale while hidden, so redraw on every open.
         Render();
+        NotificationHistory.Instance.MarkRead();
     }
 
     public void OnHidden()

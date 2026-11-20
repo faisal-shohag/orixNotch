@@ -93,5 +93,17 @@ public sealed class NotificationHistory
         return icon;
     }
 
+    /// <summary>Notifications that arrived since the Notifications tool was last opened.</summary>
+    public int Unread => _items.Count(n => n.At > App.Settings.NotifyReadAt);
+
+    /// <summary>The Notifications tool was opened: everything so far counts as seen.</summary>
+    public void MarkRead()
+    {
+        if (Unread == 0) return;
+        App.Settings.NotifyReadAt = DateTime.Now;
+        SettingsService.Save(notify: false);
+        Changed?.Invoke();
+    }
+
     private void Save() => Storage.Save(FileName, _items);
 }

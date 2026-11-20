@@ -70,6 +70,7 @@ public sealed class AppSettings
     public List<string> NotifyMutedApps { get; set; } = new();  // app ids (AUMIDs)
     public List<string> NotifySeenApps { get; set; } = new();   // "aumid|display name", newest first
     public bool NotifyKeepHistory { get; set; } = true;         // save them for the Notifications tool
+    public DateTime NotifyReadAt { get; set; } = DateTime.Now;  // newer ones are "unread" (tab badge, idle item)
 
     // Quiet hours: alerts are counted instead of shown, then summed up in one alert when quiet ends
     public bool QuietEnabled { get; set; }

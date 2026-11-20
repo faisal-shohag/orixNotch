@@ -1764,7 +1764,8 @@ public partial class NotchWindow : Window
         var tab = new RadioButton
         {
             Style = (Style)FindResource("TabButton"),
-            Content = new HeroIcon { Kind = icon, Width = 17, Height = 17 },
+            Content = id == "notifications" ? WithUnreadBadge(new HeroIcon { Kind = icon, Width = 17, Height = 17 })
+                : new HeroIcon { Kind = icon, Width = 17, Height = 17 },
             ToolTip = name,
             GroupName = "tools",
             Tag = id,
@@ -1777,6 +1778,32 @@ public partial class NotchWindow : Window
         };
         if (id != SettingsId) WireTabDrag(tab); // press and hold to reorder
         return tab;
+    }
+
+    /// <summary>The Notifications tab's icon with a count of what arrived since it was last opened.</summary>
+    private static FrameworkElement WithUnreadBadge(FrameworkElement icon)
+    {
+        var count = new TextBlock { FontSize = 8.5, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        count.SetResourceReference(TextBlock.ForegroundProperty, "OnAccentBrush");
+        var badge = new Border
+        {
+            MinWidth = 13, Height = 13, CornerRadius = new CornerRadius(6.5), Padding = new Thickness(3, 0, 3, 0),
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -6, -9, 0), IsHitTestVisible = false, Child = count,
+        };
+        badge.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+        void Update()
+        {
+            var n = NotificationHistory.Instance.Unread;
+            count.Text = n > 9 ? "9+" : n.ToString();
+            badge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        NotificationHistory.Instance.Changed += Update;
+        Update();
+        var grid = new Grid();
+        grid.Children.Add(icon);
+        grid.Children.Add(badge);
+        return grid;
     }
 
     /// <summary>Shows a tool. <paramref name="backTo"/> makes it a sub-page with a back chevron.</summary>

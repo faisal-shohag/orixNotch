@@ -36,6 +36,7 @@ public sealed class IdleInfoService
         ("network", "Network speed"),
         ("stock", "Stock ticker"),
         ("aiUsage", "AI usage"),
+        ("unread", "Unread notifications"),
         ("clipboard", "Clipboard"),
         ("shelf", "Shelf"),
         ("streak", "Focus sessions today"),
@@ -207,6 +208,9 @@ public sealed class IdleInfoService
                     $"{t} {price.ToString(price >= 1000 ? "0" : "0.00", culture)} {arrow}{Math.Abs(change):0.0}%",
                     change >= 0 ? "GoodBrush" : "BadBrush");
             }
+            case "unread":
+                var unread = NotificationHistory.Instance.Unread;
+                return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new", "AccentBrush");
             case "clipboard":
                 var clips = ClipboardService.Instance.Items.Count;
                 return new IdleItem(id, AppIcon.ClipboardList, clips == 1 ? "1 clip" : $"{clips} clips");
