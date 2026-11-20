@@ -58,5 +58,7 @@
     <!-- Mirror Windows notifications on the notch (user grants access once). -->
     <uap3:Capability Name="userNotificationListener" />
     <rescap:Capability Name="runFullTrust" />
+    <!-- Controls tool: switch Wi-Fi and Bluetooth on and off. -->
+    <DeviceCapability Name="radios" />
   </Capabilities>
 </Package>

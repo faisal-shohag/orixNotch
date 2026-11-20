@@ -45,6 +45,7 @@ public static class ToolRegistry
         new("calendar", "Calendar", AppIcon.CalendarDays, W, 245, () => new CalendarView()),
         new("notifications", "Notifications", AppIcon.Bell, W, H, () => new NotificationsView()),
         new("weather", "Weather", AppIcon.Cloud, W, 245, () => new WeatherView()),
+        new("controls", "Controls", AppIcon.Adjust, W, H, () => new ControlsView()),
         new("system", "System", AppIcon.Signal, W, H, () => new SystemMonitorView()),
         new("screentime", "Screen Time", AppIcon.Hourglass, W, H, () => new ScreenTimeView()),
         new("stocks", "Stocks", AppIcon.ChartLine, W, H, () => new StocksView()),

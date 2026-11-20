@@ -47,6 +47,77 @@ public sealed class VolumeService
         }
     }
 
+    /// <summary>Speaker volume, 0..1 (null without an audio device).</summary>
+    public float? MasterVolume
+    {
+        get => _endpoint is not null && _endpoint.GetMasterVolumeLevelScalar(out var level) == 0 ? level : null;
+        set
+        {
+            if (_endpoint is null || value is not { } level) return;
+            var context = Guid.Empty;
+            _endpoint.SetMasterVolumeLevelScalar(Math.Clamp(level, 0, 1), ref context);
+        }
+    }
+
+    /// <summary>One app's sound in the Windows volume mixer (all its sessions together), adjustable here.</summary>
+    public sealed class AppAudio(string app, int pid, List<object> sessions)
+    {
+        public string App { get; } = app;   // process name; "" for Windows' system sounds
+        public int ProcessId { get; } = pid;
+
+        public float Volume
+        {
+            get => sessions.Count > 0 && ((ISimpleAudioVolume)sessions[0]).GetMasterVolume(out var v) == 0 ? v : 1;
+            set
+            {
+                var context = Guid.Empty;
+                foreach (ISimpleAudioVolume s in sessions) s.SetMasterVolume(Math.Clamp(value, 0, 1), ref context);
+            }
+        }
+
+        public bool Muted
+        {
+            get => sessions.Count > 0 && ((ISimpleAudioVolume)sessions[0]).GetMute(out var m) == 0 && m != 0;
+            set
+            {
+                var context = Guid.Empty;
+                foreach (ISimpleAudioVolume s in sessions) s.SetMute(value ? 1 : 0, ref context);
+            }
+        }
+    }
+
+    /// <summary>Apps with sound on the default speakers (as in Windows' volume mixer), playing ones first.</summary>
+    public List<AppAudio> Apps()
+    {
+        var result = new List<AppAudio>();
+        try
+        {
+            var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            if (enumerator.GetDefaultAudioEndpoint(0, 1, out var device) != 0) return result;
+            var iid = typeof(IAudioSessionManager2).GUID;
+            if (device.Activate(ref iid, 23, IntPtr.Zero, out var obj) != 0) return result;
+            if (((IAudioSessionManager2)obj).GetSessionEnumerator(out var sessions) != 0 || sessions.GetCount(out var count) != 0) return result;
+            var groups = new Dictionary<string, (int Pid, bool Active, List<object> Sessions)>();
+            for (var i = 0; i < count; i++)
+            {
+                if (sessions.GetSession(i, out var session) != 0 || session.GetState(out var state) != 0 || state == 2 /* expired */) continue;
+                session.GetProcessId(out var pid);
+                var app = session.IsSystemSoundsSession() == 0 ? "" : ForegroundAppWatcher.NameOf((int)pid);
+                if (app is null) continue; // the app has exited
+                var group = groups.TryGetValue(app, out var g) ? g : (Pid: (int)pid, Active: false, Sessions: new List<object>());
+                group.Sessions.Add(session);
+                groups[app] = (group.Pid, group.Active || state == 1, group.Sessions);
+            }
+            result.AddRange(groups.OrderByDescending(g => g.Value.Active).ThenBy(g => g.Key.Length == 0)
+                .Select(g => new AppAudio(g.Key, g.Value.Pid, g.Value.Sessions)));
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            App.Log(ex);
+        }
+        return result;
+    }
+
     private static IAudioEndpointVolume? Open(int dataFlow, Callback callback)
     {
         try
@@ -116,6 +187,49 @@ public sealed class VolumeService
         [PreserveSig] int SetChannelVolumeLevelScalar(uint channel, float level, ref Guid context);
         [PreserveSig] int GetChannelVolumeLevel(uint channel, out float levelDb);
         [PreserveSig] int GetChannelVolumeLevelScalar(uint channel, out float level);
+        [PreserveSig] int SetMute(int mute, ref Guid context);
+        [PreserveSig] int GetMute(out int mute);
+    }
+
+    // Per-app sessions (audiopolicy.h), vtable order.
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionManager2
+    {
+        [PreserveSig] int GetAudioSessionControl(IntPtr group, int flags, out IntPtr control);
+        [PreserveSig] int GetSimpleAudioVolume(IntPtr group, int flags, out IntPtr volume);
+        [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator sessions);
+    }
+
+    [ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionEnumerator
+    {
+        [PreserveSig] int GetCount(out int count);
+        [PreserveSig] int GetSession(int index, out IAudioSessionControl2 session);
+    }
+
+    [ComImport, Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionControl2
+    {
+        [PreserveSig] int GetState(out int state);
+        [PreserveSig] int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+        [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string name, ref Guid context);
+        [PreserveSig] int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string path);
+        [PreserveSig] int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string path, ref Guid context);
+        [PreserveSig] int GetGroupingParam(out Guid group);
+        [PreserveSig] int SetGroupingParam(ref Guid group, ref Guid context);
+        [PreserveSig] int RegisterAudioSessionNotification(IntPtr notifications);
+        [PreserveSig] int UnregisterAudioSessionNotification(IntPtr notifications);
+        [PreserveSig] int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+        [PreserveSig] int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+        [PreserveSig] int GetProcessId(out uint pid);
+        [PreserveSig] int IsSystemSoundsSession(); // S_OK (0) for system sounds
+    }
+
+    [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ISimpleAudioVolume
+    {
+        [PreserveSig] int SetMasterVolume(float level, ref Guid context);
+        [PreserveSig] int GetMasterVolume(out float level);
         [PreserveSig] int SetMute(int mute, ref Guid context);
         [PreserveSig] int GetMute(out int mute);
     }
