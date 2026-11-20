@@ -56,7 +56,7 @@ public static class ThemeService
     public static IReadOnlyList<ColorScheme> Schemes { get; } =
     [
         // The default pair: slate and white cards with a coral accent; "System" picks one by Windows' light/dark mode.
-        new("coral", "Coral", C("#22262F"), C("#2A2F39"), C("#323844"), C("#3C4350"), C("#F4F5F7"), C("#8B909A"), false, "coral"),
+        new("coral", "Coral", C("#14171D"), C("#1B1F27"), C("#232832"), C("#2D333E"), C("#F4F5F7"), C("#8B909A"), false, "coral"),
         new("coral-light", "Coral Light", C("#FFFFFF"), C("#FBF3F1"), C("#F3E7E3"), C("#EADBD6"), C("#1F2430"), C("#868B95"), true, "coral"),
         new("midnight", "Midnight", C("#000000"), C("#121214"), C("#1C1C1F"), C("#28282C"), C("#F5F5F7"), C("#8A8A90"), false, "orange"),
         new("graphite", "Graphite", C("#1B1B1D"), C("#242427"), C("#2D2D31"), C("#38383D"), C("#F2F2F4"), C("#94949A"), false, "blue"),
