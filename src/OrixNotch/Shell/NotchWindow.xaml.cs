@@ -166,6 +166,9 @@ public partial class NotchWindow : Window
         };
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
         ScreenshotWatcher.Instance.Taken += ShowScreenshotPeek;
+        ScreenTimeService.Instance.Summary += (seconds, top) =>
+            EnqueuePeek(new PeekRequest("screentime", () => GlyphTile(AppIcon.Hourglass), $"{ScreenTimeService.Format(seconds)} on screen today",
+                top is null ? "Click for details" : $"Most of it in {top}", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("screentime")));
         OcrService.Instance.Done += (title, sub) =>
             EnqueuePeek(new PeekRequest("ocr", () => GlyphTile(AppIcon.DocText), title, sub, TimeSpan.FromSeconds(4)));
         NotificationHistory.Instance.Start();
@@ -217,6 +220,7 @@ public partial class NotchWindow : Window
         BluetoothWatcher.Instance.Start();
         DownloadWatcher.Instance.Start();
         ScreenshotWatcher.Instance.Start();
+        ScreenTimeService.Instance.Start();
         ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
         ForegroundAppWatcher.Instance.Start();
         _guardTimer.Start();

@@ -73,6 +73,12 @@ public sealed class AppSettings
     public bool NotifyKeepHistory { get; set; } = true;         // save them for the Notifications tool
     public DateTime NotifyReadAt { get; set; } = DateTime.Now;  // newer ones are "unread" (tab badge, idle item)
 
+    // Screen Time: off until turned on in the tool; kept only on this PC
+    public bool ScreenTimeEnabled { get; set; }
+    public bool ScreenTimeSummary { get; set; } = true;  // an evening alert with the day's total
+    public int ScreenTimeSummaryHour { get; set; } = 21;
+    public string? ScreenTimeSummaryShown { get; set; }   // yyyy-MM-dd of the last summary alert
+
     // Quiet hours: alerts are counted instead of shown, then summed up in one alert when quiet ends
     public bool QuietEnabled { get; set; }
     public string QuietFrom { get; set; } = "22:00";

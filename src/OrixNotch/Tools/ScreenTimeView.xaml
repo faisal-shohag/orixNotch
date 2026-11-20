@@ -1,0 +1,50 @@
+<UserControl x:Class="OrixNotch.Tools.ScreenTimeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hero="clr-namespace:OrixNotch.Shell">
+    <Grid>
+        <!-- Tracking on: today's total and the week on the left, the most used apps on the right. -->
+        <Grid x:Name="Stats">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="230" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,6,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="TODAY" Style="{StaticResource Caps}" />
+                    <TextBlock x:Name="TotalText" Grid.Row="1" FontSize="28" FontWeight="SemiBold" Margin="0,2,0,0"
+                               Typography.NumeralAlignment="Tabular" />
+                    <TextBlock x:Name="CompareText" Grid.Row="2" Style="{StaticResource SubText}" FontSize="11" FontWeight="Normal" />
+                    <!-- Last 7 days, today on the right -->
+                    <Grid x:Name="Week" Grid.Row="3" Margin="0,8,0,0" VerticalAlignment="Bottom" Height="62" />
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource Card}" Padding="14,10" Margin="6,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="MOST USED TODAY" Style="{StaticResource Caps}" />
+                    <StackPanel x:Name="TopList" Margin="0,6,0,0" />
+                    <TextBlock x:Name="EmptyText" Style="{StaticResource SubText}" Margin="0,10,0,0" Visibility="Collapsed"
+                               Text="Nothing yet today. Time counts while an app is in front and you're using the PC." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Tracking off: what it does, and the switch. -->
+        <StackPanel x:Name="Intro" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="Collapsed">
+            <hero:HeroIcon Kind="ChartBar" Width="26" Height="26" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" />
+            <TextBlock Text="See where your time goes" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,4" />
+            <TextBlock Style="{StaticResource SubText}" FontWeight="Normal" TextWrapping="Wrap" TextAlignment="Center"
+                       Text="Screen Time counts how long each app is in front while you use the PC. It's kept only on this PC, for 60 days, and you can stop it anytime in Settings." />
+            <Button Style="{StaticResource AccentButton}" Content="Start tracking" HorizontalAlignment="Center" Margin="0,12,0,0"
+                    Padding="16,6" Click="OnStart" />
+        </StackPanel>
+    </Grid>
+</UserControl>

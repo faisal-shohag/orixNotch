@@ -94,4 +94,5 @@ public enum AppIcon
     MicrophoneOff,
     Coffee,
     EyeOff,
+    Hourglass,
 }

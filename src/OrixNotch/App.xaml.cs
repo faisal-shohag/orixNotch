@@ -73,6 +73,7 @@ public partial class App : Application
     {
         _tray?.Dispose();
         ShelfService.Instance.Save();
+        ScreenTimeService.Instance.Save();
         _ = PhoneTransferService.Instance.StopAsync(); // sockets close with the process anyway
         _mutex?.ReleaseMutex();
         base.OnExit(e);

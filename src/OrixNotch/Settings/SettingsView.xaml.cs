@@ -478,6 +478,16 @@ public partial class SettingsView : UserControl, IToolView
         Row("Screenshots", "Show a preview on the notch when you take a screenshot (Win + PrtScn, Snipping Tool). Click it to put it on the Shelf.",
             Toggle(S.ScreenshotAlerts, v => { S.ScreenshotAlerts = v; Save(false); }));
 
+        Section("SCREEN TIME");
+        Row("Track screen time", "Counts how long each app is in front while you use the PC, for the Screen Time tool. Kept only on this PC for 60 days.",
+            Toggle(S.ScreenTimeEnabled, v => ScreenTimeService.Instance.SetEnabled(v)));
+        var hours = Enumerable.Range(17, 7).ToArray(); // 5 PM – 11 PM
+        Row("Evening summary", "One alert with the day's screen time and the app you used most.",
+            Toggle(S.ScreenTimeSummary, v => { S.ScreenTimeSummary = v; Save(false); }));
+        Row("Summary at", "When the evening summary shows.",
+            Combo(hours.Select(h => DateTime.Today.AddHours(h).ToString("t", System.Globalization.CultureInfo.CurrentCulture)),
+                Math.Max(0, Array.IndexOf(hours, S.ScreenTimeSummaryHour)), i => { S.ScreenTimeSummaryHour = hours[i]; Save(false); }));
+
         Section("QUIET HOURS");
         var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();
         int Slot(string t) => Math.Max(0, times.IndexOf(t));
@@ -705,6 +715,7 @@ public partial class SettingsView : UserControl, IToolView
         ["clipboard"] = "Number of items in clipboard history.",
         ["shelf"] = "Files waiting on the Shelf. Hidden when empty.",
         ["streak"] = "Pomodoro focus sessions finished today.",
+        ["screentime"] = "Time on screen today, from Screen Time (when it's on).",
         ["avatar"] = "Your profile picture and name.",
     };
 

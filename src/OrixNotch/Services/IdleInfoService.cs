@@ -40,6 +40,7 @@ public sealed class IdleInfoService
         ("clipboard", "Clipboard"),
         ("shelf", "Shelf"),
         ("streak", "Focus sessions today"),
+        ("screentime", "Screen time today"),
         ("avatar", "Profile picture"),
         ("mic", "Microphone muted"),
         ("awake", "Keep awake"),
@@ -208,6 +209,10 @@ public sealed class IdleInfoService
                     $"{t} {price.ToString(price >= 1000 ? "0" : "0.00", culture)} {arrow}{Math.Abs(change):0.0}%",
                     change >= 0 ? "GoodBrush" : "BadBrush");
             }
+            case "screentime":
+                return ScreenTimeService.Instance.Enabled
+                    ? new IdleItem(id, AppIcon.Hourglass, ScreenTimeService.Format(ScreenTimeService.Instance.Total(DateTime.Today)))
+                    : null;
             case "unread":
                 var unread = NotificationHistory.Instance.Unread;
                 return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new", "AccentBrush");
