@@ -768,6 +768,13 @@ public partial class SettingsView : UserControl, IToolView
                 ? "A few tools start switched off: turn on any you want, and move the rest into order with the arrows. "
                     + "Notifications shown on the notch are kept on this PC for 30 days (Settings → General to turn that off)."
                 : "The tools in the notch's bottom bar, and their order.");
+
+        Section("QUICK START");
+        var presets = new System.Windows.Controls.Primitives.UniformGrid { Columns = Presets.Length, Margin = new Thickness(-4, 0, -4, 0) };
+        foreach (var preset in Presets) presets.Children.Add(PresetCard(preset));
+        Page.Children.Add(presets);
+        Page.Children.Add(Hint("Sets your tabs and what the closed notch shows. Fine-tune everything below afterwards."));
+
         Section("IN THE NOTCH");
         var visible = ToolRegistry.Ordered();
         var list = new StackPanel();
@@ -793,6 +800,53 @@ public partial class SettingsView : UserControl, IToolView
             Render();
         };
         Page.Children.Add(restore);
+    }
+
+    /// <summary>Starting points for the tab bar and idle notch. Null tools = every tool, in the default order.</summary>
+    private sealed record Preset(string Name, string Blurb, AppIcon Icon, string[]? Tools, string[] Idle);
+
+    private static readonly Preset[] Presets =
+    [
+        new("Developer", "AI, clipboard, shortcuts, system", AppIcon.Terminal,
+            ["home", "ask", "aiusage", "clipboard", "shortcuts", "notifications", "todos", "timer", "calendar", "controls", "system", "nowplaying"],
+            ["clock", "aiUsage", "nextEvent"]),
+        new("Creator", "Teleprompter, phone, shelf, music", AppIcon.Teleprompter,
+            ["home", "nowplaying", "teleprompter", "phone", "shelf", "note", "calendar", "todos", "controls", "emoji"],
+            ["clock", "nextEvent"]),
+        new("Student", "To-dos, focus timer, calendar, notes", AppIcon.BookOpen,
+            ["home", "todos", "timer", "calendar", "note", "ask", "converter", "weather", "screentime", "nowplaying"],
+            ["clock", "nextEvent", "streak"]),
+        new("Everything", "Every tool, in the usual order", AppIcon.Grid, null, ["clock"]),
+    ];
+
+    private FrameworkElement PresetCard(Preset preset)
+    {
+        var stack = new StackPanel { Margin = new Thickness(2) };
+        var icon = new Border { Width = 28, Height = 28, CornerRadius = new CornerRadius(8), HorizontalAlignment = HorizontalAlignment.Left };
+        icon.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
+        var glyph = new HeroIcon { Kind = preset.Icon, Width = 15, Height = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
+        icon.Child = glyph;
+        stack.Children.Add(icon);
+        stack.Children.Add(new TextBlock { Text = preset.Name, FontSize = 13.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 1) });
+        // Same height on every card (up to three lines), so the cards line up.
+        stack.Children.Add(new TextBlock { Text = preset.Blurb, Style = (Style)FindResource("SubText"), FontWeight = FontWeights.Normal, FontSize = 11, TextWrapping = TextWrapping.Wrap, Height = 42 });
+        var button = new Button { Style = (Style)FindResource("RowButton"), Content = stack, Padding = new Thickness(10),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Top };
+        button.Click += (_, _) => ApplyPreset(preset);
+        var card = new Border { Style = (Style)FindResource("Card"), Padding = new Thickness(0), Margin = new Thickness(4, 0, 4, 0), Child = button };
+        return card;
+    }
+
+    private void ApplyPreset(Preset preset)
+    {
+        var all = ToolRegistry.All.Select(t => t.Id).ToList();
+        S.ToolOrder = preset.Tools?.Where(all.Contains).ToList() ?? [];
+        S.HiddenTools = preset.Tools is null ? [] : all.Where(id => !preset.Tools.Contains(id)).ToList();
+        S.IdleItems = IdleInfoService.Catalog.Select(c => c.Id).Where(preset.Idle.Contains).ToList();
+        Save();
+        IdleInfoService.Instance.Reconfigure();
+        Render();
     }
 
     private FrameworkElement ToolRow(ToolDef tool, bool shown, int index, int count)
