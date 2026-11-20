@@ -8,31 +8,48 @@ OrixNotch
 ## Description
 OrixNotch — Your Screen, Smarter.
 
-A dynamic-island style toolbox for Windows. A small pill sits at the top-center of your screen — hover it, click it, or press Ctrl+Alt+N and it springs open into a panel of everyday tools: Now Playing, Calendar with reminders, To-Dos, Quick Note, Clipboard history, File Shelf, Pomodoro and timers, Weather, System Monitor, Stocks, Unit Converter, Emoji picker and Ask AI.
+A dynamic-island style toolbox for Windows. A small notch sits at the top of your screen (or any edge you choose) — hover it, click it, or press Ctrl+Alt+N and it springs open into a panel of everyday tools: Now Playing, Ask AI, Calendar with reminders, To-Dos, Quick Note, Clipboard history, File Shelf, phone transfer, Timers, Weather, System Monitor, Screen Time, Controls, Subscriptions, Shortcuts, Stocks, Unit Converter, Emoji picker and a Teleprompter.
 
 When it's closed, the notch keeps working: live music and timer status, calendar reminders that pop out before an event starts, your Windows notifications, and an idle view you choose — clock, weather, battery, network speed, AI usage limits and more.
 
-Everything is stored locally on your PC. Network is used only for weather, stocks, lyrics and the optional AI features, and only while those are in use. Ask AI works with your own Anthropic, OpenAI (ChatGPT), Google Gemini or DeepSeek API key.
+Everything is stored locally on your PC. Network is used only for weather, stocks, lyrics, currency rates and the optional AI features, and only while those are in use. Ask AI works with your own Anthropic, OpenAI (ChatGPT), Google Gemini or DeepSeek API key.
 
 ## Short description
 A dynamic-island toolbox for Windows: music, calendar reminders, notifications, to-dos, timers, weather and AI at the top of your screen.
 
 ## What's new
-New look and a smarter notch: a fresh logo; the notch can auto-hide and come back when you touch the top edge, hide for apps you pick, and stay out of screenshots and screen sharing; alerts for finished downloads, Bluetooth devices, charging and low battery; subscribe to Google, Outlook or iCloud calendars; and a search box in Settings.
+What's new in OrixNotch 0.15
+• New tools: Screen Time with daily goals and an end-of-day wrap, Controls with quick toggles and per-app volume, Subscriptions with renewal alerts, and a Shortcuts launcher.
+• Your notch, your way: Island, Notch, Tab or Pill shapes, on any edge of the screen.
+• Focus mode that holds alerts, with a focus log and streaks, plus quiet hours, break reminders and a morning brief.
+• Command palette: type "timer 10", "todo buy milk" or "20 usd to eur" from anywhere.
+• Ask AI explains text you select in any app, and you can copy text straight from the screen.
+• Redesigned System, Weather and phone transfer screens, with glowing progress bars and smooth live charts.
+• New looks: Coral themes, glass tinted by your wallpaper, and one-click looks you can share.
+• More alerts: screenshot previews, Bluetooth battery levels, unread notification counts, and a heads-up before you hit an AI limit.
+• Faster, lighter and more reliable, with many fixes and accessibility improvements.
 
 ## Product features
-- Dynamic-island notch with smooth spring animations
-- Auto-hide with a top-edge reveal, hide in full screen or for apps you pick, hidden from screenshots
-- Alerts for finished downloads, Bluetooth devices, charging and low battery
-- Now Playing controls and synced lyrics for Spotify, browsers and media apps
-- Calendar with reminders that pop out of the notch, with sound; subscribe to Google, Outlook or iCloud calendars
-- Windows notifications mirrored on the notch
-- Customizable idle notch: clock, weather, battery, network speed, AI usage
-- AI Usage for Claude Code, Codex, OpenCode, Cursor, Antigravity and more
-- Ask AI with ChatGPT, Claude, Gemini or DeepSeek (your own API key)
-- To-Dos, Quick Note, Clipboard history and File Shelf
+- Dynamic-island notch in four shapes (Island, Notch, Tab, Pill), on any screen edge
+- Now Playing with album art, controls and synced lyrics
+- Ask AI with Claude, ChatGPT, Gemini or DeepSeek: drop images, or explain text selected in any app
+- Command palette: start a timer, add a to-do or convert currency by typing
+- Phone and PC transfer by QR code, with no app to install
+- Drag and drop onto the notch to send to the Shelf, your phone or Ask AI
+- Clipboard history, a File Shelf and copy text from the screen
+- Calendar with reminders, plus Google, Outlook and iCloud calendar sync
+- To-Dos, Quick Notes and a Teleprompter for calls and recordings
 - Pomodoro, countdown and stopwatch timers
-- Weather, Stocks, System Monitor, Unit Converter and Emoji picker
+- Focus mode with streaks, quiet hours, break reminders and a morning brief
+- Screen Time with per-app daily goals and an end-of-day wrap
+- Controls: quick toggles, per-app volume, mic mute and keep awake
+- Subscriptions tracker with renewal alerts
+- Windows notifications mirrored on the notch, with an unread count
+- AI Usage for Claude Code, Codex, Cursor and more, with limit alerts
+- Weather, Stocks, System Monitor, Unit Converter, Emoji picker and Shortcuts
+- 19 color schemes, gradient accents, wallpaper-tinted glass and one-click looks
+- Customizable idle notch: clock, weather, battery, network speed and more
+- Steps aside in full screen, for apps you choose and in screenshots; live alerts for downloads, Bluetooth and battery
 
 ## Keywords (max 7)
 dynamic island · notch · clipboard history · calendar reminders · pomodoro timer · productivity tools · ai usage
