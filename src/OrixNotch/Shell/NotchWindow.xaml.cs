@@ -214,6 +214,7 @@ public partial class NotchWindow : Window
         HotkeyService.Triggered += OnHotkey;
 
         BuildEqualizer();
+        MakeRound(PeekDismiss);
         TabBar.RenderTransform = _tabRise;
         NowPlayingService.Instance.PropertyChanged += (_, _) => UpdateGlow();
         PomodoroService.Instance.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PomodoroService.IsRunning)) UpdateGlow(); };
@@ -1613,6 +1614,7 @@ public partial class NotchWindow : Window
             button.SetResourceReference(BackgroundProperty, "HoverBrush");
             button.SetResourceReference(ForegroundProperty, "TextBrush");
             System.Windows.Automation.AutomationProperties.SetName(button, action.Tip);
+            MakeRound(button);
             button.Click += (_, e) =>
             {
                 e.Handled = true;
@@ -1695,6 +1697,18 @@ public partial class NotchWindow : Window
         EndPeek();
         click?.Invoke();
         e.Handled = true;
+    }
+
+    /// <summary>Alert buttons are circles, like the alert's icon tile (the IconButton template is a rounded square).</summary>
+    private static void MakeRound(Button button)
+    {
+        void Apply()
+        {
+            button.ApplyTemplate();
+            if (button.Template?.FindName("Bd", button) is Border bd) bd.CornerRadius = new CornerRadius(button.Width / 2);
+        }
+        if (button.IsLoaded) Apply();
+        else button.Loaded += (_, _) => Apply();
     }
 
     /// <summary>
