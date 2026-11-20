@@ -2063,6 +2063,19 @@ public partial class NotchWindow : Window
         View<Tools.AskAiView>("ask")?.Explain(text);
     }
 
+    /// <summary>An orixnotch://theme link: apply the look, with Undo on the alert.</summary>
+    public void ApplyThemeLink(ExternalCommands.Link link)
+    {
+        var before = ThemeService.Current();
+        var look = ThemeService.Parse(link.Get, before);
+        if (look == before) return;
+        ThemeService.ApplyLook(look);
+        var name = ThemeService.Schemes.FirstOrDefault(s => s.Id == look.Scheme)?.Name ?? look.Scheme;
+        EnqueuePeek(new PeekRequest("theme", () => GlyphTile(AppIcon.Palette), "New look applied",
+            $"{name}{(look.Glass ? " glass" : "")}", TimeSpan.FromSeconds(8),
+            Actions: [new PeekAction(AppIcon.Backward, "Undo", () => ThemeService.ApplyLook(before))]));
+    }
+
     public const string PaletteId = "palette";
     public const string BriefId = "brief";
     public const string WrapId = "wrap";

@@ -318,6 +318,69 @@ public static class ThemeService
         Apply();
     }
 
+    // ---------------------------------------------------------------- sharing a look
+
+    public static readonly string[] Sizes = ["Small", "Default", "Large", "ExtraLarge"];
+
+    /// <summary>The current look as a link others can open: scheme, accent, glass and size.</summary>
+    public static string ShareLink()
+    {
+        var s = App.Settings;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return $"orixnotch://theme?scheme={s.ThemeScheme}&accent={s.ThemeAccent}&glass={(s.Glass ? 1 : 0)}" +
+               $"&strength={s.GlassStrength.ToString("0.##", inv)}&tint={(s.GlassWallpaperTint ? 1 : 0)}&size={s.NotchSize}";
+    }
+
+    /// <summary>A look read from a link; unknown or missing values keep the current ones.</summary>
+    public sealed record Look(string Scheme, string Accent, bool Glass, double Strength, bool Tint, string Size);
+
+    public static Look Current()
+    {
+        var s = App.Settings;
+        return new(s.ThemeScheme, s.ThemeAccent, s.Glass, s.GlassStrength, s.GlassWallpaperTint, s.NotchSize);
+    }
+
+    /// <summary>Reads a theme link's values against the known schemes, accents and sizes (it can come from anyone).</summary>
+    public static Look Parse(Func<string, string> get, Look current)
+    {
+        var scheme = get("scheme");
+        var accent = get("accent");
+        var size = get("size");
+        return new(
+            Schemes.Any(x => x.Id == scheme) ? scheme : current.Scheme,
+            accent == AutoAccent || Accents.Any(x => x.Id == accent) ? accent : current.Accent,
+            get("glass") is "1" or "0" ? get("glass") == "1" : current.Glass,
+            double.TryParse(get("strength"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var st)
+                && st is >= 0 and <= 1 ? st : current.Strength,
+            get("tint") is "1" or "0" ? get("tint") == "1" : current.Tint,
+            Sizes.Contains(size) ? size : current.Size);
+    }
+
+    public static void ApplyLook(Look look)
+    {
+        var s = App.Settings;
+        s.ThemeScheme = look.Scheme;
+        s.ThemeAccent = look.Accent;
+        s.Glass = look.Glass;
+        s.GlassStrength = look.Strength;
+        s.GlassWallpaperTint = look.Tint;
+        s.NotchSize = look.Size;
+        _wallpaperRead = false;
+        SettingsService.Save(); // notify: the size changes the notch's layout
+        Apply();
+    }
+
+#if DEBUG
+    static ThemeService()
+    {
+        var current = new Look("midnight", "auto", false, 0.6, false, "Default");
+        var q = new Dictionary<string, string> { ["scheme"] = "frost", ["accent"] = "pink", ["glass"] = "1", ["strength"] = "0.35", ["size"] = "Large" };
+        System.Diagnostics.Debug.Assert(Parse(k => q.GetValueOrDefault(k, ""), current) == new Look("frost", "pink", true, 0.35, false, "Large"));
+        var bad = new Dictionary<string, string> { ["scheme"] = "x", ["accent"] = "<script>", ["strength"] = "9", ["size"] = "Huge" };
+        System.Diagnostics.Debug.Assert(Parse(k => bad.GetValueOrDefault(k, ""), current) == current);
+    }
+#endif
+
     /// <summary>The notch is frosted glass (Settings › Appearance › Glass).</summary>
     public static bool IsGlass => App.Settings.Glass;
 

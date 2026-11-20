@@ -73,6 +73,10 @@ public static partial class CommandRegistry
                 break;
         }
 
+        // A pasted orixnotch:// link (a shared look, a peek…) runs as if clicked.
+        if (ExternalCommands.ParseLink(text) is not null)
+            return [new(AppIcon.Link, "Open this link", text.Length > 60 ? text[..59] + "…" : text, () => ExternalCommands.Run([text]))];
+
         if (ParseConversion(text) is { } conv)
         {
             var result = ConverterView.ConvertCurrency(conv.Amount, conv.From, conv.To);

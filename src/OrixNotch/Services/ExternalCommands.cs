@@ -97,6 +97,9 @@ public static class ExternalCommands
                 else if (ToolRegistry.All.Any(t => t.Id == link.Target)) window.OpenTool(link.Target);
                 else window.Expand(activate: true);
                 break;
+            case "theme":
+                window.ApplyThemeLink(link);
+                break;
             case "palette":
                 window.ShowPalette();
                 break;

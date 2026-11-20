@@ -37,7 +37,7 @@ public partial class SettingsView : UserControl, IToolView
     {
         ["general"] = ["Add a daily goal", "Rest your eyes", "Stand up", "Drink water", "Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief", "Quiet during focus"],
-        ["appearance"] = ["Follow album art", "Tint from wallpaper", "Music bars follow the sound"],
+        ["appearance"] = ["Follow album art", "Tint from wallpaper", "Music bars follow the sound", "Share this look"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Command palette", "Explain selected text", "Start focus", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
@@ -755,6 +755,8 @@ public partial class SettingsView : UserControl, IToolView
         var looks = new System.Windows.Controls.Primitives.UniformGrid { Columns = ThemeService.Looks.Length, Margin = new Thickness(-4, 0, -4, 0) };
         for (var i = 0; i < ThemeService.Looks.Length; i++) looks.Children.Add(LookCard(i));
         Page.Children.Add(looks);
+        Row("Share this look", "Copies a link with your colours, glass and size. Anyone with OrixNotch can open it to try it, with Undo.",
+            IconButton(AppIcon.Copy, "Copy link", true, () => ClipboardService.Instance.CopyQuiet(ThemeService.ShareLink())));
 
         Section("COLOR SCHEME");
         var schemes = new WrapPanel();
