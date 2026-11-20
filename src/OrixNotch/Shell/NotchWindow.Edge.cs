@@ -29,8 +29,8 @@ public partial class NotchWindow
 
     private double _expandedW = 720;
 
-    /// <summary>The closed side tab's thickness: the same as the top notch's height.</summary>
-    private double SideDepth => Math.Max(36, _collapsedH);
+    /// <summary>The closed side tab's thickness: a little more than the top notch's height, room for its values.</summary>
+    private double SideDepth => Math.Max(46, _collapsedH + 10);
 
     /// <summary>How far the closed notch reaches into the screen on the current edge.</summary>
     private double ClosedDepth => Vertical ? SideDepth : _collapsedH; // the open panel's width, the depth of an open side notch
@@ -141,14 +141,14 @@ public partial class NotchWindow
         };
         if (activity is { } icon)
         {
-            var glyph = new HeroIcon { Kind = icon, Width = 16, Height = 16, Margin = new Thickness(0, 6, 0, 6) };
+            var glyph = new HeroIcon { Kind = icon, Width = 19, Height = 19, Margin = new Thickness(0, 6, 0, 6) };
             glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
             SideLayer.Children.Add(glyph);
         }
         foreach (var item in IdleInfoService.Instance.Items.Where(i => i.Id is not ("timeline" or "avatar")).Take(6))
             SideLayer.Children.Add(SideCell(item));
         if (SideLayer.Children.Count == 0)
-            SideLayer.Children.Add(new BrandMark { Variant = BrandVariant.Gradient, Width = 16, Height = 16, Margin = new Thickness(0, 6, 0, 6) });
+            SideLayer.Children.Add(new BrandMark { Variant = BrandVariant.Gradient, Width = 19, Height = 19, Margin = new Thickness(0, 6, 0, 6) });
 
         SideLayer.Measure(new Size(SideDepth, double.PositiveInfinity));
         var length = Math.Ceiling(SideLayer.DesiredSize.Height + 14);
@@ -170,17 +170,17 @@ public partial class NotchWindow
         FrameworkElement cell;
         if (item.Percent is { } level)
         {
-            const double size = 26;
+            const double size = 32;
             var grid = new Grid { Width = size, Height = size };
-            var track = new System.Windows.Shapes.Ellipse { Margin = new Thickness(2.5), StrokeThickness = 2.5 };
+            var track = new System.Windows.Shapes.Ellipse { Margin = new Thickness(3), StrokeThickness = 3 };
             track.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "TrackBrush");
             grid.Children.Add(track);
             grid.Children.Add(new System.Windows.Shapes.Path
             {
-                Data = BuildMiniArc(level, size, 3.75), Stroke = brush, StrokeThickness = 2.5,
+                Data = BuildMiniArc(level, size, 4.5), Stroke = brush, StrokeThickness = 3,
                 StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
             });
-            var inner = IdleGlyph(item, 12);
+            var inner = IdleGlyph(item, 15);
             if (inner is Control glyph && item.Logo is null) glyph.Foreground = brush;
             inner.HorizontalAlignment = HorizontalAlignment.Center;
             inner.VerticalAlignment = VerticalAlignment.Center;
@@ -190,14 +190,14 @@ public partial class NotchWindow
         else
         {
             var stack = new StackPanel();
-            var glyph = IdleGlyph(item, 15);
+            var glyph = IdleGlyph(item, 18);
             glyph.HorizontalAlignment = HorizontalAlignment.Center;
             stack.Children.Add(glyph);
             if (item.Short is { Length: > 0 } text)
             {
                 var value = new TextBlock
                 {
-                    Text = text, FontSize = 10, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center,
+                    Text = text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center,
                     Margin = new Thickness(0, 2, 0, 0), Foreground = item.ValueBrush == "SubTextBrush" ? (Brush)Application.Current.Resources["SubTextBrush"] : brush,
                 };
                 stack.Children.Add(value);
