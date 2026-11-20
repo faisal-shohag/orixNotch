@@ -142,6 +142,9 @@ public sealed class AppSettings
     public double GlassStrength { get; set; } = 0.6;   // 0 = nearly clear, 1 = nearly opaque tint
     public bool GlassWallpaperTint { get; set; }       // the glass takes on the wallpaper's colour
 
+    /// <summary>"Notch" (ears into the edge), "Tab" (attached, no ears), "Island" (floating capsule), "Pill" (slim floating capsule).</summary>
+    public string NotchShape { get; set; } = "Notch";
+
     /// <summary>Small, Default, Large or ExtraLarge — size of the closed notch.</summary>
     public string NotchSize { get; set; } = "Default";
 

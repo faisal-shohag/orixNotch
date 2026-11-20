@@ -36,6 +36,11 @@ public partial class NotchWindow : Window
     private const double RadiusCollapsed = 10;
     private const double RadiusExpanded = 26;
 
+    /// <summary>Island and Pill float this far from the screen edge; Notch and Tab touch it.</summary>
+    private const double IslandGap = 8;
+
+    private static bool Floating => App.Settings.NotchShape is "Island" or "Pill";
+
     public const string SettingsId = "settings";
 
     private readonly Spring _width = new(207);
@@ -541,6 +546,7 @@ public partial class NotchWindow : Window
             "ExtraLarge" => (266.0, 46.0),
             _ => (207.0, 38.0), // ≈ a MacBook hardware notch
         };
+        if (App.Settings.NotchShape == "Pill") _collapsedH -= 6; // the minimal pill is slimmer while closed
         _timerW = _idleW + 44;
         _musicW = _idleW + 150;
         CollapsedLayer.Height = _collapsedH;
@@ -934,8 +940,11 @@ public partial class NotchWindow : Window
         // While an alert is showing the notch only grows to PeekH: track that separately.
         var peek = _peeking && !_expanded ? Math.Clamp((h - _collapsedH) / (_peekH - _collapsedH), 0, 1) : 0;
         var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((h - _collapsedH) / Math.Max(1, _expandedH - _collapsedH), 0, 1);
-        var ear = EarCollapsed + (EarExpanded - EarCollapsed) * p;
-        var radius = RadiusCollapsed + (RadiusExpanded - RadiusCollapsed) * p + (RadiusPeek - RadiusCollapsed) * peek;
+        var floating = Floating;
+        var ear = App.Settings.NotchShape == "Notch" ? EarCollapsed + (EarExpanded - EarCollapsed) * p : 0;
+        // A floating island is a capsule while closed (radius = half its height), rounding like the others as it opens.
+        var closedRadius = floating ? h / 2 : RadiusCollapsed;
+        var radius = closedRadius + (RadiusExpanded - closedRadius) * p + (RadiusPeek - closedRadius) * peek;
 
         MoveWindowBy(_shove.Value);
 
@@ -951,7 +960,10 @@ public partial class NotchWindow : Window
         Body.Width = w;
         Body.Height = h;
         Body.Clip = new RectangleGeometry(new Rect(0, 0, w, h), radius, radius);
-        Shape.Data = NotchGeometry(w, h, ear, radius, EarExpanded - ear);
+        Pill.Margin = new Thickness(0, floating ? IslandGap : 0, 0, 0);
+        Shape.Data = floating
+            ? new RectangleGeometry(new Rect(EarExpanded, 0, w, h), Math.Min(radius, h / 2), Math.Min(radius, h / 2))
+            : NotchGeometry(w, h, ear, radius, EarExpanded - ear);
         if (GlassSheen.Visibility == Visibility.Visible) GlassSheen.Data = GlassGlow.Data = Shape.Data;
 
         // Content materialises out of a blur as the notch opens (and dissolves back on close).
@@ -971,7 +983,8 @@ public partial class NotchWindow : Window
         _openP = p;
         ApplyShapeEffect();
 
-        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1);
+        // The minimal Pill keeps its closed content quieter.
+        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1) * (App.Settings.NotchShape == "Pill" ? 0.75 : 1);
         CollapsedLayer.Visibility = p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
         PeekLayer.Opacity = Math.Clamp((peek - 0.5) * 2, 0, 1);
         PeekLayer.Visibility = _peeking && peek > 0.5 ? Visibility.Visible : Visibility.Collapsed;
@@ -2446,6 +2459,8 @@ public partial class NotchWindow : Window
         ApplyNotchSize();
         BuildTabs();
         Place();
+        _shapeDrawn = default; // the shape or edge may have changed: redraw even at the same size
+        ApplyGeometry();
         ApplyCaptureAffinity();
     }
 
