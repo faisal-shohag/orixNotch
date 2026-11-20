@@ -51,7 +51,7 @@ public sealed partial class EventReminderService : ObservableObject
     /// <summary>Call after events.json changes (the Calendar does on add/delete).</summary>
     public void Reload()
     {
-        _events = CalendarEvent.LoadAll();
+        _events = CalendarEvent.LoadAll().Where(e => e.Feed != CalendarEvent.AiFeed).ToList(); // a limit reset isn't a meeting
         Check();
     }
 

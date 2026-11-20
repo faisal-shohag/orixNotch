@@ -66,6 +66,11 @@ internal static class Win32
     public static extern int SHQueryUserNotificationState(out int state);
 
     [DllImport("kernel32.dll")]
+    public static extern uint SetThreadExecutionState(uint flags);
+
+    public const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x1, ES_DISPLAY_REQUIRED = 0x2;
+
+    [DllImport("kernel32.dll")]
     public static extern bool GetSystemTimes(out long idleTime, out long kernelTime, out long userTime);
 
     [DllImport("kernel32.dll")]

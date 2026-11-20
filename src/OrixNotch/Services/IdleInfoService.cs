@@ -27,6 +27,7 @@ public sealed class IdleInfoService
         ("date", "Date"),
         ("weather", "Weather"),
         ("nextEvent", "Next event"),
+        ("timeline", "Day timeline"),
         ("todos", "Open to-dos"),
         ("battery", "Battery"),
         ("cpu", "CPU & memory"),
@@ -37,6 +38,8 @@ public sealed class IdleInfoService
         ("shelf", "Shelf"),
         ("streak", "Focus sessions today"),
         ("avatar", "Profile picture"),
+        ("mic", "Microphone muted"),
+        ("awake", "Keep awake"),
     ];
 
     public static readonly string[] Layouts = ["Rotate", "Split", "Row"];
@@ -99,7 +102,7 @@ public sealed class IdleInfoService
 
         if (sel.Contains("cpu")) SampleCpu();
         if (sel.Contains("network")) SampleNetwork();
-        if ((sel.Contains("todos") || sel.Contains("nextEvent")) && now - _lastFiles > TimeSpan.FromSeconds(30))
+        if ((sel.Contains("todos") || sel.Contains("nextEvent") || sel.Contains("timeline")) && now - _lastFiles > TimeSpan.FromSeconds(30))
         {
             _lastFiles = now;
             LoadFiles();
@@ -143,6 +146,9 @@ public sealed class IdleInfoService
                 return _nextEvent is { } e
                     ? new IdleItem(id, AppIcon.CalendarDays, $"{e.Title} {(DateTime.Today + _nextAt).ToString("t", culture)}")
                     : new IdleItem(id, AppIcon.CalendarDays, "No more events", "SubTextBrush");
+            case "timeline":
+                // Drawn by NotchWindow (DayTimeline); the value only sizes the notch.
+                return new IdleItem(id, AppIcon.Sun, "");
             case "todos":
                 return new IdleItem(id, AppIcon.ListBullet, _openTodos == 0 ? "All done" : $"{_openTodos} open",
                     _openTodos == 0 ? "SubTextBrush" : "TextBrush");
@@ -185,6 +191,11 @@ public sealed class IdleInfoService
                 return new IdleItem(id, AppIcon.Fire, done == 1 ? "1 today" : $"{done} today");
             case "avatar":
                 return new IdleItem(id, null, ProfileService.FirstName, Avatar: true);
+            // Shown only while on, so the closed notch says when you're muted or kept awake.
+            case "mic":
+                return VolumeService.Instance.MicMuted ? new IdleItem(id, AppIcon.MicrophoneOff, "Muted", "BadBrush") : null;
+            case "awake":
+                return KeepAwakeService.On ? new IdleItem(id, AppIcon.Coffee, "Awake") : null;
         }
         return null;
     }
@@ -273,18 +284,22 @@ public sealed class IdleInfoService
         _openTodos = Storage.Load<List<TodoItem>>("todos.json").Count(t => !t.Done);
         var now = DateTime.Now.TimeOfDay;
         _nextEvent = null;
-        foreach (var e in CalendarEvent.LoadAll()
-                     .Where(e => e.Date.Date == DateTime.Today)
-                     .OrderBy(e => e.Time))
+        var times = new List<TimeSpan>();
+        foreach (var e in CalendarEvent.LoadAll().Where(e => e.Date.Date == DateTime.Today))
         {
-            if (CalendarView.TryParseTime(e.Time, out var t) && t >= now)
+            if (!CalendarView.TryParseTime(e.Time, out var t)) continue; // all-day events have no place on the line
+            times.Add(t);
+            if (t >= now && (_nextEvent is null || t < _nextAt))
             {
                 _nextEvent = e;
                 _nextAt = t;
-                break;
             }
         }
+        TodayEvents = times;
     }
+
+    /// <summary>Start times of today's timed events (Day timeline).</summary>
+    public IReadOnlyList<TimeSpan> TodayEvents { get; private set; } = [];
 
     private async Task FetchWeatherAsync()
     {

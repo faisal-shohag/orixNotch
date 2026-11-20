@@ -25,6 +25,23 @@ public sealed class TrayService : IDisposable
         menu.Items.Add("Open panel  (Ctrl+Alt+N)", null, (_, _) => window.Expand(activate: true));
         menu.Items.Add("Settings…", null, (_, _) => window.OpenTool(NotchWindow.SettingsId));
         menu.Items.Add(new Forms.ToolStripSeparator());
+        var quiet = new Forms.ToolStripMenuItem("Quiet for 1 hour", null, (_, _) => NotchWindow.ToggleQuietHour());
+        menu.Items.Add(quiet);
+        var mic = new Forms.ToolStripMenuItem("Mute microphone", null, (_, _) => VolumeService.Instance.ToggleMic());
+        menu.Items.Add(mic);
+        var awake = new Forms.ToolStripMenuItem("Keep awake", null, (_, _) => KeepAwakeService.Toggle());
+        menu.Items.Add(awake);
+        menu.Opening += (_, _) =>
+        {
+            mic.Visible = VolumeService.Instance.HasMic;
+            mic.Checked = VolumeService.Instance.MicMuted;
+            awake.Checked = KeepAwakeService.On;
+            quiet.Text = NotchWindow.QuietSnoozed() ? "End quiet hour"
+                : NotchWindow.QuietScheduled() ? $"Quiet hours until {App.Settings.QuietTo}"
+                : "Quiet for 1 hour";
+            quiet.Enabled = !NotchWindow.QuietScheduled() || NotchWindow.QuietSnoozed();
+        };
+        menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit OrixNotch", null, (_, _) => Application.Current.Shutdown());
         _icon.ContextMenuStrip = menu;
         _icon.MouseClick += (_, e) =>

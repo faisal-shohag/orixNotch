@@ -71,6 +71,13 @@ public sealed class AppSettings
     public List<string> NotifySeenApps { get; set; } = new();   // "aumid|display name", newest first
     public bool NotifyKeepHistory { get; set; } = true;         // save them for the Notifications tool
 
+    // Quiet hours: alerts are counted instead of shown, then summed up in one alert when quiet ends
+    public bool QuietEnabled { get; set; }
+    public string QuietFrom { get; set; } = "22:00";
+    public string QuietTo { get; set; } = "07:00";
+    public bool QuietLetRemindersThrough { get; set; } = true;
+    public DateTime? QuietUntil { get; set; }        // tray "Quiet for 1 hour"
+
     // AI tools nearing their session / weekly limit peek out of the closed notch
     public bool AiLimitAlerts { get; set; } = true;
     public List<string> AiLimitAlerted { get; set; } = new();   // "tool|window|threshold|resetTicks" already shown
@@ -88,9 +95,11 @@ public sealed class AppSettings
     /// <summary>Look for a newer version (Microsoft Store or GitHub releases) and say so once per version.</summary>
     public bool CheckForUpdates { get; set; } = true;
     public string? UpdateNotified { get; set; }
+    public string? LastSeenVersion { get; set; }    // the "Updated to …" alert shows once per version
 
     public string ThemeScheme { get; set; } = "midnight";
     public string ThemeAccent { get; set; } = "auto"; // "auto" = the scheme's own accent
+    public bool AlbumAccent { get; set; }             // while music plays, the accent follows the cover
     public bool Glass { get; set; }                    // see-through, tinted notch with a glass sheen
     public double GlassStrength { get; set; } = 0.6;   // 0 = nearly clear, 1 = nearly opaque tint
 

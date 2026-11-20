@@ -476,6 +476,18 @@ public partial class SettingsView : UserControl, IToolView
         Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
             Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); }));
 
+        Section("QUIET HOURS");
+        var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();
+        int Slot(string t) => Math.Max(0, times.IndexOf(t));
+        Row("Quiet hours", "Hold alerts during these hours. When they end, one alert says how many you missed. The tray menu also has \"Quiet for 1 hour\".",
+            Toggle(S.QuietEnabled, v => { S.QuietEnabled = v; Save(false); }));
+        Row("From", "Quiet starts at this time.",
+            Combo(times, Slot(S.QuietFrom), i => { S.QuietFrom = times[i]; Save(false); }, 100));
+        Row("Until", "Quiet ends at this time, the next morning if it's earlier than the start.",
+            Combo(times, Slot(S.QuietTo), i => { S.QuietTo = times[i]; Save(false); }, 100));
+        Row("Let calendar reminders through", "Meeting reminders still show during quiet hours.",
+            Toggle(S.QuietLetRemindersThrough, v => { S.QuietLetRemindersThrough = v; Save(false); }));
+
         if (S.NotifySeenApps.Count > 0)
         {
             Section("SHOW NOTIFICATIONS FROM");
@@ -523,6 +535,8 @@ public partial class SettingsView : UserControl, IToolView
         var gradientAccents = new WrapPanel();
         foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) gradientAccents.Children.Add(AccentSwatch(accent));
         Page.Children.Add(gradientAccents);
+        Row("Follow album art", "While music plays, the accent takes the colour of the cover. The accent above comes back when it stops.",
+            Toggle(S.AlbumAccent, v => { S.AlbumAccent = v; Save(false); ThemeService.Apply(); }));
 
         Section("GLASS");
         var strength = new Slider { Minimum = 0, Maximum = 1, Value = S.GlassStrength, Width = 170, VerticalAlignment = VerticalAlignment.Center, IsEnabled = S.Glass };

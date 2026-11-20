@@ -90,4 +90,7 @@ public enum AppIcon
     Speaker,
     SpeakerMuted,
     Bluetooth,
+    Microphone,
+    MicrophoneOff,
+    Coffee,
 }

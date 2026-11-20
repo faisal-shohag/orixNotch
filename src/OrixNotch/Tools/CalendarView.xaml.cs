@@ -21,9 +21,27 @@ public sealed class CalendarEvent
     [JsonIgnore] public string TimeLabel => string.IsNullOrEmpty(Time) ? "All day" : Time;
     [JsonIgnore] public bool IsSubscribed => Feed is not null;
 
-    /// <summary>Events added here plus those from subscribed calendars.</summary>
+    /// <summary>Events added here plus those from subscribed calendars and AI limit resets.</summary>
     public static List<CalendarEvent> LoadAll() =>
-        [.. Storage.Load<List<CalendarEvent>>("events.json"), .. Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName)];
+        [.. Storage.Load<List<CalendarEvent>>("events.json"), .. Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName), .. AiResets()];
+
+    /// <summary><see cref="Feed"/> of the AI limit resets: read-only, and they never fire a reminder.</summary>
+    public const string AiFeed = "ai";
+
+    /// <summary>
+    /// When each AI tool's weekly limit resets, from the last usage read (none until the AI limit watcher has read
+    /// usage). Session resets are left out: several a day would bury real events.
+    /// </summary>
+    public static IEnumerable<CalendarEvent> AiResets() =>
+        (AiLimitWatcher.Instance.Latest?.Usage ?? [])
+        .Where(u => u.WeeklyResets > DateTime.Now)
+        .Select(u => new CalendarEvent
+        {
+            Date = u.WeeklyResets!.Value.Date,
+            Time = $"{u.WeeklyResets.Value.Hour:00}:{u.WeeklyResets.Value.Minute:00}",
+            Title = $"{u.Name} weekly limit resets",
+            Feed = AiFeed,
+        });
 }
 
 public partial class CalendarView : UserControl, IToolView, IEscapeHandler
@@ -31,7 +49,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
     private const string FileName = "events.json";
     private readonly List<CalendarEvent> _events = Storage.Load<List<CalendarEvent>>(FileName); // the user's own (editable)
     private List<CalendarEvent> _feed = Storage.Load<List<CalendarEvent>>(CalendarFeedService.FileName); // subscribed (read-only)
-    private IEnumerable<CalendarEvent> All => _events.Concat(_feed);
+    private IEnumerable<CalendarEvent> All => _events.Concat(_feed).Concat(CalendarEvent.AiResets());
     private DateTime _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime _selected = DateTime.Today;
 

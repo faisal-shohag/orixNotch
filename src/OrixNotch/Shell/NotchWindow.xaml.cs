@@ -136,6 +136,7 @@ public partial class NotchWindow : Window
         };
 
         NowPlayingService.Instance.PropertyChanged += OnActivityChanged;
+        ThemeService.FollowAlbumArt();
         PomodoroService.Instance.PropertyChanged += OnActivityChanged;
         CountdownService.Instance.PropertyChanged += OnActivityChanged;
         StopwatchService.Instance.PropertyChanged += OnActivityChanged;
@@ -148,6 +149,12 @@ public partial class NotchWindow : Window
         UpdateService.Instance.Available += ShowUpdatePeek;
         PowerWatcher.Instance.Alert += ShowPowerPeek;
         VolumeService.Instance.Changed += ShowVolumePeek;
+        VolumeService.Instance.MicChanged += muted =>
+            EnqueuePeek(new PeekRequest("mic", () => GlyphTile(muted ? AppIcon.MicrophoneOff : AppIcon.Microphone),
+                muted ? "Microphone muted" : "Microphone on", muted ? "No app can hear you" : "", TimeSpan.FromSeconds(2)));
+        KeepAwakeService.Changed += on =>
+            EnqueuePeek(new PeekRequest("awake", () => GlyphTile(AppIcon.Coffee),
+                on ? "Keep awake on" : "Keep awake off", on ? "The PC and screen won't sleep" : "", TimeSpan.FromSeconds(2)));
         BluetoothWatcher.Instance.Changed += ShowBluetoothPeek;
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
         NotificationHistory.Instance.Start();
@@ -158,6 +165,7 @@ public partial class NotchWindow : Window
         _trackTimer.Tick += (_, _) => ShowTrackPeek();
         // A reminder already due at launch fired its alert before we subscribed: show it once we're up.
         Dispatcher.BeginInvoke(ShowReminderPeek, DispatcherPriority.ContextIdle);
+        Dispatcher.BeginInvoke(ShowWhatsNewPeek, DispatcherPriority.ContextIdle);
         SettingsService.Changed += OnSettingsChanged;
         HotkeyService.Triggered += OnHotkey;
 
@@ -236,6 +244,12 @@ public partial class NotchWindow : Window
                 if (_expanded && _activeTool == "teleprompter") TeleprompterService.Instance.Toggle();
                 else OpenTool("teleprompter");
                 break;
+            case "mic":
+                VolumeService.Instance.ToggleMic();
+                break;
+            case "awake":
+                KeepAwakeService.Toggle();
+                break;
             default:
                 OpenTool(action);
                 break;
@@ -294,7 +308,78 @@ public partial class NotchWindow : Window
         if (!hide)
             Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0,
                 Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+        CheckQuietEnded();
+        if (!_peeking && _peekQueue.Count > 0 && !AlertsHeld()) ShowNextPeek(); // full screen ended: held alerts play now
     }
+
+    // ---------------------------------------------------------------- quiet hours
+
+    private int _quietMissed;
+    private bool _wasQuiet;
+
+    /// <summary>Whether <paramref name="now"/> falls in [from, to); a window like 22:00–07:00 crosses midnight.</summary>
+    internal static bool InWindow(TimeOnly now, TimeOnly from, TimeOnly to) =>
+        from <= to ? now >= from && now < to : now >= from || now < to;
+
+    /// <summary>Quiet hours are on now: the schedule in Settings → General, or the tray's "Quiet for 1 hour".</summary>
+    public static bool QuietActive() => QuietSnoozed() || QuietScheduled();
+
+    public static bool QuietSnoozed() => App.Settings.QuietUntil is { } until && until > DateTime.Now;
+
+    public static bool QuietScheduled()
+    {
+        var s = App.Settings;
+        return s.QuietEnabled && TimeOnly.TryParse(s.QuietFrom, out var from) && TimeOnly.TryParse(s.QuietTo, out var to)
+            && InWindow(TimeOnly.FromDateTime(DateTime.Now), from, to);
+    }
+
+    /// <summary>Tray: quiet for an hour, or end a quiet hour early.</summary>
+    public static void ToggleQuietHour()
+    {
+        App.Settings.QuietUntil = QuietSnoozed() ? null : DateTime.Now.AddHours(1);
+        SettingsService.Save(notify: false);
+        Instance?.Guard();
+    }
+
+    /// <summary>Feedback for something the user just did (volume keys, mic mute) shows even while quiet.</summary>
+    private static bool IsUserFeedback(string key) => key is "volume" or "mic" or "awake";
+
+    private bool HeldForQuiet(PeekRequest request)
+    {
+        if (IsUserFeedback(request.Key) || !QuietActive()) return false;
+        if (request.Key == ReminderPeekKey && App.Settings.QuietLetRemindersThrough) return false;
+        _quietMissed++;
+        return true;
+    }
+
+    private void CheckQuietEnded()
+    {
+        var quiet = QuietActive();
+        if (_wasQuiet && !quiet && _quietMissed > 0)
+        {
+            var n = _quietMissed;
+            _quietMissed = 0;
+            EnqueuePeek(new PeekRequest("quiet", () => GlyphTile(AppIcon.Moon),
+                n == 1 ? "1 alert while you were quiet" : $"{n} alerts while you were quiet", "Click to see notifications",
+                TimeSpan.FromSeconds(6), OnClick: () => OpenTool("notifications")));
+        }
+        if (_wasQuiet && !quiet) ShowWhatsNewPeek();
+        _wasQuiet = quiet;
+    }
+
+#if DEBUG
+    static NotchWindow()
+    {
+        static TimeOnly T(int h, int m = 0) => new(h, m);
+        System.Diagnostics.Debug.Assert(InWindow(T(23), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(InWindow(T(3), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(7), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(12), T(22), T(7)));
+        System.Diagnostics.Debug.Assert(InWindow(T(13), T(13), T(14)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(14), T(13), T(14)));
+        System.Diagnostics.Debug.Assert(!InWindow(T(9), T(9), T(9))); // equal ends: no window
+    }
+#endif
 
     // ---------------------------------------------------------------- auto-hide
 
@@ -1190,6 +1275,7 @@ public partial class NotchWindow : Window
         ["shelf"] = "00 files",
         ["aiUsage"] = "100%",
         ["weather"] = "-00°",
+        ["timeline"] = "0000000000", // the timeline is 112 px: give it the wide notch
     };
 
     private static readonly Dictionary<(string, double), double> IdleWidthCache = new();
@@ -1211,8 +1297,9 @@ public partial class NotchWindow : Window
         return width;
     }
 
-    private static TextBlock IdleValue(IdleItem item, double fontSize = 13.5, TextAlignment align = TextAlignment.Right)
+    private static FrameworkElement IdleValue(IdleItem item, double fontSize = 13.5, TextAlignment align = TextAlignment.Right)
     {
+        if (item.Id == "timeline") return new DayTimeline(IdleInfoService.Instance.TodayEvents);
         var text = new TextBlock
         {
             Text = item.Value,
@@ -1274,6 +1361,7 @@ public partial class NotchWindow : Window
 
     private void EnqueuePeek(PeekRequest request)
     {
+        if (HeldForQuiet(request)) return;
         // A newer alert with the same key (same app / same reminder) replaces the waiting one.
         _peekQueue.RemoveAll(r => r.Key == request.Key);
         // The same alert already showing (volume steps): refresh it in place.
@@ -1440,6 +1528,30 @@ public partial class NotchWindow : Window
         var sub = version.Length > 0 ? $"OrixNotch {version} · click to install" : "A new version is ready · click to install";
         EnqueuePeek(new PeekRequest("update", () => GlyphTile(AppIcon.ArrowDown), "Update available", sub,
             TimeSpan.FromSeconds(8), OnClick: () => _ = UpdateService.Instance.InstallAsync()));
+    }
+
+    /// <summary>First launch after an update: say so once, and link to the release notes.</summary>
+    private void ShowWhatsNewPeek()
+    {
+        var version = UpdateService.CurrentVersion;
+        var last = App.Settings.LastSeenVersion;
+        if (last == version || QuietActive()) return; // while quiet: shown when quiet ends (CheckQuietEnded)
+        App.Settings.LastSeenVersion = version;
+        SettingsService.Save(notify: false);
+        if (SettingsService.FirstRun || ShotsDir is not null) return; // a new install gets the welcome instead
+        EnqueuePeek(new PeekRequest("whatsnew", () => GlyphTile(AppIcon.Sparkles), $"Updated to OrixNotch {version}",
+            "Click to see what's new", TimeSpan.FromSeconds(8), OnClick: () =>
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                        $"https://github.com/faisal-shohag/orixNotch/releases/tag/v{version}") { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    App.Log(ex);
+                }
+            }));
     }
 
     private void ShowPowerPeek(string title, string sub, bool charging) =>

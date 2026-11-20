@@ -115,7 +115,59 @@ public static class ThemeService
 
     public static bool IsAutoAccent => App.Settings.ThemeAccent == AutoAccent;
 
-    public static AccentColor CurrentAccent => AccentFor(CurrentScheme);
+    public static AccentColor CurrentAccent => AlbumAccent() ?? AccentFor(CurrentScheme);
+
+    /// <summary>Settings › Appearance "Follow album art": the playing song's cover colour, made vivid enough to read.</summary>
+    private static AccentColor? AlbumAccent()
+    {
+        if (!App.Settings.AlbumAccent || NowPlayingService.Instance.ArtTint is not { } tint) return null;
+        var (h, s, l) = ToHsl(tint);
+        if (s < 0.08) return null; // a grey cover has no colour to borrow
+        var light = CurrentScheme.IsLight;
+        return new AccentColor("album", "Album art",
+            FromHsl(h, Math.Max(s, 0.6), Math.Clamp(l, light ? 0.38 : 0.55, light ? 0.48 : 0.68)));
+    }
+
+    private static readonly System.Windows.Threading.DispatcherTimer AlbumDebounce = new() { Interval = TimeSpan.FromMilliseconds(500) };
+
+    /// <summary>Re-applies the accent when the cover changes (debounced: skipping tracks fires quickly).</summary>
+    public static void FollowAlbumArt()
+    {
+        AlbumDebounce.Tick += (_, _) =>
+        {
+            AlbumDebounce.Stop();
+            Apply();
+        };
+        NowPlayingService.Instance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(NowPlayingService.ArtTint) || !App.Settings.AlbumAccent) return;
+            AlbumDebounce.Stop();
+            AlbumDebounce.Start();
+        };
+    }
+
+    internal static (double H, double S, double L) ToHsl(Color c)
+    {
+        double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), l = (max + min) / 2, d = max - min;
+        if (d < 1e-6) return (0, 0, l);
+        var s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        var h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
+        return (h / 6, s, l);
+    }
+
+    internal static Color FromHsl(double h, double s, double l)
+    {
+        static double Hue(double p, double q, double t)
+        {
+            t = (t + 1) % 1;
+            return t < 1 / 6.0 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3.0 ? p + (q - p) * (2 / 3.0 - t) * 6 : p;
+        }
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        static byte B(double v) => (byte)Math.Round(Math.Clamp(v, 0, 1) * 255);
+        return Color.FromRgb(B(Hue(p, q, h + 1 / 3.0)), B(Hue(p, q, h)), B(Hue(p, q, h - 1 / 3.0)));
+    }
 
     /// <summary>The accent <paramref name="scheme"/> shows: its own while the accent is Auto, else the one picked.</summary>
     public static AccentColor AccentFor(ColorScheme scheme) =>
