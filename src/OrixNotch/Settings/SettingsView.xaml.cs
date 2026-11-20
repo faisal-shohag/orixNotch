@@ -934,7 +934,13 @@ public partial class SettingsView : UserControl, IToolView
         Row("Hide from screenshots", "Leave the notch out of screenshots, recordings and screen sharing.",
             Toggle(S.HideFromCapture, v => { S.HideFromCapture = v; Save(); }));
         Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
-            Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); }));
+            Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); Render(); }));
+        if (S.RepelCursor)
+        {
+            string[] corners = ["Tuck", "Bend"];
+            Row("Corner turn", "Chased into a screen corner, the notch moves onto the next edge. Tuck: it folds into the corner, then out along the next edge. Bend: it wraps both edges as an L while it passes.",
+                Combo(["Tuck", "Bend"], Math.Max(0, Array.IndexOf(corners, S.CornerStyle)), i => { S.CornerStyle = corners[i]; Save(false); }, 120));
+        }
 
 
         Section("HIDE FOR THESE APPS");

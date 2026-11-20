@@ -230,7 +230,7 @@ public partial class NotchWindow
     private bool _turnSwapped;
     private double _turnFromSpan, _turnToSpan;
 
-    private bool Turning => _turnTo is not null;
+    private bool Turning => _turnTo is not null || _bending;
 
     /// <summary>The edge round the corner from <paramref name="edge"/> when pushed along it, and the end it enters at.</summary>
     private static (ScreenEdge To, int Entry) NextEdge(ScreenEdge edge, int dir) => (edge, dir) switch
@@ -251,6 +251,11 @@ public partial class NotchWindow
     private void StartCornerTurn(int dir)
     {
         if (Turning) return;
+        if (BendCorners)
+        {
+            StartBend(dir); // the L-shaped alternative (NotchWindow.Bend.cs)
+            return;
+        }
         var (to, entry) = NextEdge(Edge, dir);
         _turnTo = to;
         _turnDir = dir;
@@ -295,7 +300,7 @@ public partial class NotchWindow
     }
 
     /// <summary>How tucked into the corner the outline is: 0 = its normal shape, 1 = the corner piece.</summary>
-    private double CornerAmount => !Turning ? 0 : _turnT < 0.5 ? _turnT / 0.5 : 1 - (_turnT - 0.5) / 0.5;
+    private double CornerAmount => _turnTo is null ? 0 : _turnT < 0.5 ? _turnT / 0.5 : 1 - (_turnT - 0.5) / 0.5;
 
     /// <summary>Which end of the span the corner is at, while turning (+1 the end, -1 the start).</summary>
     private int CornerEnd => _turnSwapped ? _turnEntry : _turnDir;
@@ -331,6 +336,11 @@ public partial class NotchWindow
     /// <summary>Opening mid-turn: finish it at once, on the new edge.</summary>
     private void FinishCornerTurnNow()
     {
+        if (_bending)
+        {
+            FinishBendNow();
+            return;
+        }
         if (!Turning) return;
         _turnT = 1;
         EndCornerTurn();

@@ -148,6 +148,9 @@ public sealed class AppSettings
     /// <summary>"Top", "Bottom", "Left" or "Right": the screen edge the notch sits on.</summary>
     public string NotchEdge { get; set; } = "Top";
 
+    /// <summary>How a chased notch turns a screen corner: "Tuck" (into a corner piece) or "Bend" (an L around it).</summary>
+    public string CornerStyle { get; set; } = "Tuck";
+
     /// <summary>Small, Default, Large or ExtraLarge — size of the closed notch.</summary>
     public string NotchSize { get; set; } = "Default";
 

@@ -916,7 +916,8 @@ public partial class NotchWindow : Window
         dt = Math.Min(dt, 0.05);
 
         var moving = Turning || (_dodging && Repel(dt));
-        if (Turning) StepCornerTurn(dt);
+        if (_bending) StepBend(dt);
+        else if (Turning) StepCornerTurn(dt);
 
         // Sub-step for stability on slow frames.
         var steps = (int)Math.Ceiling(dt / (1 / 240.0));
@@ -938,6 +939,7 @@ public partial class NotchWindow : Window
 
     private void ApplyGeometry()
     {
+        if (_bending) return; // the L-shaped corner turn draws itself (NotchWindow.Bend.cs)
         var w = Math.Max(Vertical ? 20 : 60, _width.Value); // the side tab is narrower than any top notch
         var h = Math.Max(20, _height.Value);
 
