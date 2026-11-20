@@ -804,11 +804,12 @@ public partial class SettingsView : UserControl, IToolView
         Page.Children.Add(accents);
 
         Section("GRADIENT ACCENTS");
-        var gradientAccents = new WrapPanel();
+        var gradientAccents = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) }; // room before "Follow album art"
         foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) gradientAccents.Children.Add(AccentSwatch(accent));
         Page.Children.Add(gradientAccents);
         Row("Follow album art", "While music plays, the accent takes the colour of the cover. The accent above comes back when it stops.",
             Toggle(S.AlbumAccent, v => { S.AlbumAccent = v; Save(false); ThemeService.Apply(); }));
+        Section("EFFECTS");
         Row("Celebrations", "Confetti when you finish your last to-do, a cheer at focus streaks (3, 7, 14, 30 days…), and birthdays from your calendar.",
             Toggle(S.Celebrations, v => { S.Celebrations = v; Save(false); }));
         Row("Glow", "A soft glow around the closed notch: the album's colour while music plays, your accent during a focus session, red while you're on a call.",
