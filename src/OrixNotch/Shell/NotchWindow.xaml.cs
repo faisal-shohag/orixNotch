@@ -550,6 +550,7 @@ public partial class NotchWindow : Window
             _repelTimer.Stop();
             SetShove(0);
             if (EventReminderService.Instance.IsActive) ShowTool("calendar");
+            else if (ContextTool() is { } matched) ShowTool(matched, remember: false);
             else ShowTool(_activeTool is SettingsId or PaletteId ? App.Settings.LastTool : _activeTool);
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
@@ -1424,8 +1425,10 @@ public partial class NotchWindow : Window
     private readonly DispatcherTimer _peekTimer = new();
 
     /// <summary>One alert: what to draw, and what dismiss / click do.</summary>
+    private sealed record PeekAction(AppIcon Icon, string Tip, Action Run);
+
     private sealed record PeekRequest(string Key, Func<FrameworkElement> Icon, string Title, string Sub,
-        TimeSpan Duration, Action? OnDismiss = null, Action? OnClick = null)
+        TimeSpan Duration, Action? OnDismiss = null, Action? OnClick = null, PeekAction[]? Actions = null)
     {
         public DateTime QueuedAt { get; } = DateTime.Now;
     }
@@ -1434,7 +1437,7 @@ public partial class NotchWindow : Window
     private readonly List<PeekRequest> _peekQueue = new();
     private PeekRequest? _currentPeek;
 
-    private double PeekW => Math.Max(_musicW + 40, 400);
+    private double PeekW => Math.Max(_musicW + 40, 400) + (_currentPeek?.Actions?.Length ?? 0) * 32;
 
     private void EnqueuePeek(PeekRequest request)
     {
@@ -1480,6 +1483,25 @@ public partial class NotchWindow : Window
         PeekTitle.Text = OneLine(next.Title);
         PeekSub.Text = OneLine(next.Sub);
         PeekSub.Visibility = string.IsNullOrWhiteSpace(next.Sub) ? Visibility.Collapsed : Visibility.Visible;
+        PeekActions.Children.Clear();
+        foreach (var action in next.Actions ?? [])
+        {
+            var button = new Button
+            {
+                Width = 28, Height = 28, Margin = new Thickness(0, 0, 4, 0), ToolTip = action.Tip,
+                Style = (Style)FindResource("IconButton"), Content = new HeroIcon { Kind = action.Icon, Width = 13, Height = 13 },
+            };
+            button.SetResourceReference(BackgroundProperty, "HoverBrush");
+            button.SetResourceReference(ForegroundProperty, "TextBrush");
+            System.Windows.Automation.AutomationProperties.SetName(button, action.Tip);
+            button.Click += (_, e) =>
+            {
+                e.Handled = true;
+                EndPeek();
+                action.Run();
+            };
+            PeekActions.Children.Add(button);
+        }
         _peekH = SubWraps(PeekSub.Text) ? PeekH2 : PeekH;
         if (_peeking)
         {
@@ -1679,19 +1701,29 @@ public partial class NotchWindow : Window
     private void ShowDownloadPeek(string path)
     {
         if (!App.Settings.DownloadAlerts) return;
+        void ShowInFolder() => Run("explorer.exe", $"/select,\"{path}\"");
+        var actions = new List<PeekAction>
+        {
+            new(AppIcon.File, "Open", () => Run(path, null)),
+            new(AppIcon.Folder, "Show in folder", ShowInFolder),
+        };
+        if (PhoneTransferService.Instance.IsRunning)
+            actions.Add(new(AppIcon.DevicePhone, "Send to phone", () => PhoneTransferService.Instance.Send([path])));
+        actions.Add(new(AppIcon.ArchiveBox, "Add to Shelf", () => ShelfService.Instance.AddFiles([path], owned: false)));
         EnqueuePeek(new PeekRequest("download:" + path, () => GlyphTile(AppIcon.ArrowDown), "Download finished",
-            System.IO.Path.GetFileName(path) + " · click to show", TimeSpan.FromSeconds(4),
-            OnClick: () =>
+            System.IO.Path.GetFileName(path), TimeSpan.FromSeconds(6), OnClick: ShowInFolder, Actions: actions.ToArray()));
+
+        static void Run(string file, string? args)
+        {
+            try
             {
-                try
-                {
-                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
-                }
-                catch (Exception ex)
-                {
-                    App.Log(ex);
-                }
-            }));
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(file, args ?? "") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Log(ex);
+            }
+        }
     }
 
     /// <summary>A screenshot was saved: its thumbnail; clicking parks it on the Shelf (drag it out or send it to the phone from there).</summary>
@@ -1900,6 +1932,7 @@ public partial class NotchWindow : Window
         };
         tab.Checked += (_, _) =>
         {
+            if (id == _activeTool) return; // Present() checks the tab of the tool it just showed
             if (id == SettingsId) ShowSettings();
             else ShowTool(id);
         };
@@ -1934,7 +1967,16 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>Shows a tool. <paramref name="backTo"/> makes it a sub-page with a back chevron.</summary>
-    public void ShowTool(string id, string? backTo = null)
+    /// <summary>Automations › "Match the app in front": the tool set for the app in front, if any.</summary>
+    private static string? ContextTool()
+    {
+        var s = App.Settings;
+        return s.ContextTools && ForegroundAppWatcher.Instance.Current is { } app && s.AppTools.TryGetValue(app, out var tool)
+            && ToolRegistry.All.Any(t => t.Id == tool) ? tool : null;
+    }
+
+    /// <param name="remember">False for a tool picked for the app in front: the next plain open returns to the last one chosen.</param>
+    public void ShowTool(string id, string? backTo = null, bool remember = true)
     {
         if (id == SettingsId)
         {
@@ -1946,7 +1988,7 @@ public partial class NotchWindow : Window
         _backTarget = backTo;
         Present(def.Id, def.Name, def.Width, def.Height, () => def.Create(), showTabs: true);
 
-        if (App.Settings.LastTool != def.Id)
+        if (remember && App.Settings.LastTool != def.Id)
         {
             App.Settings.LastTool = def.Id;
             SettingsService.Save(notify: false);

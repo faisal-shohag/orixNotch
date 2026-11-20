@@ -36,7 +36,7 @@ public partial class SettingsView : UserControl, IToolView
     private static readonly Dictionary<string, string[]> NewRows = new()
     {
         ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
-        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links"],
+        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Command palette", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
@@ -614,6 +614,43 @@ public partial class SettingsView : UserControl, IToolView
             }));
         Row("Subscription renewals", "An alert 2 days before something in the Subscriptions tool renews.",
             Toggle(S.SubscriptionAlerts, v => { S.SubscriptionAlerts = v; Save(false); }));
+
+        Section("OPEN THE RIGHT TOOL");
+        Row("Match the app in front", "Opening the notch shows the tool you picked for the app you're using, like AI Usage in your code editor.",
+            Toggle(S.ContextTools, v => { S.ContextTools = v; Save(false); Render(); }));
+        if (S.ContextTools)
+        {
+            foreach (var (app, toolId) in S.AppTools.ToList())
+            {
+                var name = app;
+                var tool = ToolRegistry.All.FirstOrDefault(t => t.Id == toolId);
+                Row(AppLabel(name), $"Opens {tool?.Name ?? toolId}",
+                    new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                    {
+                        S.AppTools.Remove(name);
+                        Save(false);
+                        Render();
+                    }));
+            }
+            var apps = RunningApps().Where(a => !S.AppTools.ContainsKey(a.Name)).ToList();
+            var appPick = Combo(apps.Select(a => a.Label), apps.Count > 0 ? 0 : -1, _ => { }, width: 150);
+            var tools = ToolRegistry.All.Where(t => t.Id != "home").ToList();
+            var toolPick = Combo(tools.Select(t => t.Name), 0, _ => { }, width: 130);
+            toolPick.Margin = new Thickness(6, 0, 0, 0);
+            var add = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = apps.Count > 0 };
+            add.Click += (_, _) =>
+            {
+                if (appPick.SelectedIndex < 0) return;
+                S.AppTools[apps[appPick.SelectedIndex].Name] = tools[toolPick.SelectedIndex].Id;
+                Save(false);
+                Render();
+            };
+            var addRow = new StackPanel { Orientation = Orientation.Horizontal };
+            addRow.Children.Add(appPick);
+            addRow.Children.Add(toolPick);
+            addRow.Children.Add(add);
+            Row("Add an app", "Pick a running app and the tool to show for it.", addRow);
+        }
 
         Section("FOR SCRIPTS");
         var api = PeekApiService.Instance;

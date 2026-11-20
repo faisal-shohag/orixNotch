@@ -131,6 +131,8 @@
                                    LineHeight="16" LineStackingStrategy="BlockLineHeight" MaxHeight="32" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Optional buttons for this alert (Open, Show in folder…) -->
+                        <StackPanel x:Name="PeekActions" Orientation="Horizontal" VerticalAlignment="Center" />
                         <!-- "+2": more alerts waiting; dismissing shows the next -->
                         <TextBlock x:Name="PeekMore" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SubTextBrush}"
                                    VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed" />
