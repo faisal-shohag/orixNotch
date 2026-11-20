@@ -71,10 +71,10 @@ You are granted a non-exclusive, non-transferable license to install and use Ori
 1. The software is provided "as is", without warranty of any kind.
 2. You may not reverse-engineer, decompile, or redistribute the software except as permitted by the Microsoft Store terms.
 3. All data created by the app (settings, notes, clipboard history, shelf items) is stored locally on your device and remains yours.
-4. Optional features (Weather, Stocks, Lyrics, Ask AI) use third-party services subject to their own terms: Open-Meteo, Yahoo Finance, LRCLIB, Anthropic, OpenAI, Google, and DeepSeek. API keys you provide are stored encrypted on your device.
+4. Optional features (Weather, Stocks, Lyrics, Currency rates, Ask AI) use third-party services subject to their own terms: Open-Meteo, Yahoo Finance, LRCLIB, ExchangeRate-API, Anthropic, OpenAI, Google, and DeepSeek. Calendar sync fetches only the calendar links you subscribe to. API keys and calendar links you provide are stored encrypted on your device.
 5. In no event shall the author be liable for any damages arising from the use of this software.
 
-Bundled third-party components retain their own licenses: Inter typeface (SIL Open Font License 1.1) and Heroicons (MIT License).
+Bundled third-party components retain their own licenses: Inter typeface (SIL Open Font License 1.1), and Heroicons, Tabler Icons and Phosphor Icons (MIT License).
 
 ## runFullTrust justification (Submission options, max 500 chars)
 OrixNotch is a WPF (.NET 8) desktop app packaged as MSIX, so it needs runFullTrust to run. It shows a topmost overlay window at the top of the screen that expands into a tools panel. Win32 APIs are used for the overlay window and hover tracking, the Ctrl+Alt+N hotkey, tray icon, clipboard history, drag-and-drop, media controls, CPU/memory/network stats and run-at-login (StartupTask). No services, drivers or elevation; all data stays local.
