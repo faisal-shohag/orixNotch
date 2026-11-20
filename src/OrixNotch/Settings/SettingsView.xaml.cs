@@ -19,11 +19,14 @@ public partial class SettingsView : UserControl, IToolView
     internal static readonly (string Id, string Name, AppIcon Icon, string? Section)[] Pages =
     [
         ("general", "General", AppIcon.Adjust, null),
-        ("automations", "Automations", AppIcon.Bolt, null),
         ("appearance", "Appearance", AppIcon.Palette, null),
-        ("display", "Display", AppIcon.Monitor, "NOTCH"),
+        ("display", "Notch", AppIcon.Monitor, "NOTCH"),
         ("tabs", "Tabs", AppIcon.Grid, null),
         ("keyboard", "Keyboard", AppIcon.Keyboard, null),
+        ("notifications", "Notifications", AppIcon.Bell, "ALERTS"),
+        ("quiet", "Quiet & focus", AppIcon.Moon, null),
+        ("calendar", "Calendar", AppIcon.CalendarDays, null),
+        ("automations", "Automations", AppIcon.Bolt, null),
         ("ai", "Ask AI", AppIcon.Sparkles, "TOOLS"),
         ("data", "Clipboard & Shelf", AppIcon.ClipboardList, null),
         ("about", "About", AppIcon.Info, ""),
@@ -35,8 +38,10 @@ public partial class SettingsView : UserControl, IToolView
     /// </summary>
     private static readonly Dictionary<string, string[]> NewRows = new()
     {
-        ["general"] = ["Add a daily goal", "Rest your eyes", "Stand up", "Drink water", "Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
-        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief", "Quiet during focus"],
+        ["notifications"] = ["Screenshots", "Calendar reminders", "Focus sessions", "Timers", "Subscription renewals"],
+        ["quiet"] = ["Quiet hours", "Quiet while on a call", "Quiet during focus", "Focus events start a session", "Track screen time", "Evening summary", "Add a daily goal", "Rest your eyes", "Stand up", "Drink water"],
+        ["calendar"] = ["Pause music", "Join from the reminder"],
+        ["automations"] = ["Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper", "Music bars follow the sound", "Share this look", "Celebrations", "Glow", "Reset theme"],
         ["display"] = ["Position", "Shape", "Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Command palette", "Explain selected text", "Start focus", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
@@ -48,6 +53,7 @@ public partial class SettingsView : UserControl, IToolView
     {
         ["general"] = "#8E8E93", ["automations"] = "#FF9F0A", ["appearance"] = "#0A84FF", ["display"] = "#30B0C7",
         ["tabs"] = "#5E5CE6", ["keyboard"] = "#636366", ["ai"] = "#BF5AF2", ["data"] = "#34C759", ["about"] = "#0B0E17",
+        ["notifications"] = "#FF453A", ["quiet"] = "#5856D6", ["calendar"] = "#FF6B3D",
     };
 
     /// <summary>A page's icon on a small coloured rounded tile (About: the OrixNotch mark on the brand's dark tile).</summary>
@@ -205,6 +211,9 @@ public partial class SettingsView : UserControl, IToolView
         switch (id)
         {
             case "general": RenderGeneral(); break;
+            case "notifications": RenderNotifications(); break;
+            case "quiet": RenderQuietFocus(); break;
+            case "calendar": RenderCalendar(); break;
             case "automations": RenderAutomations(); break;
             case "appearance": RenderAppearance(); break;
             case "display": RenderDisplay(); break;
@@ -357,67 +366,15 @@ public partial class SettingsView : UserControl, IToolView
 
     private void RenderGeneral()
     {
-        Title("General", "How OrixNotch behaves on your PC.");
+        Title("General", "You, and how OrixNotch starts and opens.");
         Section("PROFILE");
         Row("Name", "Shown in the greeting on Home.",
             TextInput(App.Settings.DisplayName, Environment.UserName, ProfileService.SetName));
         Row("Picture", ProfileService.HasAvatar ? "Shown next to the greeting. Click Home's avatar to change it too." : "Pick a photo for Home; otherwise your initial is shown.",
             AvatarPicker());
 
-        Section("BEHAVIOR");
-        Row("Open notch", "Open when the pointer rests on the notch, or only when you click it.",
-            Combo(["On Hover", "On Click"], (int)S.OpenMode, i => { S.OpenMode = (OpenMode)i; Save(); }));
-        Row("Hover delay", "How long the pointer rests on the notch before it opens.",
-            Combo(["Instant", "Fast", "Normal", "Slow"], Array.IndexOf(new[] { 0, 80, 150, 400 }, S.HoverDelayMs) is var d and >= 0 ? d : 2,
-                i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(); }));
-        string[] visibility = ["Always", "WhenActive", "HoverOnly"];
-        Row("Show notch", "Always, only while music, a timer or a reminder is on, or only when the pointer touches the top edge of the screen.",
-            Combo(["Always", "When active", "On top-edge hover"], Math.Max(0, Array.IndexOf(visibility, S.NotchVisibility)),
-                i => { S.NotchVisibility = visibility[i]; Save(); }));
-        Row("Hide in full screen", "Stay out of the way of full-screen apps and videos; touch the top edge to bring it back. Games hide it completely.",
-            Toggle(S.HideInFullscreen, v => { S.HideInFullscreen = v; Save(); }));
-        Row("Hide from screenshots", "Leave the notch out of screenshots, recordings and screen sharing.",
-            Toggle(S.HideFromCapture, v => { S.HideFromCapture = v; Save(); }));
-        Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
-            Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); }));
 
-        Section("HIDE FOR THESE APPS");
-        foreach (var listed in S.HideForApps.ToList())
-        {
-            var name = listed;
-            Row(AppLabel(name), $"{name}.exe",
-                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
-                {
-                    S.HideForApps.Remove(name);
-                    Save();
-                    Render();
-                }));
-        }
-        var running = RunningApps().Where(a => !S.HideForApps.Contains(a.Name)).ToList();
-        var pick = Combo(running.Select(a => a.Label), running.Count > 0 ? 0 : -1, _ => { }, width: 200);
-        var addApp = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = running.Count > 0 };
-        addApp.Click += (_, _) =>
-        {
-            if (pick.SelectedIndex < 0) return;
-            S.HideForApps.Add(running[pick.SelectedIndex].Name);
-            Save();
-            Render();
-        };
-        var addAppRow = new StackPanel { Orientation = Orientation.Horizontal };
-        addAppRow.Children.Add(pick);
-        addAppRow.Children.Add(addApp);
-        Row("Add an app", "Hide the notch while it's in front, on any display.", addAppRow);
-        if (S.HideForApps.Count > 0)
-        {
-            Row("When one is in front", "Fade out (touch the top edge to bring it back), or hide completely.",
-                Combo(["Fade out", "Hide completely"], S.HideForAppsMode == "Hidden" ? 1 : 0,
-                    i => { S.HideForAppsMode = i == 1 ? "Hidden" : "Fade"; Save(); }, width: 170));
-            Row("Alerts", "Hold alerts until you switch away, or let them pop out anyway.",
-                Combo(["Wait until I switch away", "Show them anyway"], S.HideForAppsHoldAlerts ? 0 : 1,
-                    i => { S.HideForAppsHoldAlerts = i == 0; Save(); }, width: 200));
-        }
-
-        Section("SYSTEM");
+        Section("START & OPEN");
         Row("Open at login", StartupService.DisabledByUser
                 ? "Turned off in Task Manager → Startup apps. Turn it back on there."
                 : "Start OrixNotch when you sign in to Windows.",
@@ -429,25 +386,96 @@ public partial class SettingsView : UserControl, IToolView
                 if (on != v) Render(); // Windows refused (e.g. disabled in Task Manager): show why
             }));
 
-        Section("NOW PLAYING");
+        Row("Open notch", "Open when the pointer rests on the notch, or only when you click it.",
+            Combo(["On Hover", "On Click"], (int)S.OpenMode, i => { S.OpenMode = (OpenMode)i; Save(); }));
+        Row("Hover delay", "How long the pointer rests on the notch before it opens.",
+            Combo(["Instant", "Fast", "Normal", "Slow"], Array.IndexOf(new[] { 0, 80, 150, 400 }, S.HoverDelayMs) is var d and >= 0 ? d : 2,
+                i => { S.HoverDelayMs = new[] { 0, 80, 150, 400 }[i]; Save(); }));
+
+        Section("MUSIC");
         Row("Lyrics", "Show time-synced lyrics on Now Playing. Songs are looked up on LRCLIB, a free lyrics library.",
             Toggle(S.LyricsEnabled, v => { S.LyricsEnabled = v; Save(false); }));
+
+        Section("UNITS");
+        Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; Save(false); }));
+    }
+
+    private void RenderNotifications()
+    {
+        Title("Notifications", "What pops out of the notch, and how it sounds.");
+        Section("WINDOWS NOTIFICATIONS");
+        var watcher = NotificationWatcher.Instance;
+        var source = watcher.Source == NotificationWatcher.SourceKind.Listener
+            ? "Uses Windows notification access."
+            : "Reads Windows' notification history on this PC (read-only).";
+        Row("Show on the notch", $"Windows notifications from other apps pop out of the closed notch. {source}",
+            Toggle(S.NotifyEnabled, async v =>
+            {
+                S.NotifyEnabled = v;
+                Save(false);
+                if (v) await watcher.RequestAccessAsync();
+                watcher.Reconfigure();
+                Render();
+            }));
+        if (S.NotifyEnabled)
+        {
+            if (watcher.Problem is { } problem)
+                Row("Not receiving notifications", problem, new Button { Content = "Open settings" }.Also(b =>
+                    b.Click += (_, _) => Process.Start(new ProcessStartInfo(watcher.ProblemSettingsUri) { UseShellExecute = true })));
+            Row("Show message text", "Off shows only the app name, for privacy when sharing your screen.",
+                Toggle(S.NotifyShowText, v => { S.NotifyShowText = v; Save(false); }));
+            Row("Keep history", "Save notifications on this PC to read later in the Notifications tool (last 30 days). Clear them there anytime.",
+                Toggle(S.NotifyKeepHistory, v => { S.NotifyKeepHistory = v; Save(false); }));
+            Row("Windows banners", "Windows still shows its own pop-up too. Turn banners off per app in Windows Settings if you only want the notch.",
+                new Button { Content = "Open settings" }.Also(b =>
+                    b.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true })));
+        }
+
+        if (S.NotifyEnabled && S.NotifySeenApps.Count > 0)
+        {
+            Section("SHOW NOTIFICATIONS FROM");
+            foreach (var entry in S.NotifySeenApps)
+            {
+                var parts = entry.Split('|', 2);
+                var appId = parts[0];
+                var name = parts.Length > 1 ? parts[1] : appId;
+                Row(name, "Recently sent a notification.",
+                    Toggle(!S.NotifyMutedApps.Contains(appId, StringComparer.OrdinalIgnoreCase), on =>
+                    {
+                        S.NotifyMutedApps.RemoveAll(a => a.Equals(appId, StringComparison.OrdinalIgnoreCase));
+                        if (!on) S.NotifyMutedApps.Add(appId);
+                        Save(false);
+                    }));
+            }
+        }
+
+        Section("DEVICE ALERTS");
+        Row("Battery alerts", "Show on the notch when the charger is plugged in or pulled, and when the battery drops to 20% and 10%.",
+            Toggle(S.PowerAlerts, v => { S.PowerAlerts = v; Save(false); }));
+        Row("Volume on the notch", "Show the volume level on the notch when it changes. Windows still shows its own volume pop-up too.",
+            Toggle(S.VolumeHud, v => { S.VolumeHud = v; Save(false); }));
+        Row("Bluetooth devices", "Show on the notch when paired headphones, a mouse or other Bluetooth device connects or disconnects.",
+            Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); }));
+        Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
+            Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); }));
+        Row("Screenshots", "Show a preview on the notch when you take a screenshot (Win + PrtScn, Snipping Tool). Click it to put it on the Shelf.",
+            Toggle(S.ScreenshotAlerts, v => { S.ScreenshotAlerts = v; Save(false); }));
+
         Row("Announce new songs", "Pop the new song's art and title out of the notch for a moment when the track changes.",
             Toggle(S.TrackPeek, v => { S.TrackPeek = v; Save(false); }));
 
-        Section("CALENDAR REMINDERS");
-        Row("Event reminders", "Show upcoming calendar events on the closed notch.",
-            Toggle(S.RemindersEnabled, v => { S.RemindersEnabled = v; Save(false); EventReminderService.Instance.Recheck(); }));
-        var leads = new[] { 5, 10, 15, 30, 60 };
-        Row("Remind me", "How long before an event the reminder appears.",
-            Combo(["5 minutes before", "10 minutes before", "15 minutes before", "30 minutes before", "1 hour before"],
-                Math.Max(0, Array.IndexOf(leads, S.ReminderLeadMin)),
-                i => { S.ReminderLeadMin = leads[i]; Save(false); EventReminderService.Instance.Recheck(); }, width: 170));
-        var lingers = new[] { 1, 5, 10, 15 };
-        Row("Keep showing", "How long the reminder stays once the event has started.",
-            Combo(["1 minute", "5 minutes", "10 minutes", "15 minutes"],
-                Math.Max(0, Array.IndexOf(lingers, S.ReminderLingerMin)),
-                i => { S.ReminderLingerMin = lingers[i]; Save(false); EventReminderService.Instance.Recheck(); }));
+
+        Section("HEADS-UPS");
+        Row("AI usage alerts", "A gentle heads-up on the notch when Claude Code, Codex, Cursor or another AI tool reaches 80% and 95% of its session or weekly limit.",
+            Toggle(S.AiLimitAlerts, v =>
+            {
+                S.AiLimitAlerts = v;
+                Save(false);
+                AiLimitWatcher.Instance.Reconfigure();
+            }));
+        Row("Subscription renewals", "An alert 2 days before something in the Subscriptions tool renews.",
+            Toggle(S.SubscriptionAlerts, v => { S.SubscriptionAlerts = v; Save(false); }));
+
 
         Section("SOUNDS");
         SoundRow("Calendar reminders", "Plays when a reminder appears and when the event starts.",
@@ -456,6 +484,144 @@ public partial class SettingsView : UserControl, IToolView
             () => S.PomodoroSound, v => { S.PomodoroSound = v; PomodoroService.Instance.RefreshSettings(); });
         SoundRow("Timers", "Plays when a countdown finishes.",
             () => S.TimerSound, v => S.TimerSound = v);
+
+    }
+
+    private void RenderQuietFocus()
+    {
+        Title("Quiet & focus", "Hold alerts when you need calm, focus sessions, and a healthy screen day.");
+        Section("QUIET HOURS");
+        var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();
+        int Slot(string t) => Math.Max(0, times.IndexOf(t));
+        Row("Quiet hours", "Hold alerts during these hours. When they end, one alert says how many you missed. The tray menu also has \"Quiet for 1 hour\".",
+            Toggle(S.QuietEnabled, v => { S.QuietEnabled = v; Save(false); Render(); }));
+        if (S.QuietEnabled)
+        {
+            Row("From", "Quiet starts at this time.",
+                Combo(times, Slot(S.QuietFrom), i => { S.QuietFrom = times[i]; Save(false); }, 100));
+            Row("Until", "Quiet ends at this time, the next morning if it's earlier than the start.",
+                Combo(times, Slot(S.QuietTo), i => { S.QuietTo = times[i]; Save(false); }, 100));
+            Row("Let calendar reminders through", "Meeting reminders still show during quiet hours.",
+                Toggle(S.QuietLetRemindersThrough, v => { S.QuietLetRemindersThrough = v; Save(false); }));
+        }
+
+        Section("QUIET AUTOMATICALLY");
+        Row("Quiet while on a call", "Holds alerts while any app (including your browser) is using the microphone or camera, then sums them up afterwards.",
+            Toggle(S.AutoQuietOnMic, v => { S.AutoQuietOnMic = v; Save(false); }));
+
+        Row("Quiet during focus", "Alerts wait while a focus session runs, then one alert sums them up. Reminders follow your quiet hours setting.",
+            Toggle(S.FocusQuiet, v => { S.FocusQuiet = v; Save(false); }));
+
+        Section("FOCUS");
+        Row("Focus events start a session", "A calendar event with \"Focus\" in its name starts a Pomodoro focus session when it begins.",
+            Toggle(S.AutoFocusEvents, v => { S.AutoFocusEvents = v; Save(false); }));
+
+
+        Section("SCREEN TIME");
+        Row("Track screen time", "Counts how long each app is in front while you use the PC, for the Screen Time tool. Kept only on this PC for 60 days.",
+            Toggle(S.ScreenTimeEnabled, v => { ScreenTimeService.Instance.SetEnabled(v); Render(); }));
+        if (S.ScreenTimeEnabled)
+        {
+            var hours = Enumerable.Range(17, 7).ToArray(); // 5 PM – 11 PM
+            Row("Evening summary", "One alert with the day's screen time and the app you used most.",
+                Toggle(S.ScreenTimeSummary, v => { S.ScreenTimeSummary = v; Save(false); }));
+            Row("Summary at", "When the evening summary shows.",
+                Combo(hours.Select(h => DateTime.Today.AddHours(h).ToString("t", System.Globalization.CultureInfo.CurrentCulture)),
+                    Math.Max(0, Array.IndexOf(hours, S.ScreenTimeSummaryHour)), i => { S.ScreenTimeSummaryHour = hours[i]; Save(false); }));
+        }
+
+        Section("DAILY GOALS");
+        var st = ScreenTimeService.Instance;
+        foreach (var (app, minutes) in S.ScreenTimeGoals.ToList())
+        {
+            var name = app;
+            Row(st.DisplayName(name), $"An alert after {CommandRegistry.FormatMinutes(minutes)} a day",
+                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                {
+                    S.ScreenTimeGoals.Remove(name);
+                    Save(false);
+                    Render();
+                }));
+        }
+        // Apps used recently or running now, most used first.
+        var goalApps = Enumerable.Range(0, 7).SelectMany(i => st.Day(DateTime.Today.AddDays(-i))).GroupBy(x => x.App)
+            .OrderByDescending(g => g.Sum(x => x.Seconds)).Select(g => g.Key)
+            .Concat(RunningApps().Select(a => a.Name)).Distinct().Where(a => !S.ScreenTimeGoals.ContainsKey(a)).ToList();
+        var goalPick = Combo(goalApps.Select(st.DisplayName), goalApps.Count > 0 ? 0 : -1, _ => { }, width: 170);
+        int[] goalMinutes = [15, 30, 45, 60, 90, 120, 180, 240];
+        var goalLength = Combo(goalMinutes.Select(CommandRegistry.FormatMinutes), 3, _ => { }, width: 100);
+        goalLength.Margin = new Thickness(6, 0, 0, 0);
+        var addGoal = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = goalApps.Count > 0 };
+        addGoal.Click += (_, _) =>
+        {
+            if (goalPick.SelectedIndex < 0) return;
+            S.ScreenTimeGoals[goalApps[goalPick.SelectedIndex]] = goalMinutes[goalLength.SelectedIndex];
+            if (!S.ScreenTimeEnabled) st.SetEnabled(true); // a goal needs tracking
+            Save(false);
+            Render();
+        };
+        var goalRow = new StackPanel { Orientation = Orientation.Horizontal };
+        goalRow.Children.Add(goalPick);
+        goalRow.Children.Add(goalLength);
+        goalRow.Children.Add(addGoal);
+        Row("Add a daily goal", "A gentle alert once a day when an app passes its time. Apps only; websites aren't counted separately.", goalRow);
+
+
+        Section("BREAKS");
+        foreach (var kind in BreakService.Kinds)
+        {
+            var id = kind.Id;
+            var (title, what) = id switch
+            {
+                "eyes" => ("Rest your eyes", "Every 20 minutes: look 20 feet (6 m) away for 20 seconds."),
+                "stand" => ("Stand up", "After an hour at the screen."),
+                _ => ("Drink water", "Every hour and a half."),
+            };
+            Row(title, what + " Only time you're using the PC counts, and a few minutes away resets it. Waits out full screen, quiet hours and focus.",
+                Toggle(BreakService.IsOn(id), v =>
+                {
+                    S.BreakReminders.Remove(id);
+                    if (v) S.BreakReminders.Add(id);
+                    Save(false);
+                    BreakService.Instance.Reconfigure();
+                }));
+        }
+
+    }
+
+    private void RenderCalendar()
+    {
+        Title("Calendar", "Reminders before events, help with meetings, and calendars you subscribe to.");
+        Section("REMINDERS");
+        Row("Event reminders", "Show upcoming calendar events on the closed notch.",
+            Toggle(S.RemindersEnabled, v => { S.RemindersEnabled = v; Save(false); EventReminderService.Instance.Recheck(); Render(); }));
+        if (S.RemindersEnabled)
+        {
+            var leads = new[] { 5, 10, 15, 30, 60 };
+            Row("Remind me", "How long before an event the reminder appears.",
+                Combo(["5 minutes before", "10 minutes before", "15 minutes before", "30 minutes before", "1 hour before"],
+                    Math.Max(0, Array.IndexOf(leads, S.ReminderLeadMin)),
+                    i => { S.ReminderLeadMin = leads[i]; Save(false); EventReminderService.Instance.Recheck(); }, width: 170));
+            var lingers = new[] { 1, 5, 10, 15 };
+            Row("Keep showing", "How long the reminder stays once the event has started.",
+                Combo(["1 minute", "5 minutes", "10 minutes", "15 minutes"],
+                    Math.Max(0, Array.IndexOf(lingers, S.ReminderLingerMin)),
+                    i => { S.ReminderLingerMin = lingers[i]; Save(false); EventReminderService.Instance.Recheck(); }));
+        }
+
+        Section("MEETINGS");
+        Row("Pause music", "Pauses what's playing shortly before a calendar event starts.",
+            Toggle(S.AutoPauseMusic, v => { S.AutoPauseMusic = v; Save(false); Render(); }));
+        if (S.AutoPauseMusic)
+        {
+            var pauseLeads = new[] { 0, 1, 2, 5 };
+            Row("Pause it", "How long before the event.",
+                Combo(["When it starts", "1 minute before", "2 minutes before", "5 minutes before"], Math.Max(0, Array.IndexOf(pauseLeads, S.AutoPauseLeadMin)),
+                    i => { S.AutoPauseLeadMin = pauseLeads[i]; Save(false); }, 170));
+        }
+        Row("Join from the reminder", "When a subscribed calendar's event has a Meet, Zoom, Teams or Webex link, clicking its reminder opens the meeting.",
+            Toggle(S.AutoJoinLink, v => { S.AutoJoinLink = v; Save(false); }));
+
 
         Section("SUBSCRIBED CALENDARS");
         var feeds = CalendarFeedService.Instance;
@@ -523,179 +689,11 @@ public partial class SettingsView : UserControl, IToolView
         Row("Add a calendar", feeds.Status.Length > 0 ? feeds.Status : "Google, Outlook or iCloud link.",
             addRow, footer: help);
 
-        Section("NOTIFICATIONS");
-        var watcher = NotificationWatcher.Instance;
-        var source = watcher.Source == NotificationWatcher.SourceKind.Listener
-            ? "Uses Windows notification access."
-            : "Reads Windows' notification history on this PC (read-only).";
-        Row("Show on the notch", $"Windows notifications from other apps pop out of the closed notch. {source}",
-            Toggle(S.NotifyEnabled, async v =>
-            {
-                S.NotifyEnabled = v;
-                Save(false);
-                if (v) await watcher.RequestAccessAsync();
-                watcher.Reconfigure();
-                Render();
-            }));
-        if (watcher.Problem is { } problem)
-            Row("Not receiving notifications", problem, new Button { Content = "Open settings" }.Also(b =>
-                b.Click += (_, _) => Process.Start(new ProcessStartInfo(watcher.ProblemSettingsUri) { UseShellExecute = true })));
-        Row("Show message text", "Off shows only the app name, for privacy when sharing your screen.",
-            Toggle(S.NotifyShowText, v => { S.NotifyShowText = v; Save(false); }));
-        Row("Keep history", "Save notifications on this PC to read later in the Notifications tool (last 30 days). Clear them there anytime.",
-            Toggle(S.NotifyKeepHistory, v => { S.NotifyKeepHistory = v; Save(false); }));
-        Row("Windows banners", "Windows still shows its own pop-up too. Turn banners off per app in Windows Settings if you only want the notch.",
-            new Button { Content = "Open settings" }.Also(b =>
-                b.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true })));
-        Row("AI usage alerts", "A gentle heads-up on the notch when Claude Code, Codex, Cursor or another AI tool reaches 80% and 95% of its session or weekly limit.",
-            Toggle(S.AiLimitAlerts, v =>
-            {
-                S.AiLimitAlerts = v;
-                Save(false);
-                AiLimitWatcher.Instance.Reconfigure();
-            }));
-        Row("Battery alerts", "Show on the notch when the charger is plugged in or pulled, and when the battery drops to 20% and 10%.",
-            Toggle(S.PowerAlerts, v => { S.PowerAlerts = v; Save(false); }));
-        Row("Volume on the notch", "Show the volume level on the notch when it changes. Windows still shows its own volume pop-up too.",
-            Toggle(S.VolumeHud, v => { S.VolumeHud = v; Save(false); }));
-        Row("Bluetooth devices", "Show on the notch when paired headphones, a mouse or other Bluetooth device connects or disconnects.",
-            Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); }));
-        Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
-            Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); }));
-        Row("Screenshots", "Show a preview on the notch when you take a screenshot (Win + PrtScn, Snipping Tool). Click it to put it on the Shelf.",
-            Toggle(S.ScreenshotAlerts, v => { S.ScreenshotAlerts = v; Save(false); }));
-
-        Section("SCREEN TIME");
-        Row("Track screen time", "Counts how long each app is in front while you use the PC, for the Screen Time tool. Kept only on this PC for 60 days.",
-            Toggle(S.ScreenTimeEnabled, v => ScreenTimeService.Instance.SetEnabled(v)));
-        var hours = Enumerable.Range(17, 7).ToArray(); // 5 PM – 11 PM
-        Row("Evening summary", "One alert with the day's screen time and the app you used most.",
-            Toggle(S.ScreenTimeSummary, v => { S.ScreenTimeSummary = v; Save(false); }));
-        Row("Summary at", "When the evening summary shows.",
-            Combo(hours.Select(h => DateTime.Today.AddHours(h).ToString("t", System.Globalization.CultureInfo.CurrentCulture)),
-                Math.Max(0, Array.IndexOf(hours, S.ScreenTimeSummaryHour)), i => { S.ScreenTimeSummaryHour = hours[i]; Save(false); }));
-
-        Section("DAILY GOALS");
-        var st = ScreenTimeService.Instance;
-        foreach (var (app, minutes) in S.ScreenTimeGoals.ToList())
-        {
-            var name = app;
-            Row(st.DisplayName(name), $"An alert after {CommandRegistry.FormatMinutes(minutes)} a day",
-                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
-                {
-                    S.ScreenTimeGoals.Remove(name);
-                    Save(false);
-                    Render();
-                }));
-        }
-        // Apps used recently or running now, most used first.
-        var goalApps = Enumerable.Range(0, 7).SelectMany(i => st.Day(DateTime.Today.AddDays(-i))).GroupBy(x => x.App)
-            .OrderByDescending(g => g.Sum(x => x.Seconds)).Select(g => g.Key)
-            .Concat(RunningApps().Select(a => a.Name)).Distinct().Where(a => !S.ScreenTimeGoals.ContainsKey(a)).ToList();
-        var goalPick = Combo(goalApps.Select(st.DisplayName), goalApps.Count > 0 ? 0 : -1, _ => { }, width: 170);
-        int[] goalMinutes = [15, 30, 45, 60, 90, 120, 180, 240];
-        var goalLength = Combo(goalMinutes.Select(CommandRegistry.FormatMinutes), 3, _ => { }, width: 100);
-        goalLength.Margin = new Thickness(6, 0, 0, 0);
-        var addGoal = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = goalApps.Count > 0 };
-        addGoal.Click += (_, _) =>
-        {
-            if (goalPick.SelectedIndex < 0) return;
-            S.ScreenTimeGoals[goalApps[goalPick.SelectedIndex]] = goalMinutes[goalLength.SelectedIndex];
-            if (!S.ScreenTimeEnabled) st.SetEnabled(true); // a goal needs tracking
-            Save(false);
-            Render();
-        };
-        var goalRow = new StackPanel { Orientation = Orientation.Horizontal };
-        goalRow.Children.Add(goalPick);
-        goalRow.Children.Add(goalLength);
-        goalRow.Children.Add(addGoal);
-        Row("Add a daily goal", "A gentle alert once a day when an app passes its time. Apps only; websites aren't counted separately.", goalRow);
-
-        Section("BREAKS");
-        foreach (var kind in BreakService.Kinds)
-        {
-            var id = kind.Id;
-            var (title, what) = id switch
-            {
-                "eyes" => ("Rest your eyes", "Every 20 minutes: look 20 feet (6 m) away for 20 seconds."),
-                "stand" => ("Stand up", "After an hour at the screen."),
-                _ => ("Drink water", "Every hour and a half."),
-            };
-            Row(title, what + " Only time you're using the PC counts, and a few minutes away resets it. Waits out full screen, quiet hours and focus.",
-                Toggle(BreakService.IsOn(id), v =>
-                {
-                    S.BreakReminders.Remove(id);
-                    if (v) S.BreakReminders.Add(id);
-                    Save(false);
-                    BreakService.Instance.Reconfigure();
-                }));
-        }
-
-        Section("QUIET HOURS");
-        var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();
-        int Slot(string t) => Math.Max(0, times.IndexOf(t));
-        Row("Quiet hours", "Hold alerts during these hours. When they end, one alert says how many you missed. The tray menu also has \"Quiet for 1 hour\".",
-            Toggle(S.QuietEnabled, v => { S.QuietEnabled = v; Save(false); }));
-        Row("From", "Quiet starts at this time.",
-            Combo(times, Slot(S.QuietFrom), i => { S.QuietFrom = times[i]; Save(false); }, 100));
-        Row("Until", "Quiet ends at this time, the next morning if it's earlier than the start.",
-            Combo(times, Slot(S.QuietTo), i => { S.QuietTo = times[i]; Save(false); }, 100));
-        Row("Let calendar reminders through", "Meeting reminders still show during quiet hours.",
-            Toggle(S.QuietLetRemindersThrough, v => { S.QuietLetRemindersThrough = v; Save(false); }));
-
-        if (S.NotifySeenApps.Count > 0)
-        {
-            Section("SHOW NOTIFICATIONS FROM");
-            foreach (var entry in S.NotifySeenApps)
-            {
-                var parts = entry.Split('|', 2);
-                var appId = parts[0];
-                var name = parts.Length > 1 ? parts[1] : appId;
-                Row(name, "Recently sent a notification.",
-                    Toggle(!S.NotifyMutedApps.Contains(appId, StringComparer.OrdinalIgnoreCase), on =>
-                    {
-                        S.NotifyMutedApps.RemoveAll(a => a.Equals(appId, StringComparison.OrdinalIgnoreCase));
-                        if (!on) S.NotifyMutedApps.Add(appId);
-                        Save(false);
-                    }));
-            }
-        }
     }
 
     private void RenderAutomations()
     {
         Title("Automations", "Small things OrixNotch does for you, each with its own switch.");
-
-        Section("BEFORE A MEETING");
-        Row("Pause music", "Pauses what's playing shortly before a calendar event starts.",
-            Toggle(S.AutoPauseMusic, v => { S.AutoPauseMusic = v; Save(false); }));
-        var leads = new[] { 0, 1, 2, 5 };
-        Row("Pause it", "How long before the event.",
-            Combo(["When it starts", "1 minute before", "2 minutes before", "5 minutes before"], Math.Max(0, Array.IndexOf(leads, S.AutoPauseLeadMin)),
-                i => { S.AutoPauseLeadMin = leads[i]; Save(false); }, 170));
-        Row("Join from the reminder", "When a subscribed calendar's event has a Meet, Zoom, Teams or Webex link, clicking its reminder opens the meeting.",
-            Toggle(S.AutoJoinLink, v => { S.AutoJoinLink = v; Save(false); }));
-
-        Section("DURING A CALL");
-        Row("Quiet while on a call", "Holds alerts while any app (including your browser) is using the microphone or camera, then sums them up afterwards.",
-            Toggle(S.AutoQuietOnMic, v => { S.AutoQuietOnMic = v; Save(false); }));
-
-        Section("FOCUS");
-        Row("Quiet during focus", "Alerts wait while a focus session runs, then one alert sums them up. Reminders follow your quiet hours setting.",
-            Toggle(S.FocusQuiet, v => { S.FocusQuiet = v; Save(false); }));
-        Row("Focus events start a session", "A calendar event with \"Focus\" in its name starts a Pomodoro focus session when it begins.",
-            Toggle(S.AutoFocusEvents, v => { S.AutoFocusEvents = v; Save(false); }));
-
-        Section("HEADS-UPS");
-        Row("AI usage alerts", "A heads-up when Claude Code, Codex, Cursor or another AI tool reaches 80% and 95% of its limit.",
-            Toggle(S.AiLimitAlerts, v =>
-            {
-                S.AiLimitAlerts = v;
-                Save(false);
-                AiLimitWatcher.Instance.Reconfigure();
-            }));
-        Row("Subscription renewals", "An alert 2 days before something in the Subscriptions tool renews.",
-            Toggle(S.SubscriptionAlerts, v => { S.SubscriptionAlerts = v; Save(false); }));
 
         Section("MORNING");
         Row("Morning brief", "When you first unlock your PC each day, the notch opens for a few seconds on the weather, your next event, open to-dos, AI usage and a stock. Not during quiet hours.",
@@ -774,7 +772,7 @@ public partial class SettingsView : UserControl, IToolView
 
     private void RenderAppearance()
     {
-        Title("Appearance", "Color scheme and accent. Changes apply instantly.");
+        Title("Appearance", "Colours, accent, glass and effects. Changes apply instantly.");
         Section("LOOKS");
         var looks = new System.Windows.Controls.Primitives.UniformGrid { Columns = ThemeService.Looks.Length, Margin = new Thickness(-4, 0, -4, 12) }; // room before "Share this look"
         for (var i = 0; i < ThemeService.Looks.Length; i++) looks.Children.Add(LookCard(i));
@@ -784,17 +782,13 @@ public partial class SettingsView : UserControl, IToolView
         Row("Share this look", "Copies a link with your colours, glass and size. Anyone with OrixNotch can open it to try it, with Undo.",
             IconButton(AppIcon.Copy, "Copy link", true, () => ClipboardService.Instance.CopyQuiet(ThemeService.ShareLink())));
 
-        Section("COLOR SCHEME");
+        Section("COLORS");
         var schemes = new WrapPanel();
         schemes.Children.Add(SchemeCard(ThemeService.Schemes.First(s => s.Id == (SystemToggles.DarkMode ? "coral" : "coral-light")),
             ThemeService.SystemScheme, "System"));
-        foreach (var scheme in ThemeService.Schemes.Where(s => !s.IsGradient)) schemes.Children.Add(SchemeCard(scheme));
+        // Solid schemes, then the gradient ones (their previews show the fade), in one grid.
+        foreach (var scheme in ThemeService.Schemes.OrderBy(s => s.IsGradient)) schemes.Children.Add(SchemeCard(scheme));
         Page.Children.Add(schemes);
-
-        Section("GRADIENT SCHEMES");
-        var gradientSchemes = new WrapPanel();
-        foreach (var scheme in ThemeService.Schemes.Where(s => s.IsGradient)) gradientSchemes.Children.Add(SchemeCard(scheme));
-        Page.Children.Add(gradientSchemes);
 
         Section("ACCENT");
         Page.Children.Add(new TextBlock
@@ -805,12 +799,13 @@ public partial class SettingsView : UserControl, IToolView
         var accents = new WrapPanel();
         accents.Children.Add(AutoAccentSwatch());
         foreach (var accent in ThemeService.Accents.Where(a => !a.IsGradient)) accents.Children.Add(AccentSwatch(accent));
+        // A thin divider, then the gradient accents, in the same row.
+        var divider = new Border { Width = 1, Height = 18, Margin = new Thickness(6, 5, 8, 9), VerticalAlignment = VerticalAlignment.Top };
+        divider.SetResourceReference(Border.BackgroundProperty, "StrokeBrush");
+        accents.Children.Add(divider);
+        foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) accents.Children.Add(AccentSwatch(accent));
+        accents.Margin = new Thickness(0, 0, 0, 8); // room before "Follow album art"
         Page.Children.Add(accents);
-
-        Section("GRADIENT ACCENTS");
-        var gradientAccents = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) }; // room before "Follow album art"
-        foreach (var accent in ThemeService.Accents.Where(a => a.IsGradient)) gradientAccents.Children.Add(AccentSwatch(accent));
-        Page.Children.Add(gradientAccents);
         Row("Follow album art", "While music plays, the accent takes the colour of the cover. The accent above comes back when it stops.",
             Toggle(S.AlbumAccent, v => { S.AlbumAccent = v; Save(false); ThemeService.Apply(); }));
         Section("EFFECTS");
@@ -846,13 +841,14 @@ public partial class SettingsView : UserControl, IToolView
             saveLater.Start();
         };
         Row("Glass", "See-through notch tinted by the color scheme.",
-            Toggle(S.Glass, v => { S.Glass = v; Save(false); ThemeService.Apply(); }));
-        Row("Tint", "Lower shows more of the background; higher keeps text easier to read.", strength);
-        Row("Tint from wallpaper", "The glass takes on the colour of your wallpaper behind the notch, and follows it when the wallpaper changes.",
-            Toggle(S.GlassWallpaperTint, v => { S.GlassWallpaperTint = v; Save(false); ThemeService.Apply(); }));
+            Toggle(S.Glass, v => { S.Glass = v; Save(false); ThemeService.Apply(); Render(); }));
+        if (S.Glass) // the tint only matters with glass on
+        {
+            Row("Tint", "Lower shows more of the background; higher keeps text easier to read.", strength);
+            Row("Tint from wallpaper", "The glass takes on the colour of your wallpaper behind the notch, and follows it when the wallpaper changes.",
+                Toggle(S.GlassWallpaperTint, v => { S.GlassWallpaperTint = v; Save(false); ThemeService.Apply(); }));
+        }
 
-        Section("UNITS");
-        Row("Fahrenheit & mph", "Weather units.", Toggle(S.UseFahrenheit, v => { S.UseFahrenheit = v; Save(false); }));
     }
 
     /// <summary>A one-click look: a small notch preview in its colours, and its name.</summary>
@@ -902,8 +898,8 @@ public partial class SettingsView : UserControl, IToolView
 
     private void RenderDisplay()
     {
-        Title("Display", "Where the notch appears, and how big it is.");
-        Section("LOCATION");
+        Title("Notch", "Where it sits, its shape and size, when it shows, and what it shows when closed.");
+        Section("POSITION & SHAPE");
         var screens = Forms.Screen.AllScreens;
         // Combo items: primary (-1), follow the pointer (-2), then each display by index.
         var names = new List<string> { "Primary display", "Follow the pointer" };
@@ -918,19 +914,67 @@ public partial class SettingsView : UserControl, IToolView
             Combo(["Top", "Bottom", "Left", "Right"], Math.Max(0, Array.IndexOf(edges, S.NotchEdge)),
                 i => { S.NotchEdge = edges[i]; Save(); }, 160));
 
-        Section("SHAPE");
         string[] shapes = ["Notch", "Tab", "Island", "Pill"];
         Row("Shape", "Notch: curves into the screen edge like a MacBook. Tab: attached, square to the edge. Island: a floating capsule like the iPhone's. Pill: a slimmer, quieter island.",
             Combo(["Notch", "Tab", "Island", "Pill (minimal)"], Math.Max(0, Array.IndexOf(shapes, S.NotchShape)),
                 i => { S.NotchShape = shapes[i]; Save(); }, 160));
 
-        Section("SIZE");
         var sizes = new[] { "Small", "Default", "Large", "ExtraLarge" };
         Row("Notch size", "Size of the closed notch. Larger is easier to hit on big monitors.",
             Combo(["Small", "Default", "Large", "Extra Large"], Math.Max(0, Array.IndexOf(sizes, S.NotchSize)),
                 i => { S.NotchSize = sizes[i]; Save(); }));
 
-        Section("IDLE NOTCH");
+        Section("WHEN IT SHOWS");
+        string[] visibility = ["Always", "WhenActive", "HoverOnly"];
+        Row("Show notch", "Always, only while music, a timer or a reminder is on, or only when the pointer touches the top edge of the screen.",
+            Combo(["Always", "When active", "On top-edge hover"], Math.Max(0, Array.IndexOf(visibility, S.NotchVisibility)),
+                i => { S.NotchVisibility = visibility[i]; Save(); }));
+        Row("Hide in full screen", "Stay out of the way of full-screen apps and videos; touch the top edge to bring it back. Games hide it completely.",
+            Toggle(S.HideInFullscreen, v => { S.HideInFullscreen = v; Save(); }));
+        Row("Hide from screenshots", "Leave the notch out of screenshots, recordings and screen sharing.",
+            Toggle(S.HideFromCapture, v => { S.HideFromCapture = v; Save(); }));
+        Row("Dodge the pointer", "The closed notch dodges the pointer from the sides. Catch it from below.",
+            Toggle(S.RepelCursor, v => { S.RepelCursor = v; Save(); }));
+
+
+        Section("HIDE FOR THESE APPS");
+        foreach (var listed in S.HideForApps.ToList())
+        {
+            var name = listed;
+            Row(AppLabel(name), $"{name}.exe",
+                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                {
+                    S.HideForApps.Remove(name);
+                    Save();
+                    Render();
+                }));
+        }
+        var running = RunningApps().Where(a => !S.HideForApps.Contains(a.Name)).ToList();
+        var pick = Combo(running.Select(a => a.Label), running.Count > 0 ? 0 : -1, _ => { }, width: 200);
+        var addApp = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = running.Count > 0 };
+        addApp.Click += (_, _) =>
+        {
+            if (pick.SelectedIndex < 0) return;
+            S.HideForApps.Add(running[pick.SelectedIndex].Name);
+            Save();
+            Render();
+        };
+        var addAppRow = new StackPanel { Orientation = Orientation.Horizontal };
+        addAppRow.Children.Add(pick);
+        addAppRow.Children.Add(addApp);
+        Row("Add an app", "Hide the notch while it's in front, on any display.", addAppRow);
+        if (S.HideForApps.Count > 0)
+        {
+            Row("When one is in front", "Fade out (touch the top edge to bring it back), or hide completely.",
+                Combo(["Fade out", "Hide completely"], S.HideForAppsMode == "Hidden" ? 1 : 0,
+                    i => { S.HideForAppsMode = i == 1 ? "Hidden" : "Fade"; Save(); }, width: 170));
+            Row("Alerts", "Hold alerts until you switch away, or let them pop out anyway.",
+                Combo(["Wait until I switch away", "Show them anyway"], S.HideForAppsHoldAlerts ? 0 : 1,
+                    i => { S.HideForAppsHoldAlerts = i == 0; Save(); }, width: 200));
+        }
+
+
+        Section("CLOSED NOTCH");
         Row("Layout", "How several items share the closed notch when nothing is playing.",
             Combo(["Rotate one at a time", "Left and right", "All in a row"], Math.Max(0, Array.IndexOf(IdleInfoService.Layouts, S.IdleLayout)),
                 i => { S.IdleLayout = IdleInfoService.Layouts[i]; SaveIdle(); }, 180));

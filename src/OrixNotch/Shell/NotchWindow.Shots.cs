@@ -121,8 +121,8 @@ public partial class NotchWindow
             await Shot(name);
         }
         await SettingsShot("settings", "appearance");
-        await SettingsShot("settings-behavior", "general", "BEHAVIOR");          // show / auto-hide / full screen / capture
-        await SettingsShot("settings-hideapps", "general", "HIDE FOR THESE APPS");
+        await SettingsShot("settings-behavior", "display", "WHEN IT SHOWS");          // show / auto-hide / full screen / capture
+        await SettingsShot("settings-hideapps", "display", "HIDE FOR THESE APPS");
 
         // Alerts out of the closed notch.
         async Task Peek(string name, Action show)
