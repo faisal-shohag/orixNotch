@@ -43,7 +43,7 @@ public partial class SettingsView : UserControl, IToolView
         ["calendar"] = ["Pause music", "Join from the reminder"],
         ["automations"] = ["Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper", "Music bars follow the sound", "Share this look", "Celebrations", "Glow", "Reset theme"],
-        ["display"] = ["Position", "Shape", "Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
+        ["display"] = ["Position", "Shape", "Corner turn", "Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Command palette", "Explain selected text", "Start focus", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
     };
