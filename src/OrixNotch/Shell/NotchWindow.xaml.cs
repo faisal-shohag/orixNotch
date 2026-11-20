@@ -165,6 +165,7 @@ public partial class NotchWindow : Window
                 TimeSpan.FromSeconds(3)));
         };
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
+        ScreenshotWatcher.Instance.Taken += ShowScreenshotPeek;
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
@@ -213,6 +214,7 @@ public partial class NotchWindow : Window
         VolumeService.Instance.Start();
         BluetoothWatcher.Instance.Start();
         DownloadWatcher.Instance.Start();
+        ScreenshotWatcher.Instance.Start();
         ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
         ForegroundAppWatcher.Instance.Start();
         _guardTimer.Start();
@@ -1599,6 +1601,40 @@ public partial class NotchWindow : Window
                     App.Log(ex);
                 }
             }));
+    }
+
+    /// <summary>A screenshot was saved: its thumbnail; clicking parks it on the Shelf (drag it out or send it to the phone from there).</summary>
+    private void ShowScreenshotPeek(string path)
+    {
+        if (!App.Settings.ScreenshotAlerts || !System.IO.File.Exists(path)) return;
+        EnqueuePeek(new PeekRequest("screenshot", () => ThumbTile(path), "Screenshot saved",
+            "Click to put it on the Shelf", TimeSpan.FromSeconds(5), OnClick: () =>
+            {
+                ShelfService.Instance.AddFiles([path], owned: false);
+                OpenTool("shelf");
+            }));
+    }
+
+    /// <summary>A small preview of an image file (decoded small, and not left locked).</summary>
+    private static FrameworkElement ThumbTile(string path)
+    {
+        var frame = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(9), ClipToBounds = true };
+        frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
+        try
+        {
+            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+            bitmap.BeginInit();
+            bitmap.UriSource = new Uri(path);
+            bitmap.DecodePixelHeight = 80;
+            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bitmap.EndInit();
+            frame.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            frame.Child = new HeroIcon { Kind = AppIcon.Photo, Width = 19, Height = 19 };
+        }
+        return frame;
     }
 
     private void ShowPhoneReceivedPeek(string peer, int count, bool text)

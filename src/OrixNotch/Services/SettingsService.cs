@@ -31,6 +31,7 @@ public sealed class AppSettings
     public bool VolumeHud { get; set; }            // off: Windows shows its own volume flyout too
     public bool BluetoothAlerts { get; set; } = true;
     public bool DownloadAlerts { get; set; } = true;
+    public bool ScreenshotAlerts { get; set; } = true;
     public bool TrackPeek { get; set; }            // a short alert with the new song when the track changes
     /// <summary>The closed notch dodges a pointer coming from its sides (it can be caught from below).</summary>
     public bool RepelCursor { get; set; } = true;

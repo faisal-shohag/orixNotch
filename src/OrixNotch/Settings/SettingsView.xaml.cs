@@ -475,6 +475,8 @@ public partial class SettingsView : UserControl, IToolView
             Toggle(S.BluetoothAlerts, v => { S.BluetoothAlerts = v; Save(false); }));
         Row("Finished downloads", "Show on the notch when a browser download finishes in your Downloads folder. Click to show the file.",
             Toggle(S.DownloadAlerts, v => { S.DownloadAlerts = v; Save(false); }));
+        Row("Screenshots", "Show a preview on the notch when you take a screenshot (Win + PrtScn, Snipping Tool). Click it to put it on the Shelf.",
+            Toggle(S.ScreenshotAlerts, v => { S.ScreenshotAlerts = v; Save(false); }));
 
         Section("QUIET HOURS");
         var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();
