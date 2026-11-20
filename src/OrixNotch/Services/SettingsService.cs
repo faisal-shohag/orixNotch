@@ -78,6 +78,7 @@ public sealed class AppSettings
     public int AutoPauseLeadMin { get; set; } = 1;
     public bool AutoJoinLink { get; set; } = true;       // a meeting reminder with a link opens the meeting on click
     public bool AutoQuietOnMic { get; set; }             // quiet while the microphone is in use (calls)
+    public bool FocusQuiet { get; set; } = true;        // alerts wait (then one summary) while a focus session runs
     public bool AutoFocusEvents { get; set; }            // an event called "Focus" starts a focus session
     public bool SubscriptionAlerts { get; set; } = true; // 2 days before a subscription renews
     public bool MorningBrief { get; set; }               // the first unlock of the day opens a short brief

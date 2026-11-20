@@ -36,10 +36,10 @@ public partial class SettingsView : UserControl, IToolView
     private static readonly Dictionary<string, string[]> NewRows = new()
     {
         ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
-        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief"],
+        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief", "Quiet during focus"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
-        ["keyboard"] = ["Command palette", "Explain selected text", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
+        ["keyboard"] = ["Command palette", "Explain selected text", "Start focus", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
     };
 
@@ -601,6 +601,8 @@ public partial class SettingsView : UserControl, IToolView
             Toggle(S.AutoQuietOnMic, v => { S.AutoQuietOnMic = v; Save(false); }));
 
         Section("FOCUS");
+        Row("Quiet during focus", "Alerts wait while a focus session runs, then one alert sums them up. Reminders follow your quiet hours setting.",
+            Toggle(S.FocusQuiet, v => { S.FocusQuiet = v; Save(false); }));
         Row("Focus events start a session", "A calendar event with \"Focus\" in its name starts a Pomodoro focus session when it begins.",
             Toggle(S.AutoFocusEvents, v => { S.AutoFocusEvents = v; Save(false); }));
 

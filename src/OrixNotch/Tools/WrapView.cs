@@ -46,7 +46,9 @@ public sealed class WrapView : UserControl
         var day = st.Day(DateTime.Today);
         var total = day.Sum(x => x.Seconds);
         var top = day.Take(3).Select(x => st.DisplayName(x.App)).ToList();
-        var focus = PomodoroService.Instance.Completed;
+        var pom = PomodoroService.Instance;
+        var focus = pom.Completed;
+        var streak = pom.Streak;
         var done = TodosView.DoneToday();
 
         _cards.Children.Clear();
@@ -55,7 +57,8 @@ public sealed class WrapView : UserControl
         _cards.Children.Add(MorningBriefView.Card(Glyph(AppIcon.Monitor), "Most used", top.Count > 0 ? top[0] : "—",
             sub: top.Count > 1 ? string.Join(", ", top.Skip(1)) : null));
         _cards.Children.Add(MorningBriefView.Card(Glyph(AppIcon.Fire), "Focus", focus == 1 ? "1 session" : $"{focus} sessions",
-            focus > 0 ? "AccentBrush" : "TextBrush", focus > 0 ? $"About {focus * App.Settings.PomodoroWorkMin} min" : null));
+            focus > 0 ? "AccentBrush" : "TextBrush",
+            focus == 0 ? null : streak > 1 ? $"{pom.MinutesToday} min · {streak}-day streak" : $"{pom.MinutesToday} min"));
         _cards.Children.Add(MorningBriefView.Card(Glyph(AppIcon.Check), "To-dos done", done.ToString(), done > 0 ? "GoodBrush" : "TextBrush"));
     }
 

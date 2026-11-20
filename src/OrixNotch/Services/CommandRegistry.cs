@@ -26,7 +26,7 @@ public static partial class CommandRegistry
         new(AppIcon.ListBullet, "todo …", "Add a to-do", Complete: "todo "),
         new(AppIcon.Sparkles, "ask …", "Ask AI a question", Complete: "ask "),
         new(AppIcon.ArrowsLeftRight, "20 usd to eur", "Convert currency, or type a sum like 12*7", Complete: "20 usd to eur"),
-        new(AppIcon.Moon, "quiet 1h", "Hold alerts for a while, or \"quiet off\"", Complete: "quiet 1h"),
+        new(AppIcon.Fire, "focus 25", "Start a focus session; alerts wait until it ends", Complete: "focus "),
         new(AppIcon.Grid, "weather, phone, settings…", "Open a tool or a settings page by name", Complete: ""),
     ];
 
@@ -54,6 +54,12 @@ public static partial class CommandRegistry
                 break;
             case "ask" when rest.Length > 0:
                 list.Add(AskSuggestion(rest));
+                break;
+            case "focus" or "pomodoro":
+                var focusMin = rest.Length == 0 ? App.Settings.PomodoroWorkMin : ParseMinutes(rest);
+                if (focusMin is { } fm)
+                    list.Add(new(AppIcon.Fire, $"Focus for {FormatMinutes(fm)}", App.Settings.FocusQuiet ? "Alerts wait until it ends" : "Pomodoro",
+                        () => { PomodoroService.Instance.StartFocus(fm); NotchWindow.Instance?.Collapse(); }));
                 break;
             case "quiet":
                 if (rest is "off" or "stop" or "end")

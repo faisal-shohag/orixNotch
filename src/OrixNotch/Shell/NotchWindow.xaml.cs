@@ -288,6 +288,10 @@ public partial class NotchWindow : Window
             case "ocr":
                 OcrService.Instance.Start();
                 break;
+            case "focus":
+                if (PomodoroService.Instance.Focusing) PomodoroService.Instance.ToggleCommand.Execute(null); // pause
+                else PomodoroService.Instance.StartFocus();
+                break;
             case "explain":
                 _ = ExplainSelectionAsync();
                 break;
@@ -370,7 +374,8 @@ public partial class NotchWindow : Window
     /// Quiet hours are on now: the schedule in Settings → General, the tray's "Quiet for 1 hour", or (Automations)
     /// a call, meaning the microphone is in use.
     /// </summary>
-    public static bool QuietActive() => QuietSnoozed() || QuietScheduled() || _inCall;
+    public static bool QuietActive() => QuietSnoozed() || QuietScheduled() || _inCall
+        || (App.Settings.FocusQuiet && PomodoroService.Instance.Focusing);
 
     private static bool _inCall; // refreshed by Guard every couple of seconds (reading it is a registry walk)
 

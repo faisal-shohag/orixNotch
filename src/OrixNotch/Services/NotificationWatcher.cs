@@ -245,6 +245,7 @@ public sealed class NotificationWatcher
         if (!App.Settings.NotifyEnabled) return;
         if (string.IsNullOrWhiteSpace(n.Title) && string.IsNullOrWhiteSpace(n.Body)) return;
         if (n.AppId.Contains("OrixNotch", StringComparison.OrdinalIgnoreCase)) return; // our own toasts
+        if (TrayService.SentRecently(n.Title)) return; // and our own tray balloons
 
         var (name, icon) = AppInfo(n.AppId, n.AppName, n.Icon);
         if (name.Equals("OrixNotch", StringComparison.OrdinalIgnoreCase)) return;
