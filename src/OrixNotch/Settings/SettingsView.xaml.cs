@@ -43,6 +43,32 @@ public partial class SettingsView : UserControl, IToolView
         ["about"] = ["Report a problem", "Request a tool"],
     };
 
+    /// <summary>Sidebar icon colours, macOS System Settings style: fixed, so they read the same in every scheme.</summary>
+    private static readonly Dictionary<string, string> NavColors = new()
+    {
+        ["general"] = "#8E8E93", ["automations"] = "#FF9F0A", ["appearance"] = "#0A84FF", ["display"] = "#30B0C7",
+        ["tabs"] = "#5E5CE6", ["keyboard"] = "#636366", ["ai"] = "#BF5AF2", ["data"] = "#34C759", ["about"] = "#0B0E17",
+    };
+
+    /// <summary>A page's icon on a small coloured rounded tile (About: the OrixNotch mark on the brand's dark tile).</summary>
+    private static Border NavTile(string id, AppIcon icon)
+    {
+        var color = (Color)ColorConverter.ConvertFromString(NavColors.GetValueOrDefault(id, "#8E8E93"));
+        FrameworkElement glyph = id == "about"
+            ? new BrandMark { Variant = BrandVariant.Gradient, Width = 13, Height = 13 }
+            : new HeroIcon { Kind = icon, Width = 13, Height = 13, Foreground = Brushes.White };
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        return new Border
+        {
+            Width = 22, Height = 22, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center, Child = glyph,
+            Background = new LinearGradientBrush(Lighten(color, 0.12), color, 90), // a hint of depth, like the Mac's tiles
+        };
+
+        static Color Lighten(Color c, double by) => Color.FromRgb(
+            (byte)(c.R + (255 - c.R) * by), (byte)(c.G + (255 - c.G) * by), (byte)(c.B + (255 - c.B) * by));
+    }
+
     private string _rendering = ""; // the page Row() is adding to, for its "New" chip
 
     private static bool IsNew(string page, string title) =>
@@ -75,9 +101,7 @@ public partial class SettingsView : UserControl, IToolView
                 });
 
             var content = new StackPanel { Orientation = Orientation.Horizontal };
-            content.Children.Add(id == "about" // About is about OrixNotch itself: its own logo
-                ? new BrandMark { Variant = BrandVariant.Gradient, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center }
-                : new HeroIcon { Kind = icon, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(NavTile(id, icon));
             content.Children.Add(new TextBlock { Text = name, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
             var dot = new System.Windows.Shapes.Ellipse
             {
