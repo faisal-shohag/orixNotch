@@ -1,70 +1,186 @@
+<div align="center">
+
+<img src="src/OrixNotch/Assets/Brand/logo-512.png" width="120" alt="OrixNotch logo" />
+
 # OrixNotch
 
-<img src="src/OrixNotch/Assets/Brand/logo-512.png" width="180" alt="OrixNotch logo — sparkles and a notched ring, pink to orange" />
+**Your screen, smarter.** A dynamic island for Windows.
 
-> **Your Screen, Smarter** — Smoother • Faster • Smarter
+A small notch sits at the top of your screen and springs open into music, AI, files, timers and more,<br/>
+then gets out of your way.
 
-A dynamic-island style toolbox for Windows.
-A small black pill sits at the top-center of your screen. Hover it (or click it, or press **Ctrl+Alt+N**) and it springs open into a panel of tools.
+[![Latest release](https://img.shields.io/github/v/release/faisal-shohag/orixNotch?label=release&color=FD0388)](https://github.com/faisal-shohag/orixNotch/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/faisal-shohag/orixNotch/ci.yml?branch=main&label=build)](https://github.com/faisal-shohag/orixNotch/actions/workflows/ci.yml)
+[![Windows 10 2004+](https://img.shields.io/badge/Windows-10%202004%2B%20%7C%2011-0078D4?logo=windows&logoColor=white)](#install)
+[![.NET 8](https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+
+<a href="https://apps.microsoft.com/detail/9PM8RN7CGSWC"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft" /></a>
+
+[**Download**](https://github.com/faisal-shohag/orixNotch/releases/latest) · [Website](https://orixnotch.vercel.app/) · [Privacy](docs/privacy-policy.md) · [Build from source](#build-from-source)
+
+<br/>
+
+<img src="store-assets/screenshots/01-hero.png" width="860" alt="The OrixNotch panel open at the top of the screen, showing music, today's events and reminders" />
+
+</div>
+
+---
+
+## Why OrixNotch
+
+- **Always there, never in the way.** Hover the notch, click it, or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd>. It steps aside for full-screen videos, games and apps you pick.
+- **Useful while closed.** Live music, timers, reminders and an idle view you choose (clock, weather, battery, network speed, AI limits and more), right in the pill.
+- **Alerts that don't interrupt.** Reminders, Windows notifications, downloads, Bluetooth and battery events pop out of the notch for a moment, then go away.
+- **Private by design.** No account, no analytics, no ads. Your data stays on your PC.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="store-assets/screenshots/02-alerts.png" alt="Alerts popping out of the notch" /><p align="center"><sub><b>Alerts</b> out of the closed notch</sub></p></td>
+    <td width="50%"><img src="store-assets/screenshots/03-music.png" alt="Now Playing with album art and lyrics" /><p align="center"><sub><b>Now Playing</b> with synced lyrics</sub></p></td>
+  </tr>
+  <tr>
+    <td><img src="store-assets/screenshots/05-ask-ai.png" alt="Ask AI chat in the notch" /><p align="center"><sub><b>Ask AI</b> with Claude, ChatGPT, Gemini or DeepSeek</sub></p></td>
+    <td><img src="store-assets/screenshots/06-phone.png" alt="Phone transfer with a QR code" /><p align="center"><sub><b>Phone transfer</b> by QR code, no app needed</sub></p></td>
+  </tr>
+  <tr>
+    <td><img src="store-assets/screenshots/04-calendar.png" alt="Calendar with reminders" /><p align="center"><sub><b>Calendar</b> with Google, Outlook and iCloud sync</sub></p></td>
+    <td><img src="store-assets/screenshots/10-themes.png" alt="Color themes" /><p align="center"><sub><b>Themes</b> and accents, applied live</sub></p></td>
+  </tr>
+</table>
 
 ## Tools
 
+Turn tools on or off and reorder them in **Settings → Tabs**. The first launch opens there so you can pick yours.
+
+**Everyday**
+
 | Tool | What it does |
 | --- | --- |
-| Now Playing | Art, title, seek bar and controls for any app using Windows media controls (Spotify, browsers, Media Player…). The closed pill shows the art and an equalizer while music plays. |
-| File Shelf | Drop files or text on the notch to park them; drag them back out, open, reveal or copy. Items expire after a configurable number of days. |
-| Phone | Send files, folders and text both ways with any phone on the same Wi-Fi: scan the QR code on the notch to open a page. Drop files on the Phone tab (or Shelf → Send to phone) and they show up on the page right away; folders download as .zip. Files from the phone go to `Downloads\OrixNotch` (or the folder set in Settings) and show up in the Phone tab's Transfers list; text sent from the phone lands there too, click to copy. No app needed. Off until turned on. |
-| Clipboard | Searchable history of text, links, images and files. Click to copy again. Skips clips that password managers mark as private. |
-| Quick Note | Auto-saving scratchpad. |
-| To-Dos | Quick list with stars and completion. |
-| Pomodoro | Focus/break timer; the countdown stays visible in the closed pill and a notification fires at the end. |
-| Calendar | Month view with your own events, plus read-only events from subscribed calendars (paste a Google, Outlook or iCloud `.ics` link in Settings; repeating events included). |
-| Weather | Current conditions + 7-day forecast from Open-Meteo (no API key). |
-| System Monitor | CPU (with history), memory, disk, network, battery, uptime. |
-| Stocks | Watchlist with intraday sparklines (Yahoo Finance). |
-| Unit Converter | Length, mass, temperature, volume and speed. |
-| Emoji | Full emoji picker with search and recents; click to copy. |
+| **Home** | A glance at your day: greeting, music, today's events and reminders. |
+| **Now Playing** | Art, controls, seek bar and synced lyrics for any app using Windows media controls (Spotify, browsers, Media Player…). |
+| **Calendar** | Month view with your own events and reminders, plus read-only subscribed calendars from a Google, Outlook or iCloud `.ics` link, repeating events included. |
+| **To-Dos** | A quick list with stars and completion. |
+| **Quick Note** | An auto-saving scratchpad. |
+| **Timers** | Pomodoro, countdown and stopwatch, with the countdown visible in the closed notch. |
+| **Weather** | Current conditions, humidity, wind, daylight and a 7-day forecast from Open-Meteo. No API key. |
 
-Tool visibility and order, open mode (hover/click), hover delay, display, autostart and more live in **Settings** (gear icon or tray menu). Settings has a search box, and the first launch opens on Settings → Tabs to pick your tools. Teleprompter, Shortcuts, System, Stocks and Converter start switched off (AI Usage too, unless Claude Code or Codex is installed); turn them on there. Weather starts on your time zone's city, in °F where your region uses it.
+**Files and text**
 
-The closed notch can stay visible, show only while something is happening (music, a timer, a reminder), or hide until the pointer touches the top edge of the screen (a thin accent line marks the spot). It steps aside for full-screen videos and games and for apps you pick (fading out or hiding completely, with alerts held or let through), can follow the pointer to another display, and can be left out of screenshots and screen sharing.
+| Tool | What it does |
+| --- | --- |
+| **Shelf** | Drop files or text on the notch to park them, then drag them back out, open, reveal or copy. |
+| **Phone** | Send files, folders and text both ways with any phone on the same Wi-Fi: scan the QR code and a page opens. No app to install. Off until you turn it on. |
+| **Clipboard** | Searchable history of text, links, images and files. Skips clips that password managers mark as private. |
+| **Teleprompter** | Scrolling script for calls and recordings, with one-tap hide from screen sharing. |
 
-Short alerts pop out of the closed notch for reminders, Windows notifications, AI usage limits, phone transfers, charger plugged in or pulled and low battery, Bluetooth devices connecting, finished browser downloads, and optionally volume changes and new songs. Each can be turned off in Settings → General.
+**AI**
 
-When a new version is out, the notch says so once. Microsoft Store builds install it through the Store, after downloading it quietly where Windows allows. The MSI install downloads the new setup in the background and installs it when you click; the portable exe opens the release page. Settings → About checks on demand and has the switch to turn this off.
+| Tool | What it does |
+| --- | --- |
+| **Ask AI** | Chat with **Claude, ChatGPT, Gemini or DeepSeek** using your own API key. Drop or paste images to ask about them, or explain selected text from any app. |
+| **AI Usage** | Limits and usage for Claude Code, Codex, Cursor, OpenCode, Antigravity and more, with an alert before you run out. |
 
-## Look & feel
+**Your PC**
 
-- Notch silhouette with concave top corners that flow into the screen edge, springing open and resizing smoothly to fit each tool.
-- 17 color schemes (5 with a gradient notch), each with its own matching accent; override it with any of 23 accents (8 gradients). Applied live from Settings → Appearance.
-- [Heroicons](https://heroicons.com/) (MIT, by the makers of Tailwind CSS) vendored as vector path data and rendered by `Shell/HeroIcon` — solid glyphs for small/chrome icons, outline glyphs for large/decorative ones; [Inter](https://rsms.me/inter/) typeface bundled in `Fonts/` (SIL OFL).
+| Tool | What it does |
+| --- | --- |
+| **Notifications** | Your Windows notifications, mirrored on the notch, with an unread count. |
+| **Controls** | Quick toggles and per-app volume, Control Center style. |
+| **System** | CPU, memory, disk, network and battery with live charts, and the apps using the most. |
+| **Screen Time** | Time per app, daily goals and an end-of-day summary. |
+| **Shortcuts** | One-click tiles for apps, folders, links and Windows settings pages. |
 
-## Build & run
+**Extras**
 
-Requires the .NET 8 SDK on Windows 10 (2004) or later.
+| Tool | What it does |
+| --- | --- |
+| **Subscriptions** | Track renewals and get alerted before you're charged. |
+| **Stocks** | A watchlist with intraday sparklines. |
+| **Converter** | Units and live currency rates. |
+| **Emoji** | Full emoji picker with search and recents. Click to copy. |
+
+## Make it yours
+
+- **Shape and position.** Island, Notch, Tab or Pill, on any screen edge. It can follow your pointer to another display.
+- **Visibility.** Always shown, shown only while something is happening, or hidden until the pointer touches the edge. It fades for full-screen apps and apps you choose, and can be left out of screenshots and screen sharing.
+- **Look.** 19 color schemes and 24 accents (some gradients), glass tinted by your wallpaper, and one-click looks. Changes apply live.
+- **Closed notch.** Pick what it shows while idle (clock, weather, battery, network, AI limits, unread notifications…), one at a time or all in a row.
+- **Focus and calm.** Focus sessions that hold alerts, quiet hours, break reminders and a morning brief.
+
+## Keyboard and automation
+
+| Action | How |
+| --- | --- |
+| Open or close the notch | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd> |
+| Command palette | Type `timer 10`, `todo buy milk`, `20 usd to eur`, `ask …` or a tool's name |
+| Ask AI, clipboard, teleprompter, focus, explain selection, copy text from screen, mute mic, keep awake | Assign your own shortcuts in **Settings → Keyboard** |
+| From scripts and CI | `orixnotch://peek?text=Build%20done` shows an alert; `orixnotch://open/weather` opens a tool |
+
+## Install
+
+Get it from the [**Microsoft Store**](https://apps.microsoft.com/detail/9PM8RN7CGSWC), or download the latest build from [**Releases**](https://github.com/faisal-shohag/orixNotch/releases/latest). Requires Windows 10 version 2004 or later, or Windows 11.
+
+| Package | Best for | Updates |
+| --- | --- | --- |
+| [Microsoft Store](https://apps.microsoft.com/detail/9PM8RN7CGSWC) | The easiest install. | Automatic, through the Store |
+| `OrixNotch-x.y.z-setup.msi` | Most people. Per-user install, no admin rights needed. | Downloads in the background, installs when you click |
+| `OrixNotch-x.y.z-portable.exe` | Trying it out, or running from a USB drive. | Tells you when a new version is out |
+
+Every release includes `SHA256SUMS.txt`, so you can verify what you downloaded.
+
+## Privacy
+
+Everything is stored locally in `%LOCALAPPDATA%\OrixNotch`. API keys and calendar links are encrypted with Windows DPAPI.
+
+The network is used only for features you turn on: Open-Meteo (weather), Yahoo Finance (stocks), LRCLIB (lyrics), ExchangeRate-API (currency rates), the AI provider you choose, calendars you subscribe to, and GitHub or the Microsoft Store for updates. Phone transfer stays on your local network and never goes through a server.
+
+Full details are in the [privacy policy](docs/privacy-policy.md).
+
+## Build from source
+
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) on Windows.
 
 ```powershell
+git clone https://github.com/faisal-shohag/orixNotch.git
+cd orixNotch
 dotnet run --project src/OrixNotch
-# start with the panel open on a tool:
+
+# start with the panel open on a tool, or on Settings
 dotnet run --project src/OrixNotch -- --open weather
+dotnet run --project src/OrixNotch -- --settings
 ```
 
-Installers (portable exe, per-user MSI, Store MSIX) are built by the scripts in `packaging/`; CI builds
-them on every push and a `vX.Y.Z` tag publishes a GitHub Release. See [docs/RELEASING.md](docs/RELEASING.md)
-for the release process, code signing and Microsoft Store setup.
+> [!TIP]
+> OrixNotch runs as a single instance. Close any running copy before building, and set `ORIXNOTCH_DATA_DIR` to a scratch folder to test without touching your own data.
 
-## Data & privacy
+Installers are built by the scripts in [`packaging/`](packaging) (`Build-Exe.ps1`, `Build-Msi.ps1`, `Build-Msix.ps1`). CI builds all three on every pull request. The release process, code signing and Microsoft Store setup are in [docs/RELEASING.md](docs/RELEASING.md).
 
-Everything is stored locally in `%LOCALAPPDATA%\OrixNotch` (settings, notes, to-dos, events, clipboard history, shelf). Network calls happen only for features you use: Open-Meteo (weather), Yahoo Finance (stocks), LRCLIB (lyrics), the AI provider you pick, calendars you subscribe to (their links are stored encrypted), and GitHub or the Microsoft Store for update checks and downloads. Phone transfer, when turned on, listens only on your local network (port 53318, or 53328 if that one is taken) and never goes through a server.
-
-## Project layout
+<details>
+<summary><b>Project layout</b></summary>
 
 ```
 src/OrixNotch/
-  Shell/       NotchWindow (pill, spring animation, hover/leave logic), ToolRegistry
-  Services/    Now playing, clipboard, shelf, pomodoro, settings, storage, tray
+  Shell/       Notch window, spring animation, tab bar, shared controls and icons
   Tools/       One UserControl per tool
+  Services/    Media, clipboard, phone transfer, AI, calendar, settings, storage, updates…
   Settings/    Settings window
-  Themes/      Dark theme and control styles
+  Themes/      Theme brushes and control styles
   Interop/     Win32 P/Invoke
+packaging/     Portable exe, MSI (WiX) and MSIX builds
+docs/          Design notes, releasing, privacy policy
 ```
+
+</details>
+
+## Credits
+
+- Icons: [Heroicons](https://heroicons.com/), [Tabler Icons](https://tabler.io/icons) and [Phosphor](https://phosphoricons.com/), all MIT.
+- Typeface: [Inter](https://rsms.me/inter/), SIL Open Font License.
+- Data: [Open-Meteo](https://open-meteo.com/) for weather and [LRCLIB](https://lrclib.net/) for lyrics.
+
+<div align="center">
+<br/>
+<sub>Made for Windows by <a href="https://github.com/faisal-shohag">Abu Nayim Faisal</a></sub>
+</div>
