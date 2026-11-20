@@ -26,7 +26,7 @@
         </Grid>
 
         <!-- Inline editor -->
-        <Border x:Name="EditorPanel" Grid.Row="1" Background="{DynamicResource SurfaceBrush}" CornerRadius="9" Padding="8"
+        <Border x:Name="EditorPanel" Grid.Row="1" Background="{DynamicResource SurfaceBrush}" CornerRadius="{StaticResource RadiusM}" Padding="8"
                 Margin="0,0,0,8" Visibility="Collapsed">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -67,7 +67,7 @@
                             </Button.ContextMenu>
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
-                                    <Border x:Name="Bd" CornerRadius="8" Background="{DynamicResource SurfaceBrush}" Padding="7,0">
+                                    <Border x:Name="Bd" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource SurfaceBrush}" Padding="7,0">
                                         <ContentPresenter VerticalAlignment="Center" />
                                     </Border>
                                     <ControlTemplate.Triggers>
@@ -81,7 +81,7 @@
                                 </ControlTemplate>
                             </Button.Template>
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="13" Height="13" CornerRadius="6.5" Background="{DynamicResource AccentBrush}">
+                                <Border Width="13" Height="13" CornerRadius="{StaticResource RadiusS}" Background="{DynamicResource AccentBrush}">
                                     <hero:HeroIcon Kind="Play" Width="8" Height="8" Margin="1,0,0,0" Foreground="{DynamicResource OnAccentBrush}"
                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>

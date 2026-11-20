@@ -273,7 +273,7 @@ public partial class AskAiView
         {
             Width = w,
             Height = size,
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = Radii.M,
             Background = new ImageBrush(source) { Stretch = Stretch.UniformToFill },
         };
     }

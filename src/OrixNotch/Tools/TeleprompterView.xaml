@@ -62,7 +62,7 @@
                         Cursor="Hand" Focusable="False" Click="OnPlay">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Bd" CornerRadius="14" Background="{DynamicResource AccentBrush}">
+                            <Border x:Name="Bd" CornerRadius="{StaticResource RadiusL}" Background="{DynamicResource AccentBrush}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <ControlTemplate.Triggers>

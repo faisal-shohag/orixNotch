@@ -15,7 +15,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="7" Padding="14,0">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusS}" Padding="14,0">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -97,7 +97,7 @@
 
         <!-- Timer | Stopwatch | Pomodoro -->
         <Border HorizontalAlignment="Center" Background="{DynamicResource Surface2Brush}"
-                CornerRadius="10" Padding="3">
+                CornerRadius="{StaticResource RadiusM}" Padding="3">
             <StackPanel Orientation="Horizontal">
                 <RadioButton x:Name="TimerTab" Style="{StaticResource SegmentButton}" Content="Timer" GroupName="timerMode" />
                 <RadioButton x:Name="StopwatchTab" Style="{StaticResource SegmentButton}" Content="Stopwatch" GroupName="timerMode" />

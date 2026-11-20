@@ -832,7 +832,7 @@ public partial class SettingsView : UserControl, IToolView
         var accent = ThemeService.Accents.FirstOrDefault(a => a.Id == scheme.Accent) ?? ThemeService.Accents[0];
         var preview = new Border
         {
-            Height = 34, CornerRadius = new CornerRadius(10), Background = scheme.PillBrush(),
+            Height = 34, CornerRadius = Radii.M, Background = scheme.PillBrush(),
             Opacity = look.Glass ? 0.75 : 1, BorderThickness = new Thickness(1),
             Child = new Border { Width = 26, Height = 5, CornerRadius = new CornerRadius(2.5), Background = accent.Brush(), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
         };
@@ -1047,7 +1047,7 @@ public partial class SettingsView : UserControl, IToolView
     private FrameworkElement PresetCard(Preset preset)
     {
         var stack = new StackPanel { Margin = new Thickness(2) };
-        var icon = new Border { Width = 28, Height = 28, CornerRadius = new CornerRadius(8), HorizontalAlignment = HorizontalAlignment.Left };
+        var icon = new Border { Width = 28, Height = 28, CornerRadius = Radii.M, HorizontalAlignment = HorizontalAlignment.Left };
         icon.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         var glyph = new HeroIcon { Kind = preset.Icon, Width = 15, Height = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
@@ -1084,7 +1084,7 @@ public partial class SettingsView : UserControl, IToolView
 
         var icon = new Border
         {
-            Width = 24, Height = 24, CornerRadius = new CornerRadius(6),
+            Width = 24, Height = 24, CornerRadius = Radii.S,
             Child = new HeroIcon { Kind = tool.Icon, Width = 13, Height = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
         };
         icon.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
@@ -1364,7 +1364,7 @@ public partial class SettingsView : UserControl, IToolView
         info.Children.Add(links);
         Grid.SetColumn(info, 1);
         hero.Children.Add(info);
-        var heroCard = new Border { CornerRadius = new CornerRadius(14), Padding = new Thickness(18), Child = hero, Margin = new Thickness(0, 16, 0, 0) };
+        var heroCard = new Border { CornerRadius = Radii.L, Padding = new Thickness(18), Child = hero, Margin = new Thickness(0, 16, 0, 0) };
         heroCard.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         Page.Children.Add(heroCard);
 
@@ -1463,7 +1463,7 @@ public partial class SettingsView : UserControl, IToolView
     private static Border Chip(string text, bool accent = false)
     {
         var label = new TextBlock { Text = text, FontSize = 11, FontWeight = FontWeights.SemiBold };
-        var chip = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 4), Child = label };
+        var chip = new Border { CornerRadius = Radii.M, Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 4), Child = label };
         chip.SetResourceReference(Border.BackgroundProperty, accent ? "AccentSoftBrush" : "Surface2Brush");
         label.SetResourceReference(TextBlock.ForegroundProperty, accent ? "AccentBrush" : "SubTextBrush");
         return chip;
@@ -1618,7 +1618,7 @@ public partial class SettingsView : UserControl, IToolView
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var glyph = new HeroIcon { Kind = icon, Width = 12, Height = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
-        var tile = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(7), Child = glyph, Margin = new Thickness(0, 0, 10, 0) };
+        var tile = new Border { Width = 24, Height = 24, CornerRadius = Radii.S, Child = glyph, Margin = new Thickness(0, 0, 10, 0) };
         tile.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         row.Children.Add(tile);
         var name = new TextBlock { Text = tool, FontSize = 12.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
@@ -1647,7 +1647,7 @@ public partial class SettingsView : UserControl, IToolView
 
     private static Border Group(UIElement child)
     {
-        var border = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(14, 2, 14, 2), Child = child };
+        var border = new Border { CornerRadius = Radii.L, Padding = new Thickness(14, 2, 14, 2), Child = child };
         border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         return border;
     }
@@ -1707,7 +1707,7 @@ public partial class SettingsView : UserControl, IToolView
         panel.Children.Add(new TextBlock { Text = title, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
         var label = new TextBlock { Text = "NEW", FontSize = 9, FontWeight = FontWeights.Bold };
         label.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
-        var chip = new Border { CornerRadius = new CornerRadius(5), Padding = new Thickness(5, 1, 5, 1), Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = label };
+        var chip = new Border { CornerRadius = Radii.S, Padding = new Thickness(5, 1, 5, 1), Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = label };
         chip.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         panel.Children.Add(chip);
         return panel;
@@ -1890,7 +1890,7 @@ public partial class SettingsView : UserControl, IToolView
 
     private Border Badge(string text)
     {
-        var badge = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(8, 3, 8, 3), Child = new TextBlock { Text = text, FontSize = 10.5, FontWeight = FontWeights.Medium } };
+        var badge = new Border { CornerRadius = Radii.S, Padding = new Thickness(8, 3, 8, 3), Child = new TextBlock { Text = text, FontSize = 10.5, FontWeight = FontWeights.Medium } };
         badge.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         return badge;
     }
@@ -1915,7 +1915,7 @@ public partial class SettingsView : UserControl, IToolView
     {
         var selected = scheme.Id == ThemeService.CurrentScheme.Id;
         var preview = new Grid { Height = 58, Width = 104 };
-        preview.Children.Add(new Border { Background = scheme.PreviewBrush(), CornerRadius = new CornerRadius(6) });
+        preview.Children.Add(new Border { Background = scheme.PreviewBrush(), CornerRadius = Radii.S });
         preview.Children.Add(new System.Windows.Shapes.Path
         {
             Data = Geometry.Parse("M0,0 A3,3 0 0 1 3,3 L3,8 A6,6 0 0 0 9,14 L35,14 A6,6 0 0 0 41,8 L41,3 A3,3 0 0 1 44,0 Z"),
@@ -1930,7 +1930,7 @@ public partial class SettingsView : UserControl, IToolView
         lines.Children.Add(new Border { Height = 4, Width = 24, CornerRadius = new CornerRadius(2), Background = ThemeService.AccentFor(scheme).Brush(), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 3, 0, 0) });
         preview.Children.Add(lines);
 
-        var frame = new Border { Child = preview, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2), Padding = new Thickness(1) };
+        var frame = new Border { Child = preview, CornerRadius = Radii.M, BorderThickness = new Thickness(2), Padding = new Thickness(1) };
         if (selected) frame.SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
         else frame.BorderBrush = Brushes.Transparent;
 

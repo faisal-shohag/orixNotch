@@ -110,7 +110,7 @@ public partial class AskAiView : UserControl, IToolView
         row.AppendChild(name);
 
         var chip = new FrameworkElementFactory(typeof(Border));
-        chip.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+        chip.SetValue(Border.CornerRadiusProperty, Radii.S);
         chip.SetValue(Border.PaddingProperty, new Thickness(6, 0, 6, 1));
         chip.SetValue(MarginProperty, new Thickness(7, 0, 0, 0));
         chip.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
@@ -551,7 +551,7 @@ public partial class AskAiView : UserControl, IToolView
         {
             Width = 24,
             Height = 24,
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = Radii.L,
             VerticalAlignment = VerticalAlignment.Top,
             // Centered on the first line of text (card padding 10 + half an ~18px line − half the avatar),
             // so it lines up with the status word while waiting and with the reply after.
@@ -680,7 +680,7 @@ public partial class AskAiView : UserControl, IToolView
             Cursor = Cursors.Hand;
             Focusable = false;
             var factory = new FrameworkElementFactory(typeof(Border), "Bd");
-            factory.SetValue(Border.CornerRadiusProperty, new CornerRadius(13));
+            factory.SetValue(Border.CornerRadiusProperty, Radii.L);
             factory.SetValue(Border.PaddingProperty, new Thickness(11, 5, 12, 5));
             factory.SetResourceReference(Border.BackgroundProperty, "Surface2Brush");
             factory.AppendChild(new FrameworkElementFactory(typeof(ContentPresenter)));
@@ -934,7 +934,7 @@ public partial class AskAiView : UserControl, IToolView
         stack.Children.Add(header);
         stack.Children.Add(divider);
         stack.Children.Add(body);
-        var card = new Border { CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 6, 0, 6), Child = stack, BorderThickness = new Thickness(1) };
+        var card = new Border { CornerRadius = Radii.M, Margin = new Thickness(0, 6, 0, 6), Child = stack, BorderThickness = new Thickness(1) };
         card.SetResourceReference(Border.BackgroundProperty, "PillBrush"); // darker than the reply card it sits in
         card.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
         return card;

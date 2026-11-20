@@ -9,7 +9,7 @@
         </Grid.RowDefinitions>
 
         <!-- New subscription: name, price, how often, next payment -->
-        <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="9" Padding="8" Margin="0,0,0,8">
+        <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="{StaticResource RadiusM}" Padding="8" Margin="0,0,0,8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

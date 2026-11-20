@@ -37,7 +37,7 @@
         <!-- "More this way" hints, shown only when the strip can scroll that way. Visual only. -->
         <Grid x:Name="EdgeLeft" Grid.Row="1" Width="48" HorizontalAlignment="Left" IsHitTestVisible="False" Opacity="0">
             <Rectangle x:Name="EdgeLeftFade" />
-            <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource Surface2Brush}"
+            <Border Width="22" Height="22" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource Surface2Brush}"
                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0">
                 <hero:HeroIcon Kind="ChevronLeft" Width="12" Height="12" Foreground="{DynamicResource TextBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -45,7 +45,7 @@
         </Grid>
         <Grid x:Name="EdgeRight" Grid.Row="1" Width="48" HorizontalAlignment="Right" IsHitTestVisible="False" Opacity="0">
             <Rectangle x:Name="EdgeRightFade" />
-            <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource Surface2Brush}"
+            <Border Width="22" Height="22" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource Surface2Brush}"
                     HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,2,0">
                 <hero:HeroIcon Kind="ChevronRight" Width="12" Height="12" Foreground="{DynamicResource TextBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />

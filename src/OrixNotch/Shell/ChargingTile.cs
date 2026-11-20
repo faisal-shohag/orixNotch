@@ -12,7 +12,7 @@ public static class ChargingTile
     public static FrameworkElement Create(int percent)
     {
         const double bodyW = 22, bodyH = 12, inset = 2;
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = Radii.M };
         tile.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
 
         var canvas = new Canvas { Width = bodyW + 3, Height = bodyH, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };

@@ -139,7 +139,7 @@ public partial class AiUsageView : UserControl, IToolView
             stack.Children.Add(captions);
         }
 
-        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Child = stack };
+        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = Radii.M, Padding = new Thickness(12, 10, 12, 10), Child = stack };
         card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         return card;
     }
@@ -150,7 +150,7 @@ public partial class AiUsageView : UserControl, IToolView
         var head = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
         head.Children.Add(BrandLogos.Create(p.Logo, 15));
         head.Children.Add(new TextBlock { Text = p.Name, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(7, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center });
-        var badge = new Border { CornerRadius = new CornerRadius(5), Padding = new Thickness(7, 1, 7, 2), VerticalAlignment = VerticalAlignment.Center };
+        var badge = new Border { CornerRadius = Radii.S, Padding = new Thickness(7, 1, 7, 2), VerticalAlignment = VerticalAlignment.Center };
         badge.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var badgeText = new TextBlock
         {
@@ -168,7 +168,7 @@ public partial class AiUsageView : UserControl, IToolView
 
     private static Border CardFrame(FrameworkElement content)
     {
-        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Child = content };
+        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = Radii.M, Padding = new Thickness(12, 10, 12, 10), Child = content };
         card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         return card;
     }

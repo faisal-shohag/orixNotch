@@ -19,7 +19,7 @@
             </StackPanel>
         </Grid>
 
-        <Border Grid.Row="1" CornerRadius="12" Background="{DynamicResource SurfaceBrush}">
+        <Border Grid.Row="1" CornerRadius="{StaticResource RadiusL}" Background="{DynamicResource SurfaceBrush}">
             <Grid>
                 <Rectangle x:Name="DropOutline" RadiusX="12" RadiusY="12" Stroke="{DynamicResource TrackBrush}"
                            StrokeThickness="1.2" StrokeDashArray="5 4" />
@@ -38,7 +38,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border x:Name="Tile" Width="74" Height="82" Margin="2" CornerRadius="9" Background="Transparent"
+                                <Border x:Name="Tile" Width="74" Height="82" Margin="2" CornerRadius="{StaticResource RadiusM}" Background="Transparent"
                                         Cursor="Hand" ToolTip="{Binding Path}"
                                         PreviewMouseLeftButtonDown="OnItemMouseDown" MouseMove="OnItemMouseMove">
                                     <Border.ContextMenu>

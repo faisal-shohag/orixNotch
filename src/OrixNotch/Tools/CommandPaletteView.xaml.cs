@@ -136,7 +136,7 @@ public partial class CommandPaletteView : UserControl, IToolView, IEscapeHandler
             row.Children.Add(icon);
             row.Children.Add(title);
             row.Children.Add(hint);
-            var border = new Border { Child = row, CornerRadius = new CornerRadius(7), Cursor = Cursors.Hand, Background = System.Windows.Media.Brushes.Transparent };
+            var border = new Border { Child = row, CornerRadius = Radii.S, Cursor = Cursors.Hand, Background = System.Windows.Media.Brushes.Transparent };
             if (i == _selected) border.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
             border.MouseLeftButtonUp += (_, _) => Choose(index);
             List.Children.Add(border);

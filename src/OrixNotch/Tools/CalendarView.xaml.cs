@@ -172,7 +172,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             {
                 Width = 26,
                 Height = 26,
-                CornerRadius = new CornerRadius(13),
+                CornerRadius = Radii.L,
                 Background = isSelected ? accent : Brushes.Transparent,
                 BorderBrush = isToday && !isSelected ? accent : null,
                 BorderThickness = new Thickness(isToday && !isSelected ? 1.5 : 0),

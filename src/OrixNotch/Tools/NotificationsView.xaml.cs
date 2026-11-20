@@ -157,7 +157,7 @@ public partial class NotificationsView : UserControl, IToolView
 
         var card = new Border
         {
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = Radii.M,
             Padding = new Thickness(12, 9, 12, 10),
             Margin = new Thickness(0, 0, 0, 6),
             Child = grid,
@@ -189,7 +189,7 @@ public partial class NotificationsView : UserControl, IToolView
     /// <summary>The app's own icon, the OrixNotch alert's chart glyph, or the app's first letter on a tile.</summary>
     private static FrameworkElement AppIcon(StoredNotification n)
     {
-        var frame = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(8) };
+        var frame = new Border { Width = 30, Height = 30, CornerRadius = Radii.M };
         frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         if (n.Source == "orixnotch")
         {

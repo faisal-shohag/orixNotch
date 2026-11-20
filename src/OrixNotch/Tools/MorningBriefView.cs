@@ -40,7 +40,7 @@ public sealed class MorningBriefView : UserControl
             subText.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
             stack.Children.Add(subText);
         }
-        var card = new Border { Child = stack, CornerRadius = new CornerRadius(12), Margin = new Thickness(5, 0, 5, 0) };
+        var card = new Border { Child = stack, CornerRadius = Radii.L, Margin = new Thickness(5, 0, 5, 0) };
         card.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         return card;
     }

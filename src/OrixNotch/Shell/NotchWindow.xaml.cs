@@ -1390,7 +1390,7 @@ public partial class NotchWindow : Window
         face.Children.Add(seam);
         var tile = new Border
         {
-            CornerRadius = new CornerRadius(5), Padding = new Thickness(5, 1, 5, 1), VerticalAlignment = VerticalAlignment.Center,
+            CornerRadius = Radii.S, Padding = new Thickness(5, 1, 5, 1), VerticalAlignment = VerticalAlignment.Center,
             Child = face, RenderTransformOrigin = new Point(0.5, 0.5),
         };
         tile.SetResourceReference(Border.BackgroundProperty, "Surface2Brush");
@@ -1773,7 +1773,7 @@ public partial class NotchWindow : Window
     /// <summary>A small preview of an image file (decoded small, and not left locked).</summary>
     private static FrameworkElement ThumbTile(string path)
     {
-        var frame = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(9), ClipToBounds = true };
+        var frame = new Border { Width = 40, Height = 40, CornerRadius = Radii.M, ClipToBounds = true };
         frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         try
         {
@@ -1805,7 +1805,7 @@ public partial class NotchWindow : Window
     /// <summary>Brand logo on a soft tile (AI usage alerts).</summary>
     private static FrameworkElement LogoTile(BrandLogo logo)
     {
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = Radii.M };
         tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var mark = BrandLogos.Create(logo, 20);
         mark.HorizontalAlignment = HorizontalAlignment.Center;
@@ -1816,7 +1816,7 @@ public partial class NotchWindow : Window
     /// <summary>Accent-soft rounded tile with a glyph (reminders).</summary>
     private static FrameworkElement GlyphTile(AppIcon kind)
     {
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = Radii.M };
         tile.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         var icon = new HeroIcon { Kind = kind, Width = 19, Height = 19, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         icon.SetResourceReference(ForegroundProperty, "AccentBrush");
@@ -1831,11 +1831,11 @@ public partial class NotchWindow : Window
         {
             var image = new Image { Source = n.Icon, Width = 34, Height = 34, Stretch = Stretch.Uniform };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-            var frame = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11), Child = image };
+            var frame = new Border { Width = 40, Height = 40, CornerRadius = Radii.M, Child = image };
             frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
             return frame;
         }
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(11) };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = Radii.M };
         tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var letter = new TextBlock
         {
@@ -2046,7 +2046,7 @@ public partial class NotchWindow : Window
         count.SetResourceReference(TextBlock.ForegroundProperty, "OnAccentBrush");
         var badge = new Border
         {
-            MinWidth = 13, Height = 13, CornerRadius = new CornerRadius(6.5), Padding = new Thickness(3, 0, 3, 0),
+            MinWidth = 13, Height = 13, CornerRadius = Radii.S, Padding = new Thickness(3, 0, 3, 0),
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, -6, -9, 0), IsHitTestVisible = false, Child = count,
         };

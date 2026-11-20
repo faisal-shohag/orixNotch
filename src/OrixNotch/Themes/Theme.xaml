@@ -6,6 +6,11 @@
     <!-- Motion: XAML-side twin of Shell/Motion.cs (Fast). -->
     <Duration x:Key="MotionFast">0:0:0.15</Duration>
 
+    <!-- Corner radii (Shell/Radii.cs is the code twin): chips, controls and rows, cards. -->
+    <CornerRadius x:Key="RadiusS">6</CornerRadius>
+    <CornerRadius x:Key="RadiusM">10</CornerRadius>
+    <CornerRadius x:Key="RadiusL">14</CornerRadius>
+
     <!-- Composite UI font (Fonts/OrixUI.CompositeFont): Inter for Latin, Noto Sans Bengali for
          Bengali. App.BuildUiFont() swaps in the SF Pro variant when SF Pro is installed. -->
     <FontFamily x:Key="UiFont">../Fonts/#OrixUI</FontFamily>
@@ -85,7 +90,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7" RenderTransformOrigin="0.5,0.5">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusS}" RenderTransformOrigin="0.5,0.5">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -122,7 +127,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusS}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -156,7 +161,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" Background="Transparent" CornerRadius="7" Padding="6,4">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusS}" Padding="6,4">
                         <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -180,7 +185,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="Bd" Background="Transparent" CornerRadius="8">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusM}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -211,7 +216,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="Bd" Background="{DynamicResource Surface2Brush}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="Bd" Background="{DynamicResource Surface2Brush}" CornerRadius="{StaticResource RadiusM}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -253,9 +258,9 @@
                 <ControlTemplate TargetType="TextBox">
                     <Grid>
                         <!-- Focus glow sits outside the field so focusing never shifts layout. -->
-                        <Border x:Name="Glow" Margin="-3" CornerRadius="12" BorderThickness="3"
+                        <Border x:Name="Glow" Margin="-3" CornerRadius="{StaticResource RadiusL}" BorderThickness="3"
                                 BorderBrush="{DynamicResource AccentSoftBrush}" Opacity="0" IsHitTestVisible="False" />
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="9"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusM}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -425,9 +430,9 @@
             <Setter.Value>
                 <ControlTemplate TargetType="PasswordBox">
                     <Grid>
-                        <Border x:Name="Glow" Margin="-3" CornerRadius="12" BorderThickness="3"
+                        <Border x:Name="Glow" Margin="-3" CornerRadius="{StaticResource RadiusL}" BorderThickness="3"
                                 BorderBrush="{DynamicResource AccentSoftBrush}" Opacity="0" IsHitTestVisible="False" />
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="9"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusM}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                             <Grid>
                                 <!-- NOTE: no Margin on the host: the password editor insets itself by
@@ -487,7 +492,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <StackPanel Orientation="Horizontal" Background="Transparent">
-                        <Border x:Name="Box" Width="15" Height="15" CornerRadius="8" BorderThickness="1.5"
+                        <Border x:Name="Box" Width="15" Height="15" CornerRadius="{StaticResource RadiusM}" BorderThickness="1.5"
                                 BorderBrush="{DynamicResource SubTextBrush}" Background="Transparent" VerticalAlignment="Center">
                             <Path x:Name="Mark" Data="M 3.5,7.5 L 6.2,10 L 11,4.5" Stroke="{DynamicResource OnAccentBrush}"
                                   StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
@@ -580,7 +585,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <Grid Width="38" Height="22" Background="Transparent">
-                        <Border x:Name="Track" CornerRadius="11" Background="{DynamicResource HoverBrush}" />
+                        <Border x:Name="Track" CornerRadius="{StaticResource RadiusM}" Background="{DynamicResource HoverBrush}" />
                         <Ellipse x:Name="Knob" Width="18" Height="18" Fill="White" HorizontalAlignment="Left" Margin="2,0,0,0">
                             <Ellipse.RenderTransform>
                                 <TranslateTransform x:Name="KnobShift" X="0" />
@@ -624,7 +629,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
-                    <Border x:Name="Bd" Background="Transparent" Padding="8,5" CornerRadius="5" Margin="3,1">
+                    <Border x:Name="Bd" Background="Transparent" Padding="8,5" CornerRadius="{StaticResource RadiusS}" Margin="3,1">
                         <ContentPresenter />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -653,7 +658,7 @@
                                       IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
-                                    <Border x:Name="Bd" Background="{DynamicResource Surface2Brush}" CornerRadius="7">
+                                    <Border x:Name="Bd" Background="{DynamicResource Surface2Brush}" CornerRadius="{StaticResource RadiusS}">
                                         <Path Data="M 0,0 L 4,4 L 8,0" Stroke="{DynamicResource SubTextBrush}" StrokeThickness="1.4"
                                               StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
                                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
@@ -671,7 +676,7 @@
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" />
                         <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
                                AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-                            <Border Background="{DynamicResource Surface2Brush}" CornerRadius="8" Margin="0,4,0,0"
+                            <Border Background="{DynamicResource Surface2Brush}" CornerRadius="{StaticResource RadiusM}" Margin="0,4,0,0"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                     MaxHeight="240" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" Padding="0,3"
                                     TextElement.FontFamily="{DynamicResource UiFont}">
@@ -694,7 +699,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ToolTip">
                     <Border Background="{DynamicResource Surface2Brush}" BorderBrush="{DynamicResource StrokeBrush}"
-                            BorderThickness="1" CornerRadius="6" Padding="7,4">
+                            BorderThickness="1" CornerRadius="{StaticResource RadiusS}" Padding="7,4">
                         <ContentPresenter />
                     </Border>
                 </ControlTemplate>
@@ -708,7 +713,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContextMenu">
-                    <Border Background="{DynamicResource Surface2Brush}" CornerRadius="8" BorderBrush="{DynamicResource StrokeBrush}"
+                    <Border Background="{DynamicResource Surface2Brush}" CornerRadius="{StaticResource RadiusM}" BorderBrush="{DynamicResource StrokeBrush}"
                             BorderThickness="1" Padding="3">
                         <StackPanel IsItemsHost="True" />
                     </Border>
@@ -723,7 +728,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
-                    <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="10,5" MinWidth="130">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource RadiusS}" Padding="10,5" MinWidth="130">
                         <ContentPresenter ContentSource="Header" />
                     </Border>
                     <ControlTemplate.Triggers>
