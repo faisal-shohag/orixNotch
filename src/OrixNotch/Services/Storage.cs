@@ -39,6 +39,9 @@ public static class Storage
         catch (Exception ex)
         {
             App.Log(ex);
+            // The next Save would overwrite the unreadable file with defaults: keep a copy the user can recover.
+            try { File.Copy(PathOf(name), $"{PathOf(name)}.corrupt-{DateTime.Now:yyyyMMdd-HHmmss}", overwrite: true); }
+            catch (Exception copyEx) { App.Log(copyEx); }
         }
         return new T();
     }

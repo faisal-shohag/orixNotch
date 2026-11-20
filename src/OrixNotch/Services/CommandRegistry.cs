@@ -30,7 +30,7 @@ public static partial class CommandRegistry
         new(AppIcon.Grid, "weather, phone, settings…", "Open a tool or a settings page by name", Complete: ""),
     ];
 
-    public static List<Suggestion> Suggest(string input)
+    public static List<Suggestion> Suggest(string input, bool fallbacks = true)
     {
         var text = input.Trim();
         if (text.Length == 0) return Examples.ToList();
@@ -111,7 +111,7 @@ public static partial class CommandRegistry
             list.Add(new(AppIcon.Gear, "Open Settings", "Settings", () => window?.OpenTool(NotchWindow.SettingsId)));
 
         // Nothing matched: offer the text to Ask AI or as a to-do.
-        if (list.Count == 0 && text.Length >= 3)
+        if (fallbacks && list.Count == 0 && text.Length >= 3)
         {
             list.Add(AskSuggestion(text));
             list.Add(new(AppIcon.ListBullet, $"Add to-do: {text}", "To-Dos", () =>
@@ -123,16 +123,19 @@ public static partial class CommandRegistry
         return list.DistinctBy(s => s.Title).Take(Max).ToList();
     }
 
-    /// <summary>Runs the best match for a whole command (orixnotch://run?text=…). False when nothing matched.</summary>
+    /// <summary>Runs the best match for a whole command (orixnotch://run?text=…). False when nothing matched.
+    /// No Ask AI / to-do fallback: any web page can open this link, and Ask AI spends the user's API key.</summary>
     public static bool RunText(string text)
     {
-        var first = Suggest(text).FirstOrDefault(s => s.Run is not null);
+        var first = Suggest(text, fallbacks: false).FirstOrDefault(s => s.Run is not null && s.Hint != AskHint);
         first?.Run?.Invoke();
         return first is not null;
     }
 
+    private const string AskHint = "Ask AI";
+
     private static Suggestion AskSuggestion(string question) =>
-        new(AppIcon.Sparkles, $"Ask AI: {question}", "Ask AI", () =>
+        new(AppIcon.Sparkles, $"Ask AI: {question}", AskHint, () =>
         {
             NotchWindow.Instance?.OpenTool("ask");
             NotchWindow.Instance?.View<AskAiView>("ask")?.Ask(question);

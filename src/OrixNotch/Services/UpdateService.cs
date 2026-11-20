@@ -179,7 +179,7 @@ public sealed partial class UpdateService : ObservableObject
                 try
                 {
                     // The setup closes this app, upgrades in place and starts the new version (OrixNotch.wxs).
-                    Process.Start(new ProcessStartInfo("msiexec.exe", $"/i \"{msi}\" /passive") { UseShellExecute = false });
+                    Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "msiexec.exe"), $"/i \"{msi}\" /passive") { UseShellExecute = false });
                     return;
                 }
                 catch (Exception ex)
@@ -241,6 +241,9 @@ public sealed partial class UpdateService : ObservableObject
             if (!Uri.TryCreate(asset.Url, UriKind.Absolute, out var uri)
                 || !(uri.Scheme == Uri.UriSchemeHttps && uri.Host == "github.com" || uri.Host == testHost))
                 return null;
+            // No digest to check against: don't run an unverified installer (the caller opens the release page).
+            if (asset.Digest is not { } digest || !digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+                return null;
 
             var dir = Path.Combine(Path.GetTempPath(), "OrixNotch-update");
             Directory.CreateDirectory(dir);
@@ -264,16 +267,13 @@ public sealed partial class UpdateService : ObservableObject
                 await using var file = File.Create(part);
                 await response.Content.CopyToAsync(file);
             }
-            if (asset.Digest is { } digest && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+            string hash;
+            await using (var read = File.OpenRead(part))
+                hash = Convert.ToHexString(await SHA256.HashDataAsync(read));
+            if (!hash.Equals(digest[7..], StringComparison.OrdinalIgnoreCase))
             {
-                string hash;
-                await using (var read = File.OpenRead(part))
-                    hash = Convert.ToHexString(await SHA256.HashDataAsync(read));
-                if (!hash.Equals(digest[7..], StringComparison.OrdinalIgnoreCase))
-                {
-                    File.Delete(part);
-                    return null;
-                }
+                File.Delete(part);
+                return null;
             }
             File.Move(part, path, overwrite: true);
             return path;

@@ -266,6 +266,19 @@ public sealed partial class PhoneTransferService : ObservableObject
         _progressTimer.Start();
     }
 
+    /// <summary>Mark-of-the-Web, as a browser download gets: SmartScreen and Office warn before running or editing it.</summary>
+    private static void MarkFromInternet(string path)
+    {
+        try
+        {
+            File.WriteAllText(path + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // Not NTFS (FAT/exFAT receive folder): no alternate streams, nothing to mark.
+        }
+    }
+
     /// <summary>Streams a request body to <paramref name="path"/> via a .part file, counting bytes on the transfer.</summary>
     private static async Task SaveBodyAsync(HttpContext ctx, string path, PhoneTransfer transfer, CancellationToken ct)
     {
@@ -283,6 +296,7 @@ public sealed partial class PhoneTransferService : ObservableObject
                 }
             }
             File.Move(part, path);
+            MarkFromInternet(path);
         }
         catch
         {

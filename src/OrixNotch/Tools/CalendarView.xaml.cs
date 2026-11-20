@@ -118,7 +118,7 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             var dow = (DayOfWeek)((first + i) % 7);
             WeekdayRow.Children.Add(new TextBlock
             {
-                Text = culture.AbbreviatedDayNames[(int)dow][..2].ToUpper(CultureInfo.CurrentCulture),
+                Text = culture.ShortestDayNames[(int)dow].ToUpper(CultureInfo.CurrentCulture),
                 Style = (Style)FindResource("SubText"),
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,

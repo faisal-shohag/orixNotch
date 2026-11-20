@@ -1587,6 +1587,8 @@ public partial class NotchWindow : Window
         TimeSpan Duration, Action? OnDismiss = null, Action? OnClick = null, PeekAction[]? Actions = null)
     {
         public DateTime QueuedAt { get; } = DateTime.Now;
+        /// <summary>Arrived while alerts were held (full screen, a listed app): shown when the hold ends, however late.</summary>
+        public bool Held { get; set; }
     }
 
     // Reminder alerts and Windows notifications share one queue and show one after another.
@@ -1612,6 +1614,7 @@ public partial class NotchWindow : Window
             _peekTimer.Start();
             return;
         }
+        request.Held = AlertsHeld() && !IsUserFeedback(request.Key); // stale volume steps after a film are noise
         _peekQueue.Add(request);
         if (_peekQueue.Count > 4) _peekQueue.RemoveAt(0);
         if (!_peeking) ShowNextPeek();
@@ -1628,7 +1631,7 @@ public partial class NotchWindow : Window
     {
         if (_expanded || AlertsHeld() || Turning) return; // mid-turn: shown when the turn ends // stays queued until the notch is closed / the app is left
         if (Visibility != Visibility.Visible) Visibility = Visibility.Visible; // a listed app hid it but lets alerts through
-        _peekQueue.RemoveAll(r => DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
+        _peekQueue.RemoveAll(r => !r.Held && DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
         if (_peekQueue.Count == 0) return;
         var next = _peekQueue[0];
         _peekQueue.RemoveAt(0);

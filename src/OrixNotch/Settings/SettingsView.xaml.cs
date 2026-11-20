@@ -1670,7 +1670,8 @@ public partial class SettingsView : UserControl, IToolView
         }
 
         void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(Show);
-        updates.PropertyChanged += OnChanged;
+        // Subscribe on Loaded: search builds this page and drops it unshown, and then Unloaded never fires.
+        button.Loaded += (_, _) => { updates.PropertyChanged -= OnChanged; updates.PropertyChanged += OnChanged; Show(); };
         button.Unloaded += (_, _) => updates.PropertyChanged -= OnChanged;
         button.Click += (_, _) =>
         {

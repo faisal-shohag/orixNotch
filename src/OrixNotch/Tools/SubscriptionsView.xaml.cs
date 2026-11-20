@@ -43,8 +43,7 @@ public partial class SubscriptionsView : UserControl, IToolView
             Field.ShowError(NameInput);
             return;
         }
-        if (!decimal.TryParse(PriceInput.Text.Trim(), NumberStyles.Number, CultureInfo.CurrentCulture, out var price)
-            && !decimal.TryParse(PriceInput.Text.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out price) || price < 0)
+        if (!NumberInput.TryParse(PriceInput.Text.Trim(), out decimal price) || price < 0)
         {
             Field.ShowError(PriceInput);
             return;

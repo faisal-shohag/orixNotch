@@ -68,7 +68,11 @@ public sealed class NotificationWatcher
     public void Reconfigure()
     {
         if (App.Settings.NotifyEnabled) _poll.Start();
-        else _poll.Stop();
+        else
+        {
+            _poll.Stop();
+            _listenerPrimed = false; // toasts that arrive while off must not replay as new when turned back on
+        }
     }
 
     /// <summary>Asks Windows for notification access (listener mode only). Returns true when allowed.</summary>
@@ -132,6 +136,8 @@ public sealed class NotificationWatcher
         foreach (var n in list)
         {
             if (!_seenIds.Add(n.Id) || !_listenerPrimed) continue;
+            // Like the database's 30 s rule: nothing old (missed while off or asleep) shows as a new alert.
+            if (DateTimeOffset.Now - n.CreationTime > TimeSpan.FromSeconds(30)) continue;
             var binding = n.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
             var texts = binding?.GetTextElements().Select(t => t.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList() ?? [];
             ImageSource? icon = null;
