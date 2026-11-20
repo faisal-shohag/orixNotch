@@ -17,7 +17,11 @@
                 Background="{DynamicResource AccentBrush}" Opacity="0" IsHitTestVisible="False" />
         <!-- Pill = notch silhouette (Shape) + clipped content (Body). Sizes are driven by springs in code. -->
         <Grid x:Name="Pill" VerticalAlignment="Top" HorizontalAlignment="Center" AllowDrop="True">
-            <Path x:Name="Shape" Fill="{DynamicResource PillBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1" />
+            <!-- In a Canvas so the outline is never clipped to its layout slot: while the notch grows, the new outline is
+                 drawn a frame before layout catches up, and that clip cut its drop shadow off in a hard, blinking edge. -->
+            <Canvas IsHitTestVisible="True">
+                <Path x:Name="Shape" Fill="{DynamicResource PillBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1" />
+            </Canvas>
             <!-- Glass highlights (NotchWindow.Glass.cs): a sheen across the top, a faint accent glow at the bottom. -->
             <Path x:Name="GlassGlow" IsHitTestVisible="False" Visibility="Collapsed" Opacity="{Binding Opacity, ElementName=Shape}" />
             <Path x:Name="GlassSheen" IsHitTestVisible="False" Visibility="Collapsed" Opacity="{Binding Opacity, ElementName=Shape}">
