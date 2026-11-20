@@ -105,6 +105,7 @@ public sealed class AppSettings
     /// <summary>"Auto" = the AI tool closest to its limit; "Choose" = the tools in <see cref="IdleAiTools"/>.</summary>
     public string IdleAiMode { get; set; } = "Auto";
     public List<string> IdleAiTools { get; set; } = new();
+    public string ClockStyle { get; set; } = "Plain";   // "Plain" | "Flip" (idle Clock item)
     public string SecondClockZone { get; set; } = "";   // Windows time zone id for the "Second clock" idle item
 
     public string LastTool { get; set; } = "home";

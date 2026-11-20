@@ -38,7 +38,7 @@ public partial class SettingsView : UserControl, IToolView
         ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
-        ["display"] = ["Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
+        ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
     };
@@ -770,6 +770,12 @@ public partial class SettingsView : UserControl, IToolView
                 }));
             if (id == "aiUsage" && S.IdleItems.Contains("aiUsage")) AiToolChoices();
             if (id == "clock2" && S.IdleItems.Contains("clock2")) SecondClockChoice();
+            if (id == "clock" && S.IdleItems.Contains("clock"))
+            {
+                string[] styles = ["Plain", "Flip"];
+                Row("Clock style", "Flip shows the time on a small split tile that flips over each minute.",
+                    Combo(styles, Math.Max(0, Array.IndexOf(styles, S.ClockStyle)), i => { S.ClockStyle = styles[i]; SaveIdle(); }));
+            }
         }
     }
 

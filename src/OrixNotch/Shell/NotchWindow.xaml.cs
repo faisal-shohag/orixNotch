@@ -1338,6 +1338,41 @@ public partial class NotchWindow : Window
     private static FrameworkElement IdleValue(IdleItem item, double fontSize = 13.5, TextAlignment align = TextAlignment.Right)
     {
         if (item.Id == "timeline") return new DayTimeline(IdleInfoService.Instance.TodayEvents);
+        if (item.Id == "clock" && App.Settings.ClockStyle == "Flip") return FlipClock(IdleText(item, fontSize - 1, TextAlignment.Center));
+        return IdleText(item, fontSize, align);
+    }
+
+    private static string? _flipShown; // the time the flip clock last showed: a new one flips in
+
+    /// <summary>Settings › Display "Clock style: Flip": the time on a small split tile that flips when the minute changes.</summary>
+    private static FrameworkElement FlipClock(TextBlock text)
+    {
+        var seam = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.7 };
+        seam.SetResourceReference(Border.BackgroundProperty, "PillBrush");
+        var face = new Grid();
+        face.Children.Add(text);
+        face.Children.Add(seam);
+        var tile = new Border
+        {
+            CornerRadius = new CornerRadius(5), Padding = new Thickness(5, 1, 5, 1), VerticalAlignment = VerticalAlignment.Center,
+            Child = face, RenderTransformOrigin = new Point(0.5, 0.5),
+        };
+        tile.SetResourceReference(Border.BackgroundProperty, "Surface2Brush");
+        if (_flipShown is not null && _flipShown != text.Text)
+        {
+            var flip = new ScaleTransform(1, 1);
+            tile.RenderTransform = flip;
+            flip.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.05, 1, TimeSpan.FromMilliseconds(380))
+            {
+                EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.35 },
+            });
+        }
+        _flipShown = text.Text;
+        return tile;
+    }
+
+    private static TextBlock IdleText(IdleItem item, double fontSize, TextAlignment align)
+    {
         var text = new TextBlock
         {
             Text = item.Value,
