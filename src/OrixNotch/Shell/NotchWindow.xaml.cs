@@ -962,6 +962,12 @@ public partial class NotchWindow : Window
         _blur.Radius = (1 - reveal) * 14;
         ExpandedLayer.Effect = reveal < 0.999 && ExpandedLayer.Visibility == Visibility.Visible ? _blur : null;
 
+        // Depth: a soft shadow that grows as the notch opens, so it lifts off bright wallpapers. Not on glass (it would
+        // show through and darken it), and removed when closed so the idle notch costs no effect pass.
+        var shadow = ThemeService.IsGlass ? 0 : p;
+        Shape.Effect = shadow > 0.02 ? _depth : null;
+        _depth.Opacity = 0.45 * shadow;
+
         CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1);
         CollapsedLayer.Visibility = p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
         PeekLayer.Opacity = Math.Clamp((peek - 0.5) * 2, 0, 1);
@@ -1892,6 +1898,7 @@ public partial class NotchWindow : Window
     }
 
     private readonly TranslateTransform _tabRise = new();
+    private readonly DropShadowEffect _depth = new() { BlurRadius = 28, ShadowDepth = 8, Direction = 270, Color = Colors.Black, Opacity = 0 };
 
     private void BuildEqualizer()
     {
