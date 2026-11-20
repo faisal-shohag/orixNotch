@@ -315,7 +315,10 @@ public static class AiService
         var client = new AnthropicClient { ApiKey = key };
 
         var messages = conversation
-            .Select(m => new BetaMessageParam { Role = m.FromUser ? Role.User : Role.Assistant, Content = ClaudeContent(m) })
+            // SDK 13: a message is a per-role type (it sets its own role) wrapped as a BetaMessageParam.
+            .Select(m => m.FromUser
+                ? (BetaMessageParam)new BetaUserMessageParam { Content = ClaudeContent(m) }
+                : new BetaAssistantMessageParam { Content = ClaudeContent(m) })
             .ToList();
 
         var parameters = new MessageCreateParams
@@ -340,7 +343,7 @@ public static class AiService
     }
 
     /// <summary>Plain text, or image blocks followed by the text when the turn has images.</summary>
-    private static BetaMessageParamContent ClaudeContent(AiTurn turn)
+    private static BetaMessageContentParam ClaudeContent(AiTurn turn)
     {
         if (!turn.HasImages) return turn.Text;
         var blocks = turn.Images!
