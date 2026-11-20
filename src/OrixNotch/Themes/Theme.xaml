@@ -32,6 +32,13 @@
     <SolidColorBrush x:Key="OnAccentBrush" Color="#111113" />
     <SolidColorBrush x:Key="GoodBrush" Color="#32D74B" />
     <SolidColorBrush x:Key="StarBrush" Color="#FFB800" />
+    <!-- Weather conditions (sun uses StarBrush); a forecast's range runs cold → warm. -->
+    <SolidColorBrush x:Key="WeatherRainBrush" Color="#4AA8FF" />
+    <SolidColorBrush x:Key="WeatherSnowBrush" Color="#7CC8F5" />
+    <SolidColorBrush x:Key="WeatherStormBrush" Color="#A77BFF" />
+    <SolidColorBrush x:Key="WeatherNightBrush" Color="#9AA6FF" />
+    <SolidColorBrush x:Key="WeatherColdBrush" Color="#4AA8FF" />
+    <SolidColorBrush x:Key="WeatherWarmBrush" Color="#FF9F0A" />
     <SolidColorBrush x:Key="BadBrush" Color="#FF453A" />
     <!-- Syntax colors for code blocks (dark defaults; ThemeService swaps in light ones). -->
     <SolidColorBrush x:Key="CodeKeywordBrush" Color="#FF7B72" />
@@ -592,6 +599,14 @@
         </Setter>
     </Style>
 
+    <!-- Shapes a glow out of any brush: strong at the centre, fading to nothing (no blur effect: cheap on the notch). -->
+    <RadialGradientBrush x:Key="GlowMaskBrush">
+        <GradientStop Color="#99000000" Offset="0" />
+        <GradientStop Color="#3C000000" Offset="0.45" />
+        <GradientStop Color="#00000000" Offset="1" />
+    </RadialGradientBrush>
+
+    <!-- The app's progress look (see Shell/GlowBar.cs): the fill ends in a glowing dot. -->
     <Style TargetType="ProgressBar">
         <Setter Property="Height" Value="3" />
         <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
@@ -601,8 +616,22 @@
                 <ControlTemplate TargetType="ProgressBar">
                     <Grid>
                         <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="2" />
-                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="2" />
+                        <Grid x:Name="PART_Indicator" HorizontalAlignment="Left">
+                            <Border Background="{TemplateBinding Foreground}" CornerRadius="2" />
+                            <!-- A zero-size Canvas at the fill's end: its dot and glow overflow without being clipped. -->
+                            <Canvas Width="0" Height="0" HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <Ellipse Canvas.Left="-10" Canvas.Top="-10" Width="20" Height="20" Fill="{TemplateBinding Foreground}"
+                                         OpacityMask="{StaticResource GlowMaskBrush}" />
+                                <Ellipse Canvas.Left="-3.5" Canvas.Top="-3.5" Width="7" Height="7" Fill="{TemplateBinding Foreground}" />
+                            </Canvas>
+                        </Grid>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- Nothing to measure (no track playing: Maximum 0) draws as full: show just the track. -->
+                        <Trigger Property="Maximum" Value="0">
+                            <Setter TargetName="PART_Indicator" Property="Visibility" Value="Hidden" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

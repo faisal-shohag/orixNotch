@@ -14,6 +14,9 @@ public sealed class LevelBar : Grid
 {
     private readonly Border _track = new();
     private readonly Border _fill = new() { HorizontalAlignment = HorizontalAlignment.Left };
+    // The app's progress glow at the fill's end (as Shell/GlowBar.cs); a Canvas so it can spill past the bar unclipped.
+    private readonly System.Windows.Shapes.Ellipse _glow = new() { IsHitTestVisible = false };
+    private readonly Canvas _glowLayer = new() { IsHitTestVisible = false };
     private readonly HeroIcon? _icon;
     private double _value;
 
@@ -27,6 +30,10 @@ public sealed class LevelBar : Grid
         _track.CornerRadius = _fill.CornerRadius = new CornerRadius(height / 2);
         _track.SetResourceReference(Border.BackgroundProperty, "TrackBrush");
         _fill.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+        _glow.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentBrush");
+        _glow.SetResourceReference(UIElement.OpacityMaskProperty, "GlowMaskBrush");
+        _glowLayer.Children.Add(_glow);
+        Children.Add(_glowLayer);
         Children.Add(_track);
         Children.Add(_fill);
         if (icon is { } kind)
@@ -93,6 +100,11 @@ public sealed class LevelBar : Grid
     {
         // Never thinner than the bar is tall, so a low level still reads as a rounded dot, not a sliver.
         _fill.Width = _value <= 0 ? 0 : Math.Max(Height, ActualWidth * _value);
+        var glow = Math.Min(Height * 2.6, 44);
+        _glow.Width = _glow.Height = glow;
+        Canvas.SetLeft(_glow, _fill.Width - Height / 2 - glow / 2);
+        Canvas.SetTop(_glow, (Height - glow) / 2);
+        _glow.Visibility = _value <= 0 ? Visibility.Collapsed : Visibility.Visible;
         if (_icon is not null)
             _icon.SetResourceReference(Control.ForegroundProperty, _fill.Width >= Height ? "OnAccentBrush" : "SubTextBrush");
     }

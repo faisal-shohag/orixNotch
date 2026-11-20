@@ -121,13 +121,8 @@ public partial class ScreenTimeView : UserControl, IToolView
             nameCell.Children.Add(icon);
             nameCell.Children.Add(name);
 
-            var track = new Border { Height = 6, CornerRadius = new CornerRadius(3), Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
-            track.SetResourceReference(Border.BackgroundProperty, "TrackBrush");
-            var fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left };
-            fill.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
-            var share = seconds / (double)Math.Max(1, most);
-            track.Child = fill;
-            track.SizeChanged += (_, e) => fill.Width = Math.Max(6, e.NewSize.Width * share);
+            // The app's glowing bar: its share of the top app's time.
+            var track = new GlowBar { BarHeight = 6, Value = seconds / (double)Math.Max(1, most), Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(track, 1);
 
             var time = new TextBlock { Text = ScreenTimeService.Format(seconds), FontSize = 12, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };

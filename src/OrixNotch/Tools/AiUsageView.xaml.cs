@@ -259,32 +259,9 @@ public partial class AiUsageView : UserControl, IToolView
 
     private static string BrushFor(double pct) => pct > 85 ? "BadBrush" : "AccentBrush";
 
-    /// <summary>Rounded track with a proportional fill and a light tick at the value.</summary>
-    private static FrameworkElement Bar(double pct, string fillBrush)
-    {
-        var grid = new Grid { Height = 6, Margin = new Thickness(0, 5, 0, 4) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(pct, 0.01), GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(100 - pct, 0.01), GridUnitType.Star) });
-
-        var track = new Border { CornerRadius = new CornerRadius(3) };
-        track.SetResourceReference(Border.BackgroundProperty, "TrackBrush");
-        Grid.SetColumnSpan(track, 2);
-        grid.Children.Add(track);
-
-        if (pct > 0.5)
-        {
-            var fill = new Border { CornerRadius = new CornerRadius(3, 0, 0, 3) };
-            fill.SetResourceReference(Border.BackgroundProperty, fillBrush);
-            grid.Children.Add(fill);
-            if (pct < 99.5)
-            {
-                var tick = new Border { Width = 2, CornerRadius = new CornerRadius(1), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, -1, 0) };
-                tick.SetResourceReference(Border.BackgroundProperty, "TextBrush");
-                grid.Children.Add(tick);
-            }
-        }
-        return grid;
-    }
+    /// <summary>The app's glowing bar: the value is printed above it, so its head is the compact glowing dot.</summary>
+    private static FrameworkElement Bar(double pct, string fillBrush) =>
+        new GlowBar { BarHeight = 6, Tone = fillBrush, Value = pct / 100, Margin = new Thickness(0, 5, 0, 4) };
 
     /// <summary>The last 14 days of tokens, in the app's one chart style (Shell/LineChart).</summary>
     private static FrameworkElement Trend(long[] daily)

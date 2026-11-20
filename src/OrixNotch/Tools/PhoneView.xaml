@@ -232,14 +232,7 @@
                                                 <TextBlock FontSize="10.5" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SubTextBrush}">
                                                     <Run Text="{Binding Direction, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding State, Mode=OneWay}" />
                                                 </TextBlock>
-                                                <Border x:Name="Track" Height="3" CornerRadius="1.5" Background="{DynamicResource TrackBrush}" Margin="0,4,0,1"
-                                                        ClipToBounds="True">
-                                                    <Border CornerRadius="1.5" Background="{DynamicResource AccentBrush}" RenderTransformOrigin="0,0.5">
-                                                        <Border.RenderTransform>
-                                                            <ScaleTransform ScaleX="{Binding Progress}" />
-                                                        </Border.RenderTransform>
-                                                    </Border>
-                                                </Border>
+                                                <hero:GlowBar x:Name="Track" BarHeight="3" Value="{Binding Progress}" Margin="0,5,0,1" />
                                             </StackPanel>
                                             <Button x:Name="CancelBtn" Grid.Column="2" Style="{StaticResource IconButton}" Width="20" Height="20" Margin="4,0,0,0"
                                                     VerticalAlignment="Top" ToolTip="Cancel" Foreground="{DynamicResource SubTextBrush}" Click="OnCancelTransfer">
