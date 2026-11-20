@@ -17,6 +17,8 @@ public sealed class CalendarEvent
     public string Title { get; set; } = "";
     /// <summary>Which subscribed calendar this came from (an id, not the secret link; read-only); null for events added here.</summary>
     public string? Feed { get; set; }
+    /// <summary>Online meeting link from a subscribed calendar (Meet, Zoom, Teams, Webex), for the reminder's Join.</summary>
+    public string? Link { get; set; }
 
     [JsonIgnore] public string TimeLabel => string.IsNullOrEmpty(Time) ? "All day" : Time;
     [JsonIgnore] public bool IsSubscribed => Feed is not null;

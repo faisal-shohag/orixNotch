@@ -73,6 +73,14 @@ public sealed class AppSettings
     public bool NotifyKeepHistory { get; set; } = true;         // save them for the Notifications tool
     public DateTime NotifyReadAt { get; set; } = DateTime.Now;  // newer ones are "unread" (tab badge, idle item)
 
+    // Automations (Settings › Automations)
+    public bool AutoPauseMusic { get; set; }
+    public int AutoPauseLeadMin { get; set; } = 1;
+    public bool AutoJoinLink { get; set; } = true;       // a meeting reminder with a link opens the meeting on click
+    public bool AutoQuietOnMic { get; set; }             // quiet while the microphone is in use (calls)
+    public bool AutoFocusEvents { get; set; }            // an event called "Focus" starts a focus session
+    public bool SubscriptionAlerts { get; set; } = true; // 2 days before a subscription renews
+
     // Screen Time: off until turned on in the tool; kept only on this PC
     public bool ScreenTimeEnabled { get; set; }
     public bool ScreenTimeSummary { get; set; } = true;  // an evening alert with the day's total

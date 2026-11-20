@@ -19,6 +19,7 @@ public partial class SettingsView : UserControl, IToolView
     private static readonly (string Id, string Name, AppIcon Icon, string? Section)[] Pages =
     [
         ("general", "General", AppIcon.Adjust, null),
+        ("automations", "Automations", AppIcon.Bolt, null),
         ("appearance", "Appearance", AppIcon.Palette, null),
         ("display", "Display", AppIcon.Monitor, "NOTCH"),
         ("tabs", "Tabs", AppIcon.Grid, null),
@@ -119,6 +120,7 @@ public partial class SettingsView : UserControl, IToolView
         switch (id)
         {
             case "general": RenderGeneral(); break;
+            case "automations": RenderAutomations(); break;
             case "appearance": RenderAppearance(); break;
             case "display": RenderDisplay(); break;
             case "tabs": RenderTabs(); break;
@@ -517,6 +519,40 @@ public partial class SettingsView : UserControl, IToolView
                     }));
             }
         }
+    }
+
+    private void RenderAutomations()
+    {
+        Title("Automations", "Small things OrixNotch does for you, each with its own switch.");
+
+        Section("BEFORE A MEETING");
+        Row("Pause music", "Pauses what's playing shortly before a calendar event starts.",
+            Toggle(S.AutoPauseMusic, v => { S.AutoPauseMusic = v; Save(false); }));
+        var leads = new[] { 0, 1, 2, 5 };
+        Row("Pause it", "How long before the event.",
+            Combo(["When it starts", "1 minute before", "2 minutes before", "5 minutes before"], Math.Max(0, Array.IndexOf(leads, S.AutoPauseLeadMin)),
+                i => { S.AutoPauseLeadMin = leads[i]; Save(false); }, 170));
+        Row("Join from the reminder", "When a subscribed calendar's event has a Meet, Zoom, Teams or Webex link, clicking its reminder opens the meeting.",
+            Toggle(S.AutoJoinLink, v => { S.AutoJoinLink = v; Save(false); }));
+
+        Section("DURING A CALL");
+        Row("Quiet while on a call", "Holds alerts while any app (including your browser) is using the microphone, then sums them up afterwards.",
+            Toggle(S.AutoQuietOnMic, v => { S.AutoQuietOnMic = v; Save(false); }));
+
+        Section("FOCUS");
+        Row("Focus events start a session", "A calendar event with \"Focus\" in its name starts a Pomodoro focus session when it begins.",
+            Toggle(S.AutoFocusEvents, v => { S.AutoFocusEvents = v; Save(false); }));
+
+        Section("HEADS-UPS");
+        Row("AI usage alerts", "A heads-up when Claude Code, Codex, Cursor or another AI tool reaches 80% and 95% of its limit.",
+            Toggle(S.AiLimitAlerts, v =>
+            {
+                S.AiLimitAlerts = v;
+                Save(false);
+                AiLimitWatcher.Instance.Reconfigure();
+            }));
+        Row("Subscription renewals", "An alert 2 days before something in the Subscriptions tool renews.",
+            Toggle(S.SubscriptionAlerts, v => { S.SubscriptionAlerts = v; Save(false); }));
     }
 
     /// <summary>A sound picker that previews on change, plus a play button to hear it again.</summary>

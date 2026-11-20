@@ -15,7 +15,26 @@ namespace OrixNotch.Services;
 /// </remarks>
 public static class IcsParser
 {
-    public sealed record Occurrence(DateTime Start, bool AllDay, string Title);
+    /// <param name="Link">The online meeting link (Meet, Zoom, Teams, Webex) found in the event, if any.</param>
+    public sealed record Occurrence(DateTime Start, bool AllDay, string Title, string? Link = null);
+
+    private static readonly System.Text.RegularExpressions.Regex MeetingLink = new(
+        @"https://(meet\.google\.com|[\w.-]*zoom\.us|teams\.microsoft\.com|teams\.live\.com|[\w.-]*webex\.com)/[^\s""<>\\]+",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>The first meeting link in the places calendars put it: URL, LOCATION, the conference fields, DESCRIPTION.</summary>
+    internal static string? FindMeetingLink(IEnumerable<string> values) =>
+        values.Select(v => MeetingLink.Match(v.Replace("\\n", " ").Replace("\\,", ",").Replace("\\;", ";"))).FirstOrDefault(m => m.Success)?.Value;
+
+#if DEBUG
+    static IcsParser()
+    {
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["Join: https://meet.google.com/abc-defg-hij\\nor dial in"]) == "https://meet.google.com/abc-defg-hij");
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["Room 4", "https://us02web.zoom.us/j/123?pwd=x"]) == "https://us02web.zoom.us/j/123?pwd=x");
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["<https://teams.microsoft.com/l/meetup-join/19%3a>"]) == "https://teams.microsoft.com/l/meetup-join/19%3a");
+        System.Diagnostics.Debug.Assert(FindMeetingLink(["https://example.com/meet", "Office"]) is null);
+    }
+#endif
 
     private sealed record Prop(string Name, Dictionary<string, string> Params, string Value);
 
@@ -44,6 +63,8 @@ public static class IcsParser
             var title = Unescape(Get(e, "SUMMARY")?.Value ?? "");
             if (title.Length == 0) title = "(No title)";
             var uid = Get(e, "UID")?.Value ?? "";
+            var link = FindMeetingLink(new[] { "URL", "LOCATION", "X-GOOGLE-CONFERENCE", "X-MICROSOFT-SKYPETEAMSMEETINGURL", "DESCRIPTION" }
+                .Select(n => Get(e, n)?.Value).OfType<string>());
 
             IEnumerable<DateTime> walls = [start.Wall];
             if (Get(e, "RECURRENCE-ID") is null && Get(e, "RRULE") is { } rrule)
@@ -60,7 +81,7 @@ public static class IcsParser
             foreach (var wall in walls)
             {
                 var local = start.AllDay ? wall.Date : ToLocal(start with { Wall = wall });
-                if (local.Date >= from.Date && local.Date <= to.Date) result.Add(new Occurrence(local, start.AllDay, title));
+                if (local.Date >= from.Date && local.Date <= to.Date) result.Add(new Occurrence(local, start.AllDay, title, link));
             }
         }
         result.Sort((a, b) => a.Start.CompareTo(b.Start));

@@ -58,6 +58,37 @@ public static class SystemToggles
         }
     }
 
+    private const string MicConsentKey = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
+
+    /// <summary>
+    /// Some app is using the microphone right now (a call, in any app or browser): Windows' privacy records keep a
+    /// start time per app and a stop time of 0 while it's in use.
+    /// </summary>
+    public static bool MicInUse()
+    {
+        try
+        {
+            using var root = Registry.CurrentUser.OpenSubKey(MicConsentKey);
+            return root is not null && InUse(root, 0);
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or System.IO.IOException)
+        {
+            return false;
+        }
+
+        static bool InUse(RegistryKey key, int depth)
+        {
+            if (key.GetValue("LastUsedTimeStop") is long stop && stop == 0 && key.GetValue("LastUsedTimeStart") is long start && start > 0) return true;
+            if (depth >= 2) return false; // apps sit one level down (two under NonPackaged)
+            foreach (var name in key.GetSubKeyNames())
+            {
+                using var sub = key.OpenSubKey(name);
+                if (sub is not null && InUse(sub, depth + 1)) return true;
+            }
+            return false;
+        }
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint msg, IntPtr wParam, string lParam, uint flags, uint timeout, out IntPtr result);
 }

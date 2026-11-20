@@ -61,6 +61,7 @@ public sealed partial class CalendarFeedService : ObservableObject
                         Time = o.AllDay ? "" : $"{o.Start.Hour:00}:{o.Start.Minute:00}",
                         Title = o.Title,
                         Feed = FeedId(feed),
+                        Link = o.Link,
                     }));
                 }
                 catch (Exception ex)

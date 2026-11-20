@@ -35,6 +35,9 @@ public sealed partial class EventReminderService : ObservableObject
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(15) };
     private List<CalendarEvent> _events = new();
     private string? _currentKey;
+
+    /// <summary>The reminded event's meeting link, if its calendar gave one.</summary>
+    public string? CurrentLink { get; private set; }
     private readonly HashSet<string> _dismissed = new();
     private readonly HashSet<string> _chimedLead = new();
     private readonly HashSet<string> _chimedStart = new();
@@ -49,9 +52,13 @@ public sealed partial class EventReminderService : ObservableObject
     /// <summary>Call after events.json changes (the Calendar does on add/delete).</summary>
     public void Reload()
     {
-        _events = CalendarEvent.LoadAll().Where(e => e.Feed != CalendarEvent.AiFeed).ToList(); // a limit reset isn't a meeting
+        _events = Meetings();
         Check();
     }
+
+    /// <summary>Calendar events that are things you attend: not AI limit resets or subscription renewals.</summary>
+    public static List<CalendarEvent> Meetings() =>
+        CalendarEvent.LoadAll().Where(e => e.Feed is not (CalendarEvent.AiFeed or CalendarEvent.SubscriptionFeed)).ToList();
 
     /// <summary>Re-evaluate now (e.g. after the lead/linger settings change).</summary>
     public void Recheck() => Check();
@@ -89,6 +96,7 @@ public sealed partial class EventReminderService : ObservableObject
         if (pick.Event is null)
         {
             _currentKey = null;
+            CurrentLink = null;
             IsActive = false;
             IsNow = false;
             Text = "";
@@ -102,6 +110,7 @@ public sealed partial class EventReminderService : ObservableObject
         var key = Key(pick.Event);
         var until = pick.Start - now;
         _currentKey = key;
+        CurrentLink = pick.Event.Link;
         IsNow = until <= TimeSpan.Zero;
         var when = IsNow ? "now" : until.TotalMinutes < 1 ? "in <1m" : $"in {(int)Math.Ceiling(until.TotalMinutes)}m";
         Text = $"{pick.Event.Title} · {when}";

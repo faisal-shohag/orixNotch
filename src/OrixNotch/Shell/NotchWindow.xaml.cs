@@ -166,10 +166,15 @@ public partial class NotchWindow : Window
         };
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
         ScreenshotWatcher.Instance.Taken += ShowScreenshotPeek;
+        AutomationService.Instance.Acted += (title, sub) =>
+            EnqueuePeek(new PeekRequest("automation", () => GlyphTile(AppIcon.Bolt), title, sub, TimeSpan.FromSeconds(4)));
         SubscriptionService.Instance.Renewing += (sub, days) =>
+        {
+            if (!App.Settings.SubscriptionAlerts) return;
             EnqueuePeek(new PeekRequest("sub:" + sub.Id, () => GlyphTile(AppIcon.CreditCard),
                 days == 0 ? $"{sub.Name} renews today" : days == 1 ? $"{sub.Name} renews tomorrow" : $"{sub.Name} renews in {days} days",
                 $"{sub.PriceLabel} · cancel before then if you don't need it", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("subscriptions")));
+        };
         ScreenTimeService.Instance.Summary += (seconds, top) =>
             EnqueuePeek(new PeekRequest("screentime", () => GlyphTile(AppIcon.Hourglass), $"{ScreenTimeService.Format(seconds)} on screen today",
                 top is null ? "Click for details" : $"Most of it in {top}", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("screentime")));
@@ -225,6 +230,7 @@ public partial class NotchWindow : Window
         DownloadWatcher.Instance.Start();
         ScreenshotWatcher.Instance.Start();
         ScreenTimeService.Instance.Start();
+        AutomationService.Instance.Start();
         Dispatcher.BeginInvoke(SubscriptionService.Instance.Start, DispatcherPriority.ContextIdle); // its alerts once the notch is up
         ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
         ForegroundAppWatcher.Instance.Start();
@@ -346,8 +352,13 @@ public partial class NotchWindow : Window
     internal static bool InWindow(TimeOnly now, TimeOnly from, TimeOnly to) =>
         from <= to ? now >= from && now < to : now >= from || now < to;
 
-    /// <summary>Quiet hours are on now: the schedule in Settings → General, or the tray's "Quiet for 1 hour".</summary>
-    public static bool QuietActive() => QuietSnoozed() || QuietScheduled();
+    /// <summary>
+    /// Quiet hours are on now: the schedule in Settings → General, the tray's "Quiet for 1 hour", or (Automations)
+    /// a call, meaning the microphone is in use.
+    /// </summary>
+    public static bool QuietActive() => QuietSnoozed() || QuietScheduled() || _inCall;
+
+    private static bool _inCall; // refreshed by Guard every couple of seconds (reading it is a registry walk)
 
     public static bool QuietSnoozed() => App.Settings.QuietUntil is { } until && until > DateTime.Now;
 
@@ -379,6 +390,7 @@ public partial class NotchWindow : Window
 
     private void CheckQuietEnded()
     {
+        _inCall = App.Settings.AutoQuietOnMic && SystemToggles.MicInUse();
         var quiet = QuietActive();
         if (_wasQuiet && !quiet && _quietMissed > 0)
         {
@@ -1513,10 +1525,27 @@ public partial class NotchWindow : Window
     {
         var r = EventReminderService.Instance;
         if (!r.IsActive) return;
-        EnqueuePeek(new PeekRequest(ReminderPeekKey, () => GlyphTile(AppIcon.CalendarDays), r.Title, r.SubText,
-            TimeSpan.FromSeconds(5),
+        // Automations › Join: a meeting with a link opens it from the reminder.
+        var link = App.Settings.AutoJoinLink ? r.CurrentLink : null;
+        EnqueuePeek(new PeekRequest(ReminderPeekKey, () => GlyphTile(AppIcon.CalendarDays), r.Title,
+            link is null ? r.SubText : $"{r.SubText} · click to join",
+            TimeSpan.FromSeconds(link is null ? 5 : 8),
             OnDismiss: () => EventReminderService.Instance.Dismiss(),
-            OnClick: () => Expand(activate: true))); // a live reminder routes this to Calendar
+            OnClick: link is null
+                ? () => Expand(activate: true) // a live reminder routes this to Calendar
+                : () => OpenLink(link)));
+    }
+
+    private static void OpenLink(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
     }
 
     private void ShowNotificationPeek(NotchNotification n)
