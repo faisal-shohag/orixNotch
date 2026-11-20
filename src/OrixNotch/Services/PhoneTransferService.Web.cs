@@ -2,6 +2,7 @@ using System.IO;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.StaticFiles;
@@ -188,13 +189,44 @@ public sealed partial class PhoneTransferService
     {
         if (_page is null)
         {
-            using var stream = typeof(PhoneTransferService).Assembly.GetManifestResourceStream("OrixNotch.Resources.phone.html")!;
-            using var reader = new StreamReader(stream);
-            _page = reader.ReadToEnd();
+            _page = Resource("phone.html")
+                .Replace("{{MARK}}", SvgUri(BrandMarkSvg(tile: false)))
+                .Replace("{{FAVICON}}", SvgUri(BrandMarkSvg(tile: true)))
+                .Replace("{{TOUCH_ICON}}", "data:image/png;base64," + Convert.ToBase64String(ResourceBytes("logo-512.png")));
         }
         // NAME_JS first: the default JSON encoder escapes < > & ' so the name can't close the script or the string.
         return _page.Replace("{{NAME_JS}}", System.Text.Json.JsonSerializer.Serialize(PcName)).Replace("{{NAME}}", WebUtility.HtmlEncode(PcName)).Replace("{{ACCENT}}", AccentHex());
     }
+
+    /// <summary>
+    /// The OrixNotch mark from Assets/Brand/mark.svg (white paths, each with its own transform) as a standalone SVG in
+    /// the logo's colours: one pink → orange sweep across the whole mark, like Shell/BrandMark.cs draws it. The paths are
+    /// a mask over one gradient rect, because a gradient on each path would restart on each piece. With
+    /// <paramref name="tile"/>: on the brand's dark rounded tile (the favicon).
+    /// </summary>
+    private static string BrandMarkSvg(bool tile)
+    {
+        var paths = string.Concat(Regex.Matches(Resource("mark.svg"), @"<path\b[^>]*/>").Select(m => m.Value));
+        // x 212..1020 is the mark's extent in its 1254 viewBox (measured from the path data).
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1254 1254\"><defs>"
+            + "<linearGradient id=\"g\" gradientUnits=\"userSpaceOnUse\" x1=\"212\" y1=\"0\" x2=\"1020\" y2=\"0\">"
+            + "<stop offset=\"0\" stop-color=\"#FD0388\"/><stop offset=\"1\" stop-color=\"#FC6F18\"/></linearGradient>"
+            + $"<mask id=\"m\">{paths}</mask></defs>"
+            + (tile ? "<rect width=\"1254\" height=\"1254\" rx=\"280\" fill=\"#0B0E17\"/>" : "")
+            + "<rect width=\"1254\" height=\"1254\" fill=\"url(#g)\" mask=\"url(#m)\"/></svg>";
+    }
+
+    private static string SvgUri(string svg) => "data:image/svg+xml," + Uri.EscapeDataString(svg);
+
+    private static byte[] ResourceBytes(string name)
+    {
+        using var stream = typeof(PhoneTransferService).Assembly.GetManifestResourceStream("OrixNotch.Resources." + name)!;
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
+    }
+
+    private static string Resource(string name) => Encoding.UTF8.GetString(ResourceBytes(name)).TrimStart('﻿');
 
     /// <summary>How the page names this PC (ORIXNOTCH_PC_NAME overrides it, for screenshots).</summary>
     private static string PcName => Environment.GetEnvironmentVariable("ORIXNOTCH_PC_NAME") is { Length: > 0 } name ? name : Environment.MachineName;
