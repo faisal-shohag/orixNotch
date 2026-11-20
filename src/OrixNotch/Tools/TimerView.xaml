@@ -173,6 +173,9 @@
 
                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0" HorizontalAlignment="Right">
                     <ComboBox x:Name="DurationBox" Width="128" Height="28" FontSize="13" FontWeight="SemiBold" />
+                    <!-- Timer › Custom…: type a length; Enter sets it, Esc goes back to the list -->
+                    <TextBox x:Name="CustomInput" Width="128" Height="28" FontSize="13" Tag="45, 90m, 1h30" Visibility="Collapsed"
+                             KeyDown="OnCustomKeyDown" LostKeyboardFocus="OnCustomLostFocus" />
                     <ComboBox x:Name="SoundBox" Width="118" Height="28" Margin="8,0,0,0" FontSize="13" FontWeight="SemiBold" />
                 </StackPanel>
             </StackPanel>

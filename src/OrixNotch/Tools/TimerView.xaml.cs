@@ -8,8 +8,11 @@ using OrixNotch.Services;
 
 namespace OrixNotch.Tools;
 
-public partial class TimerView : UserControl
+public partial class TimerView : UserControl, IEscapeHandler
 {
+    private const string CustomLabel = "Custom…";
+    private readonly List<int> _timerOptions = new(); // minutes behind each Timer list item (before "Custom…")
+
     private enum Mode { Timer, Stopwatch, Pomodoro }
 
     private Mode _mode = Mode.Pomodoro;
@@ -66,10 +69,14 @@ public partial class TimerView : UserControl
                     SecondaryButton.ToolTip = "Skip";
                     break;
                 case Mode.Timer:
-                    foreach (var m in CountdownService.Presets) DurationBox.Items.Add(m == 1 ? "1 min" : $"{m} min");
-                    DurationBox.SelectedIndex = Math.Max(0, Array.IndexOf(CountdownService.Presets, App.Settings.TimerMinutes));
+                    // The presets, plus the current length if it's a custom one, then "Custom…".
+                    _timerOptions.Clear();
+                    _timerOptions.AddRange(CountdownService.Presets.Append(App.Settings.TimerMinutes).Distinct().Order());
+                    foreach (var m in _timerOptions) DurationBox.Items.Add(CommandRegistry.FormatMinutes(m));
+                    DurationBox.Items.Add(CustomLabel);
+                    DurationBox.SelectedIndex = _timerOptions.IndexOf(App.Settings.TimerMinutes);
                     SoundBox.SelectedItem = App.Settings.TimerSound;
-                    TimerPresetText.Text = $"{App.Settings.TimerMinutes} minute countdown";
+                    TimerPresetText.Text = $"{CommandRegistry.FormatMinutes(App.Settings.TimerMinutes)} countdown";
                     SecondaryIcon.Kind = AppIcon.Plus;
                     SecondaryButton.ToolTip = "Add 1 minute";
                     break;
@@ -117,9 +124,56 @@ public partial class TimerView : UserControl
         }
         else if (_mode == Mode.Timer)
         {
-            Ctd.SetMinutes(CountdownService.Presets[DurationBox.SelectedIndex]);
-            TimerPresetText.Text = $"{App.Settings.TimerMinutes} minute countdown";
+            if (DurationBox.SelectedIndex >= _timerOptions.Count)
+            {
+                ShowCustom(true); // "Custom…"
+                return;
+            }
+            Ctd.SetMinutes(_timerOptions[DurationBox.SelectedIndex]);
+            TimerPresetText.Text = $"{CommandRegistry.FormatMinutes(App.Settings.TimerMinutes)} countdown";
         }
+    }
+
+    private IDisposable? _customHold; // the pick was made below the notch: keep it open while the length is typed
+
+    private void ShowCustom(bool on)
+    {
+        _customHold?.Dispose();
+        _customHold = on ? NotchWindow.Instance?.HoldOpen() : null;
+        CustomInput.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        DurationBox.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        if (on)
+        {
+            CustomInput.Clear();
+            Dispatcher.BeginInvoke(() => CustomInput.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+        }
+        else SetMode(_mode); // rebuild the list on the current length
+    }
+
+    private void OnCustomKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) return;
+        e.Handled = true;
+        if (CommandRegistry.ParseMinutes(CustomInput.Text) is not { } minutes)
+        {
+            Field.ShowError(CustomInput);
+            return;
+        }
+        Ctd.SetMinutes(minutes);
+        ShowCustom(false);
+    }
+
+    private void OnCustomLostFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        if (CustomInput.Visibility == Visibility.Visible) ShowCustom(false);
+    }
+
+    /// <summary>Esc while typing a custom length goes back to the list instead of closing the notch.</summary>
+    public bool OnEscape()
+    {
+        if (CustomInput.Visibility != Visibility.Visible) return false;
+        ShowCustom(false);
+        return true;
     }
 
     private void OnSoundChanged(object sender, SelectionChangedEventArgs e)
