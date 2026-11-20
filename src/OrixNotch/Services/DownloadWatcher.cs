@@ -1,6 +1,5 @@
 using System.IO;
 using System.Windows;
-using Microsoft.Win32;
 
 namespace OrixNotch.Services;
 
@@ -29,7 +28,7 @@ public sealed class DownloadWatcher
         if (_watcher is not null) return;
         try
         {
-            var dir = DownloadsFolder();
+            var dir = ShellFolders.Downloads;
             if (!Directory.Exists(dir)) return;
             _watcher = new FileSystemWatcher(dir) { NotifyFilter = NotifyFilters.FileName, EnableRaisingEvents = true };
             _watcher.Renamed += (_, e) =>
@@ -46,13 +45,4 @@ public sealed class DownloadWatcher
 
     private static bool IsPartial(string? name) =>
         name is not null && Partial.Any(ext => name.EndsWith(ext, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>The user's Downloads folder, even if they moved it (Explorer's "User Shell Folders" entry).</summary>
-    private static string DownloadsFolder()
-    {
-        const string key = @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders";
-        if (Registry.GetValue(key, "{374DE290-123F-4565-9164-39C4925E467B}", null) is string path && path.Length > 0)
-            return Environment.ExpandEnvironmentVariables(path);
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-    }
 }

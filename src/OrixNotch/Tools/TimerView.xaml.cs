@@ -276,7 +276,7 @@ public partial class TimerView : UserControl, IEscapeHandler, IToolView
         }
 
         RingText.Text = text;
-        Arc.Data = BuildArc(progress);
+        Arc.Data = NotchWindow.BuildMiniArc(progress, 118, 5.5);
     }
 
     private void UpdateDots()
@@ -290,23 +290,4 @@ public partial class TimerView : UserControl, IEscapeHandler, IToolView
         }
     }
 
-    /// <summary>Clockwise arc from 12 o'clock covering <paramref name="progress"/> of the ring.</summary>
-    private static Geometry BuildArc(double progress)
-    {
-        const double size = 118, inset = 5.5;
-        var radius = size / 2 - inset;
-        var center = new Point(size / 2, size / 2);
-        progress = Math.Clamp(progress, 0, 0.9999);
-        if (progress <= 0.001) return Geometry.Empty;
-
-        var angle = progress * 2 * Math.PI;
-        var start = new Point(center.X, center.Y - radius);
-        var end = new Point(center.X + radius * Math.Sin(angle), center.Y - radius * Math.Cos(angle));
-        var figure = new PathFigure { StartPoint = start, IsClosed = false };
-        figure.Segments.Add(new ArcSegment(end, new Size(radius, radius), 0, progress > 0.5, SweepDirection.Clockwise, true));
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-        geometry.Freeze();
-        return geometry;
-    }
 }

@@ -210,14 +210,7 @@ public partial class ConverterView : UserControl
 
     private void OnRatesLink(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
     {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
-        }
+        Launcher.Open(e.Uri.AbsoluteUri);
         e.Handled = true;
     }
 

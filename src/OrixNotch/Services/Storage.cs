@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
@@ -57,6 +58,43 @@ public static class Storage
         File.Move(tmp, path, overwrite: true);
     }
 
+    /// <summary>A DPAPI-protected (current user) secret from the data folder; null when missing or unreadable (logged).</summary>
+    public static string? LoadSecret(string name, byte[] entropy)
+    {
+        try
+        {
+            var path = PathOf(name);
+            if (!File.Exists(path)) return null;
+            return System.Text.Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), entropy, DataProtectionScope.CurrentUser));
+        }
+        catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
+        {
+            App.Log(ex);
+            return null;
+        }
+    }
+
+    /// <summary>Saves a secret DPAPI-protected and atomically; null or empty deletes it. Throws when it can't be written.</summary>
+    public static void SaveSecret(string name, string? value, byte[] entropy)
+    {
+        var path = PathOf(name);
+        if (string.IsNullOrEmpty(value))
+        {
+            File.Delete(path);
+            return;
+        }
+        WriteAllBytesAtomic(path, ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(value), entropy, DataProtectionScope.CurrentUser));
+    }
+
+    /// <summary>Writes an image as a PNG file (clipboard copies, the phone outbox, the avatar, the day's wrap).</summary>
+    public static void SavePng(System.Windows.Media.Imaging.BitmapSource image, string path)
+    {
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+        using var file = File.Create(path);
+        encoder.Save(file);
+    }
+
     public static void Save<T>(string name, T value)
     {
         try
@@ -80,7 +118,7 @@ public static class Http
     private static HttpClient Create()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) OrixNotch/0.1");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) OrixNotch/" + UpdateService.CurrentVersion);
         return client;
     }
 }

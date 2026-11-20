@@ -204,12 +204,7 @@ public sealed class ClipboardService
             var image = Clipboard.GetImage();
             if (image is null) return;
             var path = Path.Combine(Storage.Dir("clipboard"), $"{Guid.NewGuid():N}.png");
-            using (var fs = File.Create(path))
-            {
-                var encoder = new PngBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(image));
-                encoder.Save(fs);
-            }
+            Storage.SavePng(image, path);
             item = new ClipItem { Kind = ClipKind.Image, ImagePath = path };
         }
 

@@ -1,4 +1,3 @@
-using System.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -12,8 +11,7 @@ public sealed partial class CountdownService : ObservableObject
 
     public static readonly int[] Presets = [1, 5, 10, 15, 25, 30, 45, 60];
 
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private DateTime _endsAt;
+    private readonly CountdownClock _clock;
 
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private TimeSpan _remaining = TimeSpan.FromMinutes(10);
@@ -53,7 +51,7 @@ public sealed partial class CountdownService : ObservableObject
     private CountdownService()
     {
         Remaining = TimeSpan.FromMinutes(App.Settings.TimerMinutes);
-        _timer.Tick += (_, _) => Tick();
+        _clock = new CountdownClock(left => Remaining = left, Done);
     }
 
     partial void OnRemainingChanged(TimeSpan value)
@@ -62,16 +60,9 @@ public sealed partial class CountdownService : ObservableObject
         OnPropertyChanged(nameof(Progress));
     }
 
-    private void Tick()
+    /// <summary>The countdown reached zero (the clock has stopped).</summary>
+    private void Done()
     {
-        var left = _endsAt - DateTime.Now;
-        if (left > TimeSpan.Zero)
-        {
-            Remaining = TimeSpan.FromSeconds(Math.Ceiling(left.TotalSeconds));
-            return;
-        }
-
-        _timer.Stop();
         IsRunning = false;
         Remaining = TimeSpan.Zero;
         SoundService.Play(SelectedSound);
@@ -83,15 +74,14 @@ public sealed partial class CountdownService : ObservableObject
     {
         if (IsRunning)
         {
-            _timer.Stop();
+            _clock.Stop();
             IsRunning = false;
         }
         else
         {
             if (Remaining <= TimeSpan.Zero) Remaining = TimeSpan.FromMinutes(App.Settings.TimerMinutes);
             if (Remaining <= TimeSpan.Zero) Remaining = TimeSpan.FromMinutes(10);
-            _endsAt = DateTime.Now + Remaining;
-            _timer.Start();
+            _clock.Start(Remaining);
             IsRunning = true;
         }
     }
@@ -99,7 +89,7 @@ public sealed partial class CountdownService : ObservableObject
     [RelayCommand]
     private void Reset()
     {
-        _timer.Stop();
+        _clock.Stop();
         IsRunning = false;
         Remaining = TimeSpan.FromMinutes(App.Settings.TimerMinutes);
     }
@@ -111,10 +101,43 @@ public sealed partial class CountdownService : ObservableObject
     {
         App.Settings.TimerMinutes = minutes;
         SettingsService.Save(notify: false);
-        _timer.Stop();
+        _clock.Stop();
         IsRunning = false;
         Remaining = TimeSpan.FromMinutes(minutes);
     }
+}
+
+/// <summary>
+/// The ticking shared by the Timer and Pomodoro: counts down to an end time on the monotonic clock, so a DST change or
+/// a clock set by hand doesn't move it. Reports the time left each second (rounded up), then calls done once.
+/// </summary>
+internal sealed class CountdownClock
+{
+    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private long _endsAt;
+
+    public CountdownClock(Action<TimeSpan> remaining, Action done)
+    {
+        _timer.Tick += (_, _) =>
+        {
+            var left = TimeSpan.FromMilliseconds(_endsAt - Environment.TickCount64);
+            if (left > TimeSpan.Zero)
+            {
+                remaining(TimeSpan.FromSeconds(Math.Ceiling(left.TotalSeconds)));
+                return;
+            }
+            _timer.Stop();
+            done();
+        };
+    }
+
+    public void Start(TimeSpan remaining)
+    {
+        _endsAt = Environment.TickCount64 + (long)remaining.TotalMilliseconds;
+        _timer.Start();
+    }
+
+    public void Stop() => _timer.Stop();
 }
 
 /// <summary>Count-up stopwatch (the "Stopwatch" tab).</summary>

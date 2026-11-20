@@ -22,6 +22,7 @@ namespace OrixNotch.Tools;
 /// </remarks>
 public partial class TeleprompterView : UserControl, IToolView
 {
+    private readonly ResizeGrip _grip;
     private const double MinPrompterHeight = 120;
     private const double MaxPrompterHeight = 360;
     private const double LineSpacing = 1.35;
@@ -35,9 +36,6 @@ public partial class TeleprompterView : UserControl, IToolView
     private double _offset;        // DIPs scrolled from the start
     private double _velocity;      // DIPs per second, eased toward the target speed
     private double _pendingNudge;  // DIPs still to glide from wheel input
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
     private IDisposable? _keepOpen;
 
     private static TeleprompterService Service => TeleprompterService.Instance;
@@ -45,6 +43,8 @@ public partial class TeleprompterView : UserControl, IToolView
     public TeleprompterView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.PrompterHeight, v => App.Settings.PrompterHeight = v,
+            MinPrompterHeight, MaxPrompterHeight, @default: 203, width: 690);
         var s = App.Settings;
         SpeedSlider.Value = s.PrompterSpeed;
         SizeSlider.Value = s.PrompterFontSize;
@@ -69,7 +69,7 @@ public partial class TeleprompterView : UserControl, IToolView
 
     public void OnShown()
     {
-        NotchWindow.Instance?.SetToolSize(690, App.Settings.PrompterHeight);
+        _grip.Apply();
         NotchWindow.Instance?.SetBackgroundOpacity(App.Settings.PrompterOpacity);
         UpdateMode();
     }
@@ -331,31 +331,5 @@ public partial class TeleprompterView : UserControl, IToolView
         var hidden = App.Settings.HideFromCapture;
         CaptureButton.ToolTip = hidden ? "Hidden from screen sharing and recordings: only you see it" : "Hide from screen sharing and recordings";
         CaptureButton.SetResourceReference(ForegroundProperty, hidden ? "AccentBrush" : "SubTextBrush");
-    }
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinPrompterHeight, MaxPrompterHeight);
-        App.Settings.PrompterHeight = NotchWindow.Instance?.SetToolSize(690, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
     }
 }

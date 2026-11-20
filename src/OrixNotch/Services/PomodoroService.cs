@@ -1,4 +1,3 @@
-using System.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -27,8 +26,7 @@ public sealed partial class PomodoroService : ObservableObject
         (60, 15, "60 / 15 min"),
     ];
 
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private DateTime _endsAt;
+    private readonly CountdownClock _clock;
 
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private bool _isBreak;
@@ -62,7 +60,7 @@ public sealed partial class PomodoroService : ObservableObject
     {
         Remaining = Total;
         Completed = Today().Sessions; // "N today" survives a restart
-        _timer.Tick += (_, _) => Tick();
+        _clock = new CountdownClock(left => Remaining = left, Done);
     }
 
     partial void OnRemainingChanged(TimeSpan value)
@@ -74,7 +72,6 @@ public sealed partial class PomodoroService : ObservableObject
     partial void OnIsBreakChanged(bool value)
     {
         OnPropertyChanged(nameof(ModeText));
-        OnPropertyChanged(nameof(Total));
     }
 
     partial void OnIsRunningChanged(bool value) => OnPropertyChanged(nameof(Focusing));
@@ -95,16 +92,9 @@ public sealed partial class PomodoroService : ObservableObject
         OnPropertyChanged(nameof(Progress));
     }
 
-    private void Tick()
+    /// <summary>The countdown reached zero (the clock has stopped).</summary>
+    private void Done()
     {
-        var left = _endsAt - DateTime.Now;
-        if (left > TimeSpan.Zero)
-        {
-            Remaining = TimeSpan.FromSeconds(Math.Ceiling(left.TotalSeconds));
-            return;
-        }
-
-        _timer.Stop();
         IsRunning = false;
         var finishedFocus = !IsBreak;
         if (finishedFocus) LogSession();
@@ -121,14 +111,13 @@ public sealed partial class PomodoroService : ObservableObject
     {
         if (IsRunning)
         {
-            _timer.Stop();
+            _clock.Stop();
             IsRunning = false;
         }
         else
         {
             if (Remaining <= TimeSpan.Zero) Remaining = Total;
-            _endsAt = DateTime.Now + Remaining;
-            _timer.Start();
+            _clock.Start(Remaining);
             IsRunning = true;
         }
     }
@@ -195,7 +184,7 @@ public sealed partial class PomodoroService : ObservableObject
     [RelayCommand]
     private void Reset()
     {
-        _timer.Stop();
+        _clock.Stop();
         IsRunning = false;
         Remaining = Total;
     }
@@ -203,7 +192,7 @@ public sealed partial class PomodoroService : ObservableObject
     [RelayCommand]
     private void Skip()
     {
-        _timer.Stop();
+        _clock.Stop();
         IsRunning = false;
         IsBreak = !IsBreak;
         Remaining = Total;
@@ -213,7 +202,7 @@ public sealed partial class PomodoroService : ObservableObject
     {
         App.Settings.PomodoroWorkMin = minutes;
         SettingsService.Save(notify: false);
-        _timer.Stop();
+        _clock.Stop();
         IsRunning = false;
         IsBreak = false;
         Remaining = Total;
@@ -225,7 +214,7 @@ public sealed partial class PomodoroService : ObservableObject
         App.Settings.PomodoroWorkMin = work;
         App.Settings.PomodoroBreakMin = rest;
         SettingsService.Save(notify: false);
-        _timer.Stop();
+        _clock.Stop();
         IsRunning = false;
         IsBreak = false;
         Remaining = Total;

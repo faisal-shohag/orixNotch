@@ -78,6 +78,8 @@ public partial class AskAiView : UserControl, IToolView
     public AskAiView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.AskAiHeight, v => App.Settings.AskAiHeight = v, MinChatHeight, MaxChatHeight, DefaultHeight);
+        _grip.Released += () => { if (ChatScroll.IsVisible) ChatScroll.ScrollToEnd(); };
         PreviewKeyDown += OnPreviewKeyDown;
         foreach (var (text, icon) in SuggestionItems) Suggestions.Children.Add(SuggestionChip(text, icon));
         InitImages();
@@ -114,7 +116,7 @@ public partial class AskAiView : UserControl, IToolView
 
     public void OnShown()
     {
-        ApplyHeight();
+        _grip.Apply();
         UpdateKeyState();
         _ = RefreshModelListAsync();
     }
@@ -224,50 +226,10 @@ public partial class AskAiView : UserControl, IToolView
 
     // ---------------------------------------------------------------- resize (same handle as the teleprompter)
 
+    private readonly ResizeGrip _grip;
     private const double DefaultHeight = 220;
     private const double MinChatHeight = 200;
     private const double MaxChatHeight = 520;
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
-
-    private static void ApplyHeight() =>
-        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.AskAiHeight, MinChatHeight, MaxChatHeight));
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            App.Settings.AskAiHeight = DefaultHeight;
-            ApplyHeight();
-            SettingsService.Save(notify: false);
-            e.Handled = true;
-            return;
-        }
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinChatHeight, MaxChatHeight);
-        App.Settings.AskAiHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
-        if (ChatScroll.IsVisible) ChatScroll.ScrollToEnd();
-    }
 
     public void OnHidden()
     {

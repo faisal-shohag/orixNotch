@@ -1,5 +1,3 @@
-using System.IO;
-using System.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OrixNotch.Tools;

@@ -35,7 +35,7 @@ public sealed class ShortcutsService
         new() { Name = "Task Manager", Target = "taskmgr.exe" },
         new() { Name = "Calculator", Target = "calc.exe" },
         new() { Name = "Notepad", Target = "notepad.exe" },
-        new() { Name = "Downloads", Target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads") },
+        new() { Name = "Downloads", Target = ShellFolders.Downloads },
         new() { Name = "Bluetooth", Target = "ms-settings:bluetooth" },
         new() { Name = "Wi-Fi", Target = "ms-settings:network-wifi" },
         new() { Name = "Sound", Target = "ms-settings:sound" },

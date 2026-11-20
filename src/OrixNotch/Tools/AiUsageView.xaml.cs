@@ -30,29 +30,10 @@ public partial class AiUsageView : UserControl, IToolView
     private void OnStripScrolled(object sender, ScrollChangedEventArgs e)
     {
         if (e.OriginalSource != Strip) return;
-        FadeTo(EdgeLeft, Strip.HorizontalOffset > 1);
-        FadeTo(EdgeRight, Strip.HorizontalOffset < Strip.ScrollableWidth - 1);
+        EdgeScroll.ShowFades(Strip, EdgeLeft, EdgeRight);
     }
 
-    private static void FadeTo(FrameworkElement element, bool visible)
-    {
-        if (element.Tag is bool shown && shown == visible) return;
-        element.Tag = visible;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(visible ? 1.0 : 0.0, Motion.Fast));
-    }
-
-    /// <summary>Edge fades go from the notch color to transparent, so cards dissolve into the edge (same as Clipboard).</summary>
-    private void UpdateEdgeFades()
-    {
-        var pill = ThemeService.PillFadeColor; // a gradient scheme's notch isn't one colour; see-through with glass
-        var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);
-        var left = new LinearGradientBrush(pill, clear, 0);
-        var right = new LinearGradientBrush(clear, pill, 0);
-        left.Freeze();
-        right.Freeze();
-        EdgeLeftFade.Fill = left;
-        EdgeRightFade.Fill = right;
-    }
+    private void UpdateEdgeFades() => (EdgeLeftFade.Fill, EdgeRightFade.Fill) = EdgeScroll.FadeBrushes();
 
     public void OnShown()
     {
@@ -139,9 +120,7 @@ public partial class AiUsageView : UserControl, IToolView
             stack.Children.Add(captions);
         }
 
-        var card = new Border { Width = 236, Margin = new Thickness(0, 0, 8, 0), CornerRadius = Radii.M, Padding = new Thickness(12, 10, 12, 10), Child = stack };
-        card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
-        return card;
+        return CardFrame(stack);
     }
 
     /// <summary>Logo, name and a small badge ("Plan", "Local", "Pro"…).</summary>
@@ -192,7 +171,7 @@ public partial class AiUsageView : UserControl, IToolView
         {
             var link = new Button { Content = p.LinkText ?? "Open", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
             var url = p.LinkUrl;
-            link.Click += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            link.Click += (_, _) => Launcher.Open(url);
             stack.Children.Add(link);
         }
         return CardFrame(stack);

@@ -281,8 +281,8 @@ public partial class NotchWindow
         if (!_turnSwapped && _turnT >= 0.5) SwapEdge();
         var depth = ClosedDepth;
         double span;
-        if (_turnT < 0.5) span = Lerp(_turnFromSpan, depth, Ease(_turnT / 0.5));
-        else span = Lerp(depth, _turnToSpan, Ease((_turnT - 0.5) / 0.5));
+        if (_turnT < 0.5) span = Lerp(_turnFromSpan, depth, Motion.EaseInOut(_turnT / 0.5));
+        else span = Lerp(depth, _turnToSpan, Motion.EaseInOut((_turnT - 0.5) / 0.5));
         // The far side stays flush with the corner: on the old edge at the end it was pushed to, on the new one at
         // the end it came out of.
         var end = _turnSwapped ? _turnEntry : _turnDir;
@@ -296,7 +296,6 @@ public partial class NotchWindow
         if (_turnT >= 1) EndCornerTurn();
 
         static double Lerp(double a, double b, double t) => a + (b - a) * t;
-        static double Ease(double t) => t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2; // ease in-out
     }
 
     /// <summary>How tucked into the corner the outline is: 0 = its normal shape, 1 = the corner piece.</summary>

@@ -1,6 +1,5 @@
 using System.IO;
 using System.Windows;
-using Microsoft.Win32;
 
 namespace OrixNotch.Services;
 
@@ -27,7 +26,7 @@ public sealed class ScreenshotWatcher
         if (_watcher is not null) return;
         try
         {
-            var dir = ScreenshotsFolder();
+            var dir = ShellFolders.Screenshots;
             if (!Directory.Exists(dir)) return;
             _watcher = new FileSystemWatcher(dir) { NotifyFilter = NotifyFilters.FileName, EnableRaisingEvents = true };
             foreach (var pattern in new[] { "*.png", "*.jpg", "*.jpeg" }) _watcher.Filters.Add(pattern);
@@ -41,14 +40,5 @@ public sealed class ScreenshotWatcher
         {
             App.Log(ex);
         }
-    }
-
-    /// <summary>The user's Screenshots folder, even if moved (Explorer's "User Shell Folders" entry).</summary>
-    private static string ScreenshotsFolder()
-    {
-        const string key = @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders";
-        if (Registry.GetValue(key, "{B7BEDE81-DF94-4682-A7D8-57A52620B86F}", null) is string path && path.Length > 0)
-            return Environment.ExpandEnvironmentVariables(path);
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Screenshots");
     }
 }

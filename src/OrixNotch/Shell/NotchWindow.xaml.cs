@@ -89,8 +89,6 @@ public partial class NotchWindow : Window
     private string _activeTool;
     private string? _backTarget;
     private double _expandedH = 220;
-    private double _toolW = 560;
-    private double _toolH = 120;
 
     // Closed-notch size, from Settings → Display
     private double _collapsedH = 38;
@@ -667,13 +665,10 @@ public partial class NotchWindow : Window
         // Alerts that arrived while the notch was open play once it has closed.
         if (_peekQueue.Count > 0)
         {
-            var later = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-            later.Tick += (_, _) =>
+            After(TimeSpan.FromMilliseconds(600), () =>
             {
-                later.Stop();
                 if (!_peeking) ShowNextPeek();
-            };
-            later.Start();
+            });
         }
     }
 
@@ -1126,7 +1121,6 @@ public partial class NotchWindow : Window
 
     // ---------------------------------------------------------------- collapsed live activity
 
-    private bool HasActivity() => NotchActivityService.Instance.HasActivity;
     private bool _reminderPulsing;
 
     /// <summary>Closed-notch width for the current state: compact for timers and reminders, wide for track text.</summary>
@@ -1262,7 +1256,7 @@ public partial class NotchWindow : Window
         if (tint is not { } c) return ThemeService.CurrentAccent.Mean;
         static double Lum(Color x) => (0.299 * x.R + 0.587 * x.G + 0.114 * x.B) / 255;
         for (var i = 0; i < 6 && Lum(c) < 0.55; i++)
-            c = Color.FromRgb((byte)(c.R + (255 - c.R) * 0.25), (byte)(c.G + (255 - c.G) * 0.25), (byte)(c.B + (255 - c.B) * 0.25));
+            c = ThemeService.Mix(c, Colors.White, 0.25);
         return c;
     }
 
@@ -1832,20 +1826,9 @@ public partial class NotchWindow : Window
             OnDismiss: () => EventReminderService.Instance.Dismiss(),
             OnClick: link is null
                 ? () => Expand(activate: true) // a live reminder routes this to Calendar
-                : () => OpenLink(link)));
+                : () => Launcher.Open(link)));
     }
 
-    private static void OpenLink(string url)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
-        }
-    }
 
     private void ShowNotificationPeek(NotchNotification n)
     {
@@ -1896,15 +1879,7 @@ public partial class NotchWindow : Window
         EnqueuePeek(new PeekRequest("whatsnew", () => GlyphTile(AppIcon.Sparkles), $"Updated to OrixNotch {version}",
             "Click to see what's new", TimeSpan.FromSeconds(8), OnClick: () =>
             {
-                try
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
-                        $"https://github.com/faisal-shohag/orixNotch/releases/tag/v{version}") { UseShellExecute = true });
-                }
-                catch (Exception ex)
-                {
-                    App.Log(ex);
-                }
+                Launcher.Open($"https://github.com/faisal-shohag/orixNotch/releases/tag/v{version}");
             }));
     }
 
@@ -1939,10 +1914,10 @@ public partial class NotchWindow : Window
     private void ShowDownloadPeek(string path)
     {
         if (!App.Settings.DownloadAlerts) return;
-        void ShowInFolder() => Run("explorer.exe", $"/select,\"{path}\"");
+        void ShowInFolder() => Launcher.Reveal(path);
         var actions = new List<PeekAction>
         {
-            new(AppIcon.File, "Open", () => Run(path, null)),
+            new(AppIcon.File, "Open", () => Launcher.Open(path)),
             new(AppIcon.Folder, "Show in folder", ShowInFolder),
         };
         if (PhoneTransferService.Instance.IsRunning)
@@ -1950,18 +1925,6 @@ public partial class NotchWindow : Window
         actions.Add(new(AppIcon.ArchiveBox, "Add to Shelf", () => ShelfService.Instance.AddFiles([path], owned: false)));
         EnqueuePeek(new PeekRequest("download:" + path, () => GlyphTile(AppIcon.ArrowDown), "Download finished",
             System.IO.Path.GetFileName(path), TimeSpan.FromSeconds(6), OnClick: ShowInFolder, Actions: actions.ToArray()));
-
-        static void Run(string file, string? args)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(file, args ?? "") { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                App.Log(ex);
-            }
-        }
     }
 
     /// <summary>A screenshot was saved: its thumbnail; clicking parks it on the Shelf (drag it out or send it to the phone from there).</summary>
@@ -2058,7 +2021,8 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>Clockwise arc from 12 o'clock covering <paramref name="progress"/> of the mini ring.</summary>
-    private static Geometry BuildMiniArc(double progress, double size = 22, double inset = 2.5)
+    /// <summary>A progress ring's arc, clockwise from 12 o'clock, for a size×size box (also the Timer tool's big ring).</summary>
+    internal static Geometry BuildMiniArc(double progress, double size = 22, double inset = 2.5)
     {
         var radius = size / 2 - inset;
         var center = new Point(size / 2, size / 2);
@@ -2330,7 +2294,6 @@ public partial class NotchWindow : Window
         return grid;
     }
 
-    /// <summary>Shows a tool. <paramref name="backTo"/> makes it a sub-page with a back chevron.</summary>
     /// <summary>Automations › "Match the app in front": the tool set for the app in front, if any.</summary>
     private static string? ContextTool()
     {
@@ -2340,6 +2303,7 @@ public partial class NotchWindow : Window
     }
 
     /// <param name="remember">False for a tool picked for the app in front: the next plain open returns to the last one chosen.</param>
+    /// <summary>Shows a tool. <paramref name="backTo"/> makes it a sub-page with a back chevron.</summary>
     public void ShowTool(string id, string? backTo = null, bool remember = true)
     {
         if (id == SettingsId)
@@ -2435,13 +2399,10 @@ public partial class NotchWindow : Window
         var greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
         Present(BriefId, $"{greeting}, {ProfileService.FirstName}", 720, 110, () => new Tools.MorningBriefView(), showTabs: false);
         (_views[BriefId] as Tools.MorningBriefView)?.Show(items, i => IdleGlyph(i, 14));
-        var close = new DispatcherTimer { Interval = TimeSpan.FromSeconds(9) };
-        close.Tick += (_, _) =>
+        After(TimeSpan.FromSeconds(9), () =>
         {
-            close.Stop();
             if (_expanded && _activeTool == BriefId && !IsCursorOverPill() && !_pinned) Collapse();
-        };
-        close.Start();
+        });
     }
 
     /// <summary>Opens the notch on the command palette ("timer 10", "todo …", "20 usd to eur", tool names…).</summary>
@@ -2526,8 +2487,6 @@ public partial class NotchWindow : Window
             Place();
         }
 
-        _toolW = w;
-        _toolH = h;
         ToolHost.Width = w;
         ToolHost.Height = h;
         _expandedH = chrome + h;

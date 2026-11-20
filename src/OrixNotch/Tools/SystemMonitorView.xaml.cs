@@ -180,8 +180,8 @@ public partial class SystemMonitorView : UserControl, IToolView
         if (_lastNetSample != default)
         {
             var secs = Math.Max(0.1, (now - _lastNetSample).TotalSeconds);
-            DownText.Text = Rate(Math.Max(0, rx - _lastRx) / secs);
-            UpText.Text = Rate(Math.Max(0, tx - _lastTx) / secs);
+            DownText.Text = IdleInfoService.Rate(Math.Max(0, rx - _lastRx) / secs);
+            UpText.Text = IdleInfoService.Rate(Math.Max(0, tx - _lastTx) / secs);
         }
         _lastRx = rx;
         _lastTx = tx;
@@ -214,11 +214,4 @@ public partial class SystemMonitorView : UserControl, IToolView
     }
 
     private static string Gb(ulong bytes) => $"{bytes / 1024d / 1024 / 1024:0.#} GB";
-
-    private static string Rate(double bytesPerSec) => bytesPerSec switch
-    {
-        >= 1024 * 1024 => $"{bytesPerSec / 1024 / 1024:0.0} MB/s",
-        >= 1024 => $"{bytesPerSec / 1024:0} KB/s",
-        _ => $"{bytesPerSec:0} B/s",
-    };
 }

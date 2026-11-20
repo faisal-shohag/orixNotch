@@ -27,27 +27,15 @@ public sealed partial class PhoneTransferService
     /// <summary>The saved key, or a new one (saved) when there's none yet.</summary>
     private void LoadOrCreateWebKey()
     {
-        var path = Storage.PathOf(KeyFile);
-        try
+        if (Storage.LoadSecret(KeyFile, KeyEntropy) is { Length: >= 12 } key)
         {
-            if (File.Exists(path))
-            {
-                var key = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), KeyEntropy, DataProtectionScope.CurrentUser));
-                if (key.Length >= 12)
-                {
-                    _webKey = key;
-                    return;
-                }
-            }
-        }
-        catch (Exception ex) when (ex is CryptographicException or IOException)
-        {
-            App.Log(ex);
+            _webKey = key;
+            return;
         }
         _webKey = RandomId();
         try
         {
-            Storage.WriteAllBytesAtomic(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(_webKey), KeyEntropy, DataProtectionScope.CurrentUser));
+            Storage.SaveSecret(KeyFile, _webKey, KeyEntropy);
         }
         catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {

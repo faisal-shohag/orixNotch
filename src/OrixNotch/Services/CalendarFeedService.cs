@@ -95,18 +95,8 @@ public sealed partial class CalendarFeedService : ObservableObject
     {
         get
         {
-            try
-            {
-                var path = Storage.PathOf(LinksFile);
-                if (!File.Exists(path)) return [];
-                var text = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), Entropy, DataProtectionScope.CurrentUser));
-                return text.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
-            }
-            catch (Exception ex)
-            {
-                App.Log(ex);
-                return [];
-            }
+            var text = Storage.LoadSecret(LinksFile, Entropy) ?? "";
+            return text.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
         }
     }
 
@@ -129,13 +119,7 @@ public sealed partial class CalendarFeedService : ObservableObject
 
     private static void SaveFeeds(List<string> feeds)
     {
-        var path = Storage.PathOf(LinksFile);
-        if (feeds.Count == 0)
-        {
-            File.Delete(path);
-            return;
-        }
-        Storage.WriteAllBytesAtomic(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(string.Join('\n', feeds)), Entropy, DataProtectionScope.CurrentUser));
+        Storage.SaveSecret(LinksFile, string.Join('\n', feeds), Entropy); // no feeds: the file is deleted
     }
 
     /// <summary>Stable id for a link that doesn't reveal it (stored on each event).</summary>

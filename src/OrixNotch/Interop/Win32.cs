@@ -24,7 +24,6 @@ internal static class Win32
     public const uint MOD_WIN = 0x0008;
     public const uint MOD_NOREPEAT = 0x4000;
 
-    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
     // QUERY_USER_NOTIFICATION_STATE values that mean "something is fullscreen"
     public const int QUNS_BUSY = 2;
@@ -108,9 +107,6 @@ internal static class Win32
     [DllImport("kernel32.dll")]
     public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
 
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT
     {
@@ -165,11 +161,5 @@ internal static class Win32
             QUNS_BUSY or QUNS_PRESENTATION_MODE => 1,
             _ => 0,
         };
-    }
-
-    public static void UseDarkTitleBar(IntPtr hwnd, bool dark = true)
-    {
-        var on = dark ? 1 : 0;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
     }
 }

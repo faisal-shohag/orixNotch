@@ -48,10 +48,7 @@ public partial class NotchWindow
             crop.Height = Math.Min(crop.Height, full.PixelHeight - crop.Y);
             var bitmap = new CroppedBitmap(full, crop);
             var (w, h) = (crop.Width, crop.Height);
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            await using (var file = File.Create(Path.Combine(dir, name + ".png")))
-                encoder.Save(file);
+            Storage.SavePng(bitmap, Path.Combine(dir, name + ".png"));
             manifest[name] = [w, h];
         }
 

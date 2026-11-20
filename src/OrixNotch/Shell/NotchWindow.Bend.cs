@@ -40,7 +40,7 @@ public partial class NotchWindow
         _bendFromDepth = ClosedDepth;
         var toVertical = to is ScreenEdge.Left or ScreenEdge.Right;
         _bendToDepth = toVertical ? SideDepth : _collapsedH;
-        _bendToSpan = toVertical ? Math.Max(_sideLength, Math.Round(SideDepth * 2.6)) : ActivityWidth();
+        _bendToSpan = toVertical ? SideTabLength() : ActivityWidth();
         _dodging = false;
         _dodgeSpeed = 0;
 
@@ -88,7 +88,7 @@ public partial class NotchWindow
     /// <summary>The L for the current progress: arm lengths trade from the old edge to the new one.</summary>
     private void DrawBend()
     {
-        var e = _bendT < 0.5 ? 2 * _bendT * _bendT : 1 - Math.Pow(-2 * _bendT + 2, 2) / 2; // ease in-out
+        var e = Motion.EaseInOut(_bendT);
         var gap = Floating ? IslandGap : 0;
         // Each arm's length past the corner block (the block is as deep as the other arm is thick).
         var oldArm = Math.Max(0, (_bendFromSpan - _bendToDepth) * (1 - e));

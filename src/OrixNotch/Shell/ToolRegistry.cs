@@ -25,7 +25,7 @@ public static class ToolRegistry
 {
     // One panel size (≈726×323) for every tool: 690 wide content after
     // 18 px padding, ≈203 tall between header and tab bar. A few tools need a little more.
-    private const double W = 720;
+    public const double W = 720;
     private const double H = 220;
 
     public static IReadOnlyList<ToolDef> All { get; } =

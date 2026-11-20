@@ -126,7 +126,7 @@ public sealed class PeekApiService
         _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         try
         {
-            Storage.WriteAllBytesAtomic(Storage.PathOf(TokenFile), ProtectedData.Protect(Encoding.UTF8.GetBytes(_token), TokenEntropy, DataProtectionScope.CurrentUser));
+            Storage.SaveSecret(TokenFile, _token, TokenEntropy);
         }
         catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {
@@ -135,19 +135,5 @@ public sealed class PeekApiService
         return _token;
     }
 
-    private static string? LoadToken()
-    {
-        try
-        {
-            var path = Storage.PathOf(TokenFile);
-            if (!File.Exists(path)) return null;
-            var token = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), TokenEntropy, DataProtectionScope.CurrentUser));
-            return token.Length >= 16 ? token : null;
-        }
-        catch (Exception ex) when (ex is CryptographicException or IOException)
-        {
-            App.Log(ex);
-            return null;
-        }
-    }
+    private static string? LoadToken() => Storage.LoadSecret(TokenFile, TokenEntropy) is { Length: >= 16 } token ? token : null;
 }

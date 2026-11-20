@@ -13,6 +13,35 @@ namespace OrixNotch.Shell;
 /// </summary>
 public static class EdgeScroll
 {
+    /// <summary>Shows each edge fade only while the strip has more to scroll that way.</summary>
+    public static void ShowFades(ScrollViewer strip, FrameworkElement left, FrameworkElement right)
+    {
+        FadeTo(left, strip.HorizontalOffset > 1);
+        FadeTo(right, strip.HorizontalOffset < strip.ScrollableWidth - 1);
+
+        static void FadeTo(FrameworkElement element, bool visible)
+        {
+            if (element.Tag is bool shown && shown == visible) return; // don't restart a running fade every scroll frame
+            element.Tag = visible;
+            element.BeginAnimation(UIElement.OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(visible ? 1.0 : 0.0, Motion.Fast));
+        }
+    }
+
+    /// <summary>
+    /// Fills for a strip's edge fades: the notch colour to transparent, so cards dissolve into the edge. Call again when
+    /// the theme changes (a gradient scheme's notch isn't one colour; see-through with glass).
+    /// </summary>
+    public static (Brush Left, Brush Right) FadeBrushes()
+    {
+        var pill = Services.ThemeService.PillFadeColor;
+        var clear = Color.FromArgb(0, pill.R, pill.G, pill.B);
+        var left = new LinearGradientBrush(pill, clear, 0);
+        var right = new LinearGradientBrush(clear, pill, 0);
+        left.Freeze();
+        right.Freeze();
+        return (left, right);
+    }
+
     private const double ZoneWidth = 56;     // DIPs from each edge that trigger auto-scroll
     private const double MaxSpeed = 900;     // DIPs per second at the very edge
     private const double SpeedEase = 0.12;   // seconds: ramp for edge speed

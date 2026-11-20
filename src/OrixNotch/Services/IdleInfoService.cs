@@ -162,9 +162,6 @@ public sealed class IdleInfoService
         return ids.SelectMany(id => id == "aiUsage" ? BuildAi() : [Build(id)]).OfType<IdleItem>().ToList();
     }
 
-    /// <summary>Forces a refresh of the file-backed items (to-dos / events) on the next tick.</summary>
-    public void InvalidateFiles() => _lastFiles = DateTime.MinValue;
-
     private IdleItem? Build(string id)
     {
         var culture = CultureInfo.CurrentCulture;
@@ -319,7 +316,8 @@ public sealed class IdleInfoService
     /// <summary>"2h", "45m": a day's screen time in three characters.</summary>
     private static string ShortDuration(int seconds) => seconds >= 3600 ? $"{seconds / 3600}h" : $"{seconds / 60}m";
 
-    private static string Rate(double bytesPerSec) => bytesPerSec switch
+    /// <summary>"340 KB/s", "2.4 MB/s": the idle notch and the System tool.</summary>
+    internal static string Rate(double bytesPerSec) => bytesPerSec switch
     {
         >= 100 * 1024 * 1024 => $"{bytesPerSec / 1024 / 1024:0} MB/s",
         >= 1000 * 1024 => $"{bytesPerSec / 1024 / 1024:0.0} MB/s",
@@ -389,22 +387,12 @@ public sealed class IdleInfoService
     /// <summary>Start times of today's timed events (Day timeline).</summary>
     public IReadOnlyList<TimeSpan> TodayEvents { get; private set; } = [];
 
-    private (string City, double Lat, double Lon)? _geo;
-
     private async Task FetchWeatherAsync()
     {
         try
         {
-            var city = App.Settings.WeatherCity;
-            // A city doesn't move: geocode it once, not on every 10-minute refresh.
-            if (_geo?.City != city)
-            {
-                using var geo = JsonDocument.Parse(await Http.Client.GetStringAsync(
-                    $"https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name={Uri.EscapeDataString(city)}"));
-                if (!geo.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0) return;
-                _geo = (city, results[0].GetProperty("latitude").GetDouble(), results[0].GetProperty("longitude").GetDouble());
-            }
-            var (_, lat, lon) = _geo.Value;
+            if (await OpenMeteo.FindAsync(App.Settings.WeatherCity) is not { } place) return;
+            var (lat, lon) = (place.Lat, place.Lon);
             var unit = App.Settings.UseFahrenheit ? "&temperature_unit=fahrenheit" : "";
             using var doc = JsonDocument.Parse(await Http.Client.GetStringAsync(FormattableString.Invariant(
                 $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&forecast_days=2&timezone=auto{unit}")));

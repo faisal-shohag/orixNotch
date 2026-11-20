@@ -65,6 +65,7 @@ public partial class QuickNoteView : UserControl, IToolView
     public QuickNoteView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.NoteHeight, v => App.Settings.NoteHeight = v, MinNoteHeight, MaxNoteHeight, DefaultHeight);
         _saveTimer.Tick += (_, _) => Save();
         PreviewKeyDown += OnPreviewKeyDown;
 
@@ -94,7 +95,7 @@ public partial class QuickNoteView : UserControl, IToolView
         return [];
     }
 
-    public void OnShown() => ApplyHeight();
+    public void OnShown() => _grip.Apply();
 
     public void OnHidden()
     {
@@ -213,47 +214,8 @@ public partial class QuickNoteView : UserControl, IToolView
 
     // ---------------------------------------------------------------- resize (same handle as Ask AI)
 
+    private readonly ResizeGrip _grip;
     private const double DefaultHeight = 220;
     private const double MinNoteHeight = 200;
     private const double MaxNoteHeight = 520;
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
-
-    private static void ApplyHeight() =>
-        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.NoteHeight, MinNoteHeight, MaxNoteHeight));
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            App.Settings.NoteHeight = DefaultHeight;
-            ApplyHeight();
-            SettingsService.Save(notify: false);
-            e.Handled = true;
-            return;
-        }
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinNoteHeight, MaxNoteHeight);
-        App.Settings.NoteHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
-    }
 }

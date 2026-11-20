@@ -66,7 +66,6 @@ public sealed class ShelfItem
         }
     }
 
-    [JsonIgnore] public bool HasIcon => Icon is not null;
 }
 
 /// <summary>Temporary holding area for files dragged onto the notch.</summary>

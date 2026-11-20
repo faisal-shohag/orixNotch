@@ -104,19 +104,12 @@ public partial class WeatherView : UserControl, IToolView
         try
         {
             var city = App.Settings.WeatherCity;
-            var geoUrl = $"https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name={Uri.EscapeDataString(city)}";
-            using var geo = JsonDocument.Parse(await Http.Client.GetStringAsync(geoUrl));
-            if (!geo.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0)
+            if (await OpenMeteo.FindAsync(city) is not { } place)
             {
                 Status.Text = $"City \"{city}\" not found";
                 return;
             }
-
-            var place = results[0];
-            var lat = place.GetProperty("latitude").GetDouble();
-            var lon = place.GetProperty("longitude").GetDouble();
-            var name = place.GetProperty("name").GetString();
-            var country = place.TryGetProperty("country", out var c) ? c.GetString() : null;
+            var (name, country, lat, lon) = (place.Name, place.Country, place.Lat, place.Lon);
 
             var unit = App.Settings.UseFahrenheit ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : "";
             var url = FormattableString.Invariant(

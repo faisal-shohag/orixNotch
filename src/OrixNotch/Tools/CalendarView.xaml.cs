@@ -111,8 +111,8 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
             _month = new DateTime(_selected.Year, _selected.Month, 1);
         }
         Render();
-        Rise(MonthCard, 0);
-        Rise(DayPanel, 70);
+        Motion.Rise(MonthCard, 0);
+        Motion.Rise(DayPanel, 70);
     }
 
     public void OnHidden()
@@ -298,18 +298,6 @@ public partial class CalendarView : UserControl, IToolView, IEscapeHandler
     }
 
     /// <summary>Fade in and rise a few pixels (same entrance as Home's cards).</summary>
-    private static void Rise(UIElement element, int delayMs)
-    {
-        var ease = Motion.Out;
-        var begin = Motion.Scale(delayMs);
-        var duration = Motion.Slow;
-        element.Opacity = 0;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { BeginTime = begin, EasingFunction = ease });
-        var shift = new TranslateTransform(0, 8);
-        element.RenderTransform = shift;
-        shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, duration) { BeginTime = begin, EasingFunction = ease });
-    }
-
     private void OnInputKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) Add();

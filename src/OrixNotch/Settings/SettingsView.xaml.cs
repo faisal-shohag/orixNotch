@@ -68,11 +68,8 @@ public partial class SettingsView : UserControl, IToolView
         return new Border
         {
             Width = 22, Height = 22, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center, Child = glyph,
-            Background = new LinearGradientBrush(Lighten(color, 0.12), color, 90), // a hint of depth, like the Mac's tiles
+            Background = new LinearGradientBrush(ThemeService.Mix(color, Colors.White, 0.12), color, 90), // a hint of depth, like the Mac's tiles
         };
-
-        static Color Lighten(Color c, double by) => Color.FromRgb(
-            (byte)(c.R + (255 - c.R) * by), (byte)(c.G + (255 - c.G) * by), (byte)(c.B + (255 - c.B) * by));
     }
 
     private string _rendering = ""; // the page Row() is adding to, for its "New" chip
@@ -450,14 +447,14 @@ public partial class SettingsView : UserControl, IToolView
         {
             if (watcher.Problem is { } problem)
                 Row("Not receiving notifications", problem, new Button { Content = "Open settings" }.Also(b =>
-                    b.Click += (_, _) => Process.Start(new ProcessStartInfo(watcher.ProblemSettingsUri) { UseShellExecute = true })));
+                    b.Click += (_, _) => Launcher.Open(watcher.ProblemSettingsUri)));
             Row("Show message text", "Off shows only the app name, for privacy when sharing your screen.",
                 Toggle(S.NotifyShowText, v => { S.NotifyShowText = v; Save(false); }));
             Row("Keep history", "Save notifications on this PC to read later in the Notifications tool (last 30 days). Clear them there anytime.",
                 Toggle(S.NotifyKeepHistory, v => { S.NotifyKeepHistory = v; Save(false); }));
             Row("Windows banners", "Windows still shows its own pop-up too. Turn banners off per app in Windows Settings if you only want the notch.",
                 new Button { Content = "Open settings" }.Also(b =>
-                    b.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true })));
+                    b.Click += (_, _) => Launcher.Open("ms-settings:notifications")));
         }
 
         if (S.NotifyEnabled && S.NotifySeenApps.Count > 0)
@@ -1513,12 +1510,12 @@ public partial class SettingsView : UserControl, IToolView
         report.Children.Add(new Button { Content = "Copy details", Height = RowControlHeight, Margin = new Thickness(0, 0, 6, 0) }
             .Also(b => b.Click += (_, _) => ClipboardService.Instance.CopyQuiet(Diagnostics())));
         report.Children.Add(new Button { Content = "Report", Style = (Style)FindResource("AccentButton"), Height = RowControlHeight }
-            .Also(b => b.Click += (_, _) => OpenUrl(RepoUrl + "/issues/new?labels=bug&title=" + Uri.EscapeDataString("Problem: ")
+            .Also(b => b.Click += (_, _) => Launcher.Open(RepoUrl + "/issues/new?labels=bug&title=" + Uri.EscapeDataString("Problem: ")
                 + "&body=" + Uri.EscapeDataString("**What happened?**\n\n\n**What did you expect?**\n\n\n" + Diagnostics()))));
         Row("Report a problem", "Opens a GitHub issue with your version, Windows and the app's recent errors filled in. You see everything before you send it; nothing is sent on its own.", report);
         Row("Request a tool", "Missing something on the notch? Tell us what you'd use it for.",
             new Button { Content = "Request", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
-                OpenUrl(RepoUrl + "/issues/new?labels=tool-request&title=" + Uri.EscapeDataString("Tool request: ")
+                Launcher.Open(RepoUrl + "/issues/new?labels=tool-request&title=" + Uri.EscapeDataString("Tool request: ")
                     + "&body=" + Uri.EscapeDataString("**What should it do?**\n\n\n**When would you use it?**\n\n"))));
 
         Section("DETAILS");
@@ -1645,18 +1642,6 @@ public partial class SettingsView : UserControl, IToolView
         return string.Join("\n", lines);
     }
 
-    private static void OpenUrl(string url)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
-        }
-    }
-
     private static Button LinkButton(string text, AppIcon icon, string url, bool primary = false)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal };
@@ -1664,7 +1649,7 @@ public partial class SettingsView : UserControl, IToolView
         content.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
         var button = new Button { Content = content, Margin = new Thickness(0, 4, 8, 0), ToolTip = url };
         if (primary) button.SetResourceReference(StyleProperty, "AccentButton");
-        button.Click += (_, _) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        button.Click += (_, _) => Launcher.Open(url);
         return button;
     }
 
@@ -1714,7 +1699,7 @@ public partial class SettingsView : UserControl, IToolView
     private static Button OpenButton(string path)
     {
         var button = new Button { Content = "Open", ToolTip = path };
-        button.Click += (_, _) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        button.Click += (_, _) => Launcher.Open(path);
         return button;
     }
 

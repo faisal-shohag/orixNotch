@@ -139,7 +139,7 @@ public partial class ShortcutsView : UserControl, IEscapeHandler
             _ => (AppIcon.Bolt, "#FF9F0A"),
         };
         var c = (Color)ColorConverter.ConvertFromString(color);
-        var lighter = Color.FromRgb((byte)(c.R + (255 - c.R) * 0.12), (byte)(c.G + (255 - c.G) * 0.12), (byte)(c.B + (255 - c.B) * 0.12));
+        var lighter = ThemeService.Mix(c, Colors.White, 0.12);
         return new Border
         {
             Width = 42, Height = 42, CornerRadius = new CornerRadius(12), Background = new LinearGradientBrush(lighter, c, 90),

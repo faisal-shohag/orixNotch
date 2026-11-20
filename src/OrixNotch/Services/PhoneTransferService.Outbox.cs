@@ -102,12 +102,7 @@ public sealed partial class PhoneTransferService
             if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
             {
                 var path = Path.Combine(Storage.Dir("phone-out"), $"Clipboard {DateTime.Now:yyyy-MM-dd HHmmss}.png");
-                using (var file = File.Create(path))
-                {
-                    var encoder = new PngBitmapEncoder();
-                    encoder.Frames.Add(BitmapFrame.Create(image));
-                    encoder.Save(file);
-                }
+                Storage.SavePng(image, path);
                 Send([path]);
                 return true;
             }

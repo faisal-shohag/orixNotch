@@ -18,10 +18,10 @@ public partial class NotificationsView : UserControl, IToolView
     private int _shown = Page;
     private readonly HashSet<string> _expanded = new();
 
-
     public NotificationsView()
     {
         InitializeComponent();
+        _grip = new ResizeGrip(this, Grip, () => App.Settings.NotificationsHeight, v => App.Settings.NotificationsHeight = v, MinListHeight, MaxListHeight, DefaultHeight);
         NotificationHistory.Instance.Changed += () =>
         {
             if (IsVisible) Render();
@@ -30,7 +30,7 @@ public partial class NotificationsView : UserControl, IToolView
 
     public void OnShown()
     {
-        ApplyHeight();
+        _grip.Apply();
         _shown = Page;
         // Relative times ("5m") go stale while hidden, so redraw on every open.
         Render();
@@ -231,49 +231,10 @@ public partial class NotificationsView : UserControl, IToolView
 
     // ---------------------------------------------------------------- resize (same handle as Ask AI / Quick Note)
 
+    private readonly ResizeGrip _grip;
     private const double DefaultHeight = 220;
     private const double MinListHeight = 200;
     private const double MaxListHeight = 520;
-    private bool _dragging;
-    private double _dragStartY;
-    private double _dragStartHeight;
-
-    private static void ApplyHeight() =>
-        NotchWindow.Instance?.SetToolSize(720, Math.Clamp(App.Settings.NotificationsHeight, MinListHeight, MaxListHeight));
-
-    private void OnGripDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            App.Settings.NotificationsHeight = DefaultHeight;
-            ApplyHeight();
-            SettingsService.Save(notify: false);
-            e.Handled = true;
-            return;
-        }
-        _dragging = true;
-        _dragStartY = PointToScreen(e.GetPosition(this)).Y;
-        _dragStartHeight = ActualHeight; // what's shown, which may be capped to fit the screen
-        Grip.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnGripMove(object sender, MouseEventArgs e)
-    {
-        if (!_dragging) return;
-        var dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        var dy = (PointToScreen(e.GetPosition(this)).Y - _dragStartY) / dpi;
-        var want = Math.Clamp(_dragStartHeight + dy, MinListHeight, MaxListHeight);
-        App.Settings.NotificationsHeight = NotchWindow.Instance?.SetToolSize(720, want) ?? want;
-    }
-
-    private void OnGripUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_dragging) return;
-        _dragging = false;
-        Grip.ReleaseMouseCapture();
-        SettingsService.Save(notify: false);
-    }
 
     /// <summary>"now", "5m", "2h" today; the time for older ones (the day header carries the date).</summary>
     private static string Time(DateTime at)

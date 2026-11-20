@@ -62,15 +62,7 @@ public partial class ShelfView : UserControl
 
     private void OnReveal(object sender, RoutedEventArgs e)
     {
-        if (ItemOf(sender) is not { } item) return;
-        try
-        {
-            Process.Start("explorer.exe", $"/select,\"{item.Path}\"");
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
-        }
+        if (ItemOf(sender) is { } item) Launcher.Reveal(item.Path);
     }
 
     private void OnCopy(object sender, RoutedEventArgs e)
@@ -104,14 +96,6 @@ public partial class ShelfView : UserControl
 
     private static void Open(string path)
     {
-        if (!File.Exists(path) && !Directory.Exists(path)) return;
-        try
-        {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
-        }
+        if (File.Exists(path) || Directory.Exists(path)) Launcher.Open(path);
     }
 }

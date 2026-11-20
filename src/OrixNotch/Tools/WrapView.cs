@@ -95,10 +95,8 @@ public sealed class WrapView : UserControl
             var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "OrixNotch");
             Directory.CreateDirectory(folder);
             var path = Path.Combine(folder, $"my-day-{DateTime.Today:yyyy-MM-dd}.png");
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using (var file = File.Create(path)) encoder.Save(file);
-            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+            Storage.SavePng(bitmap, path);
+            Launcher.Reveal(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {

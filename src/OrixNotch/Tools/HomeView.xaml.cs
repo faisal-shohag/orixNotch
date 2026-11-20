@@ -61,9 +61,9 @@ public partial class HomeView : UserControl, IToolView
         UpdateCard();
         _timer.Start();
 
-        Rise(Card, 0);
-        Rise(TodayCard, 60);
-        Rise(RemindersCard, 120);
+        Motion.Rise(Card, 0);
+        Motion.Rise(TodayCard, 60);
+        Motion.Rise(RemindersCard, 120);
     }
 
     public void OnHidden() => _timer.Stop();
@@ -97,18 +97,6 @@ public partial class HomeView : UserControl, IToolView
     }
 
     /// <summary>Cards fade in and rise a few pixels, staggered, each time Home opens.</summary>
-    private static void Rise(UIElement element, int delayMs)
-    {
-        var ease = Motion.Out;
-        var begin = Motion.Scale(delayMs);
-        var duration = Motion.Slow;
-        element.Opacity = 0;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { BeginTime = begin, EasingFunction = ease });
-        var shift = new TranslateTransform(0, 8);
-        element.RenderTransform = shift;
-        shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, duration) { BeginTime = begin, EasingFunction = ease });
-    }
-
     private void OnPlayerChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(NowPlayingService.ArtTint) or nameof(NowPlayingService.IsPlaying)

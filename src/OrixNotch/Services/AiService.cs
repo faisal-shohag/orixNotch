@@ -131,7 +131,8 @@ public static class AiService
     }
 
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("OrixNotch.AiKey");
-    private static readonly HttpClient Http = new();
+    // Not the shared Http.Client: a streamed reply runs far past its 12 s timeout.
+    private static readonly HttpClient AiHttp = new();
 
     public static string ActiveProvider =>
         Providers.Any(p => p.Id == App.Settings.AiProvider) ? App.Settings.AiProvider : ProviderAnthropic;
@@ -172,7 +173,7 @@ public static class AiService
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/models");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key);
-            using var response = await Http.SendAsync(request);
+            using var response = await AiHttp.SendAsync(request);
             if (!response.IsSuccessStatusCode) return false;
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             var ids = doc.RootElement.GetProperty("data").EnumerateArray()
@@ -201,7 +202,7 @@ public static class AiService
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000");
             request.Headers.Add("x-goog-api-key", key);
-            using var response = await Http.SendAsync(request);
+            using var response = await AiHttp.SendAsync(request);
             if (!response.IsSuccessStatusCode) return false;
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             var models = new List<(string Id, string Label)>();
@@ -266,28 +267,20 @@ public static class AiService
         return models[0];
     }
 
-    public static bool HasKey => HasKeyFor(ProviderAnthropic);
-    public static bool HasGeminiKey => HasKeyFor(ProviderGemini);
-
     public static bool HasKeyFor(string provider) => File.Exists(Storage.PathOf(Info(provider).KeyFile));
-
-    public static void SaveKey(string apiKey) => SaveKeyFor(ProviderAnthropic, apiKey);
-    public static void SaveGeminiKey(string apiKey) => SaveKeyFor(ProviderGemini, apiKey);
 
     public static void SaveKeyFor(string provider, string apiKey)
     {
-        var path = Storage.PathOf(Info(provider).KeyFile);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            if (File.Exists(path)) File.Delete(path);
+            Storage.SaveSecret(Info(provider).KeyFile, null, Entropy);
             return;
         }
         var key = CleanKey(apiKey);
         // The key travels in an HTTP header, which only allows ASCII.
         if (key.Length == 0 || key.Any(c => c < 0x21 || c > 0x7E))
             throw new ArgumentException("Invalid characters in key. Copy it again.");
-        var data = ProtectedData.Protect(Encoding.UTF8.GetBytes(key), Entropy, DataProtectionScope.CurrentUser);
-        Storage.WriteAllBytesAtomic(path, data);
+        Storage.SaveSecret(Info(provider).KeyFile, key, Entropy);
     }
 
     /// <summary>
@@ -297,20 +290,8 @@ public static class AiService
     private static string CleanKey(string key) =>
         new(key.Where(c => !char.IsWhiteSpace(c) && char.GetUnicodeCategory(c) != UnicodeCategory.Format).ToArray());
 
-    private static string? LoadKey(string file)
-    {
-        try
-        {
-            var path = Storage.PathOf(file);
-            if (!File.Exists(path)) return null;
-            // Cleaned on load too, so keys saved before validation existed still work.
-            return CleanKey(Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(path), Entropy, DataProtectionScope.CurrentUser)));
-        }
-        catch (CryptographicException)
-        {
-            return null;
-        }
-    }
+    // Cleaned on load too, so keys saved before validation existed still work.
+    private static string? LoadKey(string file) => Storage.LoadSecret(file, Entropy) is { } key ? CleanKey(key) : null;
 
     /// <summary>Streams the assistant's reply text for the conversation so far, via the active provider.</summary>
     public static async IAsyncEnumerable<string> StreamReplyAsync(
@@ -415,7 +396,7 @@ public static class AiService
         request.Headers.Add("x-goog-api-key", key);
         request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
-        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await AiHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -487,7 +468,7 @@ public static class AiService
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key);
         request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
-        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await AiHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync(cancellationToken);

@@ -281,7 +281,7 @@
         <!-- Grab handle: drag to make the notch taller or shorter; double-click resets -->
         <Border x:Name="Grip" Grid.Row="1" Width="120" Height="12" Margin="0,4,0,-6" Background="Transparent"
                 Cursor="SizeNS" ToolTip="Drag to resize · double-click to reset"
-                MouseLeftButtonDown="OnGripDown" MouseMove="OnGripMove" MouseLeftButtonUp="OnGripUp" LostMouseCapture="OnGripUp">
+               >
             <Border Width="44" Height="4" CornerRadius="2" Background="{DynamicResource TrackBrush}" VerticalAlignment="Center" />
         </Border>
     </Grid>

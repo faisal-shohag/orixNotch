@@ -33,14 +33,9 @@ public sealed class OcrService
             return;
         }
         _waitUntil = DateTime.Now.AddSeconds(30);
-        try
-        {
-            Process.Start(new ProcessStartInfo("ms-screenclip:") { UseShellExecute = true });
-        }
-        catch (Exception ex)
+        if (!Launcher.Open("ms-screenclip:"))
         {
             _waitUntil = default;
-            App.Log(ex);
             Done?.Invoke("Can't open the snipping tool", "Windows' Snipping Tool may be missing");
         }
     }

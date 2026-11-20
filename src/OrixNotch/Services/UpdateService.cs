@@ -166,7 +166,7 @@ public sealed partial class UpdateService : ObservableObject
             {
                 App.Log(ex);
             }
-            Open($"ms-windows-store://pdp/?PFN={Package.Current.Id.FamilyName}");
+            Launcher.Open($"ms-windows-store://pdp/?PFN={Package.Current.Id.FamilyName}");
             return;
         }
         if (StartMsiDownload() is { } download)
@@ -188,7 +188,7 @@ public sealed partial class UpdateService : ObservableObject
                 }
             }
         }
-        Open(_releaseUrl ?? "https://github.com/faisal-shohag/orixNotch/releases/latest");
+        Launcher.Open(_releaseUrl ?? "https://github.com/faisal-shohag/orixNotch/releases/latest");
     }
 
     /// <summary>Starts (or reuses) the background download of the latest setup; MSI installs only.</summary>
@@ -282,18 +282,6 @@ public sealed partial class UpdateService : ObservableObject
         {
             App.Log(ex);
             return null;
-        }
-    }
-
-    private static void Open(string url)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            App.Log(ex);
         }
     }
 
