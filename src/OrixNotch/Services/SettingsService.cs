@@ -115,7 +115,7 @@ public sealed class AppSettings
 
     // Idle closed notch: what to show when nothing is live
     public List<string> IdleItems { get; set; } = new() { "clock" };
-    public string IdleLayout { get; set; } = "Rotate"; // Rotate | Split | Row
+    public string IdleLayout { get; set; } = "Row"; // Rotate | Split | Row
     public int IdleRotateSec { get; set; } = 8;
     /// <summary>"Auto" = the AI tool closest to its limit; "Choose" = the tools in <see cref="IdleAiTools"/>.</summary>
     public string IdleAiMode { get; set; } = "Auto";
@@ -143,7 +143,7 @@ public sealed class AppSettings
     public bool GlassWallpaperTint { get; set; }       // the glass takes on the wallpaper's colour
 
     /// <summary>"Notch" (ears into the edge), "Tab" (attached, no ears), "Island" (floating capsule), "Pill" (slim floating capsule).</summary>
-    public string NotchShape { get; set; } = "Notch";
+    public string NotchShape { get; set; } = "Island";
 
     /// <summary>"Top", "Bottom", "Left" or "Right": the screen edge the notch sits on.</summary>
     public string NotchEdge { get; set; } = "Top";
