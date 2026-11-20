@@ -76,25 +76,79 @@ public sealed class ScreenTimeService
 
     public int Total(DateTime day) => Day(day).Sum(x => x.Seconds);
 
-    /// <summary>"Google Chrome" for "chrome", from the running app's file description when it can be read.</summary>
+    /// <summary>
+    /// Each app's program file, remembered the first time it's in front (screentime-apps.json), so names and icons
+    /// still show once the app has closed.
+    /// </summary>
+    private const string PathsFile = "screentime-apps.json";
+    private readonly Dictionary<string, string> _paths = Storage.Load<Dictionary<string, string>>(PathsFile);
+    private readonly Dictionary<string, System.Windows.Media.ImageSource?> _icons = new();
+    private readonly HashSet<string> _unreadable = new(); // tried this session and couldn't read: don't look again every tick
+
+    private string? PathOf(string app)
+    {
+        if (_paths.TryGetValue(app, out var known) && File.Exists(known)) return known;
+        try
+        {
+            using var process = Process.GetProcessesByName(app).FirstOrDefault();
+            if (process?.MainModule?.FileName is not { Length: > 0 } path) return null;
+            _paths[app] = path;
+            Storage.Save(PathsFile, _paths);
+            return path;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return null; // elevated apps don't let us read their file
+        }
+    }
+
+    /// <summary>"Google Chrome" for "chrome", from the app's file description when it can be read.</summary>
     public string DisplayName(string app)
     {
         if (_names.TryGetValue(app, out var cached)) return cached;
         var name = app;
         try
         {
-            var process = Process.GetProcessesByName(app).FirstOrDefault();
-            using (process)
-            {
-                if (process?.MainModule?.FileVersionInfo.FileDescription is { Length: > 0 } description) name = description;
-            }
+            if (PathOf(app) is { } path && FileVersionInfo.GetVersionInfo(path).FileDescription is { Length: > 0 } description) name = description.Trim();
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        catch (FileNotFoundException)
         {
-            // Elevated apps don't let us read their file: keep the process name.
+            // Uninstalled since: keep the process name.
         }
         if (name == app && app.Length > 0) name = char.ToUpper(app[0], CultureInfo.CurrentCulture) + app[1..];
         return _names[app] = name;
+    }
+
+    /// <summary>The app's own icon, from its program file; null when it can't be found.</summary>
+    public System.Windows.Media.ImageSource? IconFor(string app)
+    {
+        if (_icons.TryGetValue(app, out var cached)) return cached;
+        System.Windows.Media.ImageSource? image = null;
+        try
+        {
+            if (PathOf(app) is { } path)
+            {
+                using var icon = System.Drawing.Icon.ExtractAssociatedIcon(path);
+                if (icon is not null)
+                {
+                    var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon.Handle, System.Windows.Int32Rect.Empty,
+                        System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+                    source.Freeze();
+                    image = source;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        {
+            // No icon: the view shows the app's initial instead.
+        }
+        return _icons[app] = image;
+    }
+
+    /// <summary>Remembers the app's file while it's in front (cheap: once per app).</summary>
+    private void Remember(string app)
+    {
+        if (!_paths.ContainsKey(app) && !_unreadable.Contains(app) && PathOf(app) is null) _unreadable.Add(app);
     }
 
     public static string Format(int seconds)
@@ -114,6 +168,7 @@ public sealed class ScreenTimeService
         if (_locked || ForegroundAppWatcher.Instance.Current is not { } app) return;
         if (Win32.IdleTime() > IdleAfter && Win32.FullscreenKind() == 0) return; // away, and not watching something
         _today[app] = _today.GetValueOrDefault(app) + TickSeconds;
+        Remember(app);
         if (++_unsaved >= 60 / TickSeconds) Save();
         Changed?.Invoke();
         CheckSummary();

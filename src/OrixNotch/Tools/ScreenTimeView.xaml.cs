@@ -100,8 +100,26 @@ public partial class ScreenTimeView : UserControl, IToolView
             row.ColumnDefinitions.Add(new ColumnDefinition());
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
 
-            var name = new TextBlock { Text = Service.DisplayName(app), FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            var label = Service.DisplayName(app);
+            var name = new TextBlock { Text = label, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
             name.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+            // The app's own icon beside its name (its initial on a soft disc when there is none).
+            FrameworkElement icon;
+            if (Service.IconFor(app) is { } image)
+                icon = new Image { Source = image, Width = 18, Height = 18, VerticalAlignment = VerticalAlignment.Center };
+            else
+            {
+                var initial = new TextBlock { Text = label[..1].ToUpperInvariant(), FontSize = 10, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                initial.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+                var disc = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Child = initial, VerticalAlignment = VerticalAlignment.Center };
+                disc.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
+                icon = disc;
+            }
+            RenderOptions.SetBitmapScalingMode(icon, BitmapScalingMode.HighQuality);
+            icon.Margin = new Thickness(0, 0, 8, 0);
+            var nameCell = new StackPanel { Orientation = Orientation.Horizontal };
+            nameCell.Children.Add(icon);
+            nameCell.Children.Add(name);
 
             var track = new Border { Height = 6, CornerRadius = new CornerRadius(3), Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
             track.SetResourceReference(Border.BackgroundProperty, "TrackBrush");
@@ -116,7 +134,7 @@ public partial class ScreenTimeView : UserControl, IToolView
             time.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
             Grid.SetColumn(time, 2);
 
-            row.Children.Add(name);
+            row.Children.Add(nameCell);
             row.Children.Add(track);
             row.Children.Add(time);
             TopList.Children.Add(row);
