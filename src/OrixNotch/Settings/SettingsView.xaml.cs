@@ -776,7 +776,7 @@ public partial class SettingsView : UserControl, IToolView
     {
         Title("Appearance", "Color scheme and accent. Changes apply instantly.");
         Section("LOOKS");
-        var looks = new System.Windows.Controls.Primitives.UniformGrid { Columns = ThemeService.Looks.Length, Margin = new Thickness(-4, 0, -4, 0) };
+        var looks = new System.Windows.Controls.Primitives.UniformGrid { Columns = ThemeService.Looks.Length, Margin = new Thickness(-4, 0, -4, 12) }; // room before "Share this look"
         for (var i = 0; i < ThemeService.Looks.Length; i++) looks.Children.Add(LookCard(i));
         Page.Children.Add(looks);
         Row("Share this look", "Copies a link with your colours, glass and size. Anyone with OrixNotch can open it to try it, with Undo.",
