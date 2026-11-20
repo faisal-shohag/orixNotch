@@ -98,6 +98,8 @@ public sealed class AppSettings
     public bool ScreenTimeSummary { get; set; } = true;  // an evening alert with the day's total
     public int ScreenTimeSummaryHour { get; set; } = 21;
     public string? ScreenTimeSummaryShown { get; set; }   // yyyy-MM-dd of the last summary alert
+    public Dictionary<string, int> ScreenTimeGoals { get; set; } = new(); // app (process name) → daily minutes
+    public List<string> ScreenTimeGoalsHit { get; set; } = new();         // "yyyy-MM-dd|app" already alerted
 
     // Quiet hours: alerts are counted instead of shown, then summed up in one alert when quiet ends
     public bool QuietEnabled { get; set; }

@@ -35,7 +35,7 @@ public partial class SettingsView : UserControl, IToolView
     /// </summary>
     private static readonly Dictionary<string, string[]> NewRows = new()
     {
-        ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
+        ["general"] = ["Add a daily goal", "Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief", "Quiet during focus"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
@@ -550,6 +550,42 @@ public partial class SettingsView : UserControl, IToolView
         Row("Summary at", "When the evening summary shows.",
             Combo(hours.Select(h => DateTime.Today.AddHours(h).ToString("t", System.Globalization.CultureInfo.CurrentCulture)),
                 Math.Max(0, Array.IndexOf(hours, S.ScreenTimeSummaryHour)), i => { S.ScreenTimeSummaryHour = hours[i]; Save(false); }));
+
+        Section("DAILY GOALS");
+        var st = ScreenTimeService.Instance;
+        foreach (var (app, minutes) in S.ScreenTimeGoals.ToList())
+        {
+            var name = app;
+            Row(st.DisplayName(name), $"An alert after {CommandRegistry.FormatMinutes(minutes)} a day",
+                new Button { Content = "Remove", Height = RowControlHeight }.Also(b => b.Click += (_, _) =>
+                {
+                    S.ScreenTimeGoals.Remove(name);
+                    Save(false);
+                    Render();
+                }));
+        }
+        // Apps used recently or running now, most used first.
+        var goalApps = Enumerable.Range(0, 7).SelectMany(i => st.Day(DateTime.Today.AddDays(-i))).GroupBy(x => x.App)
+            .OrderByDescending(g => g.Sum(x => x.Seconds)).Select(g => g.Key)
+            .Concat(RunningApps().Select(a => a.Name)).Distinct().Where(a => !S.ScreenTimeGoals.ContainsKey(a)).ToList();
+        var goalPick = Combo(goalApps.Select(st.DisplayName), goalApps.Count > 0 ? 0 : -1, _ => { }, width: 170);
+        int[] goalMinutes = [15, 30, 45, 60, 90, 120, 180, 240];
+        var goalLength = Combo(goalMinutes.Select(CommandRegistry.FormatMinutes), 3, _ => { }, width: 100);
+        goalLength.Margin = new Thickness(6, 0, 0, 0);
+        var addGoal = new Button { Content = "Add", Height = RowControlHeight, Margin = new Thickness(6, 0, 0, 0), IsEnabled = goalApps.Count > 0 };
+        addGoal.Click += (_, _) =>
+        {
+            if (goalPick.SelectedIndex < 0) return;
+            S.ScreenTimeGoals[goalApps[goalPick.SelectedIndex]] = goalMinutes[goalLength.SelectedIndex];
+            if (!S.ScreenTimeEnabled) st.SetEnabled(true); // a goal needs tracking
+            Save(false);
+            Render();
+        };
+        var goalRow = new StackPanel { Orientation = Orientation.Horizontal };
+        goalRow.Children.Add(goalPick);
+        goalRow.Children.Add(goalLength);
+        goalRow.Children.Add(addGoal);
+        Row("Add a daily goal", "A gentle alert once a day when an app passes its time. Apps only; websites aren't counted separately.", goalRow);
 
         Section("QUIET HOURS");
         var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();

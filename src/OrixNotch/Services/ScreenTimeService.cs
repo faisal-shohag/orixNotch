@@ -117,6 +117,22 @@ public sealed class ScreenTimeService
         if (++_unsaved >= 60 / TickSeconds) Save();
         Changed?.Invoke();
         CheckSummary();
+        CheckGoal(app);
+    }
+
+    /// <summary>An app passed its daily goal: (display name, goal minutes). Once per app per day.</summary>
+    public event Action<string, int>? GoalPassed;
+
+    private void CheckGoal(string app)
+    {
+        var s = App.Settings;
+        if (!s.ScreenTimeGoals.TryGetValue(app, out var minutes) || _today.GetValueOrDefault(app) < minutes * 60) return;
+        var key = $"{DateTime.Today:yyyy-MM-dd}|{app}";
+        if (s.ScreenTimeGoalsHit.Contains(key)) return;
+        s.ScreenTimeGoalsHit.RemoveAll(k => !k.StartsWith($"{DateTime.Today:yyyy-MM-dd}|")); // only today's matter
+        s.ScreenTimeGoalsHit.Add(key);
+        SettingsService.Save(notify: false);
+        GoalPassed?.Invoke(DisplayName(app), minutes);
     }
 
     /// <summary>The evening summary: today's total and the most used app (seconds, app), once a day.</summary>
