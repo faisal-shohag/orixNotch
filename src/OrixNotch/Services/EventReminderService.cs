@@ -15,8 +15,6 @@ public sealed partial class EventReminderService : ObservableObject
 {
     public static EventReminderService Instance { get; } = new();
 
-    public static readonly string[] SoundNames = ["Calendar", "Chime", "Bell", "No Sound"];
-
     public static TimeSpan Lead => TimeSpan.FromMinutes(Math.Max(1, App.Settings.ReminderLeadMin));
     public static TimeSpan Linger => TimeSpan.FromMinutes(Math.Max(1, App.Settings.ReminderLingerMin));
 
@@ -118,31 +116,9 @@ public sealed partial class EventReminderService : ObservableObject
         // One chime + alert when the reminder first shows, one when the event starts.
         if (IsNow ? _chimedStart.Add(key) : _chimedLead.Add(key))
         {
-            PlaySound(App.Settings.ReminderSound);
+            SoundService.Play(App.Settings.ReminderSound);
             Alert?.Invoke(IsNow);
         }
         if (IsNow) _chimedLead.Add(key); // reminder appeared at/after start: don't chime twice
-    }
-
-    /// <summary>Plays one of <see cref="SoundNames"/> (also used to preview from Settings).</summary>
-    public static void PlaySound(string? name)
-    {
-        try
-        {
-            switch (name)
-            {
-                case "Calendar":
-                    var wav = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "Windows Notify Calendar.wav");
-                    if (File.Exists(wav)) new SoundPlayer(wav).Play();
-                    else SystemSounds.Asterisk.Play();
-                    break;
-                case "Chime": SystemSounds.Asterisk.Play(); break;
-                case "Bell": SystemSounds.Exclamation.Play(); break;
-            }
-        }
-        catch
-        {
-            // Sound is a nicety; never let it break the reminder.
-        }
     }
 }

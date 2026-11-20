@@ -74,10 +74,7 @@ public sealed partial class CountdownService : ObservableObject
         _timer.Stop();
         IsRunning = false;
         Remaining = TimeSpan.Zero;
-        if (SelectedSound is not null and not "No Sound")
-        {
-            try { SystemSounds.Exclamation.Play(); } catch { }
-        }
+        SoundService.Play(SelectedSound);
         TrayService.Instance?.Notify("Timer done", "Your countdown has finished.");
     }
 

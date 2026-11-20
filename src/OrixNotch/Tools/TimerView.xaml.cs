@@ -54,7 +54,7 @@ public partial class TimerView : UserControl
         {
             DurationBox.Items.Clear();
             SoundBox.Items.Clear();
-            foreach (var s in PomodoroService.SoundOptions) SoundBox.Items.Add(s);
+            foreach (var s in SoundService.Names) SoundBox.Items.Add(s);
 
             switch (mode)
             {

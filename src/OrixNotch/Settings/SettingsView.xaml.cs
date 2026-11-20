@@ -361,14 +361,14 @@ public partial class SettingsView : UserControl, IToolView
             Combo(["1 minute", "5 minutes", "10 minutes", "15 minutes"],
                 Math.Max(0, Array.IndexOf(lingers, S.ReminderLingerMin)),
                 i => { S.ReminderLingerMin = lingers[i]; Save(false); EventReminderService.Instance.Recheck(); }));
-        Row("Sound", "Plays when a reminder appears and when the event starts.",
-            Combo(EventReminderService.SoundNames, Math.Max(0, Array.IndexOf(EventReminderService.SoundNames, S.ReminderSound)),
-                i =>
-                {
-                    S.ReminderSound = EventReminderService.SoundNames[i];
-                    Save(false);
-                    EventReminderService.PlaySound(S.ReminderSound); // preview
-                }));
+
+        Section("SOUNDS");
+        SoundRow("Calendar reminders", "Plays when a reminder appears and when the event starts.",
+            () => S.ReminderSound, v => S.ReminderSound = v);
+        SoundRow("Focus sessions", "Plays when a focus session or a break ends.",
+            () => S.PomodoroSound, v => { S.PomodoroSound = v; PomodoroService.Instance.RefreshSettings(); });
+        SoundRow("Timers", "Plays when a countdown finishes.",
+            () => S.TimerSound, v => S.TimerSound = v);
 
         Section("SUBSCRIBED CALENDARS");
         var feeds = CalendarFeedService.Instance;
@@ -505,6 +505,20 @@ public partial class SettingsView : UserControl, IToolView
                     }));
             }
         }
+    }
+
+    /// <summary>A sound picker that previews on change, plus a play button to hear it again.</summary>
+    private void SoundRow(string title, string description, Func<string> get, Action<string> set)
+    {
+        var controls = new StackPanel { Orientation = Orientation.Horizontal };
+        controls.Children.Add(Combo(SoundService.Names, SoundService.IndexOf(get()), i =>
+        {
+            set(SoundService.Names[i]);
+            Save(false);
+            SoundService.Play(get());
+        }));
+        controls.Children.Add(IconButton(AppIcon.Play, "Play", true, () => SoundService.Play(get())));
+        Row(title, description, controls);
     }
 
     private void RenderAppearance()

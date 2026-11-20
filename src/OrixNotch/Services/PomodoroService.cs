@@ -9,7 +9,6 @@ public sealed partial class PomodoroService : ObservableObject
 {
     public static PomodoroService Instance { get; } = new();
 
-    public static readonly string[] SoundOptions = ["No Sound", "Soft Chime", "Bell", "Ping"];
     public static readonly (int Work, int BreakMin, string Label)[] DurationOptions =
     [
         (15, 3, "15 / 3 min"),
@@ -98,25 +97,10 @@ public sealed partial class PomodoroService : ObservableObject
         if (finishedFocus) Completed++;
         IsBreak = !IsBreak;
         Remaining = Total;
-        PlaySound();
+        SoundService.Play(SelectedSound);
         TrayService.Instance?.Notify(
             finishedFocus ? "Focus session done" : "Break is over",
             finishedFocus ? $"Take a {App.Settings.PomodoroBreakMin} minute break." : "Ready for the next focus session?");
-    }
-
-    private void PlaySound()
-    {
-        if (SelectedSound is null or "No Sound") return;
-        try
-        {
-            switch (SelectedSound)
-            {
-                case "Soft Chime": SystemSounds.Asterisk.Play(); break;
-                case "Bell": SystemSounds.Exclamation.Play(); break;
-                default: SystemSounds.Beep.Play(); break;
-            }
-        }
-        catch { }
     }
 
     [RelayCommand]
