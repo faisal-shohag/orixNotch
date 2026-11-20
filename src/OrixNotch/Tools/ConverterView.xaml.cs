@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using OrixNotch.Services;
@@ -48,7 +50,21 @@ public partial class ConverterView : UserControl
             Unit.Linear("m/s", 1), Unit.Linear("km/h", 1 / 3.6), Unit.Linear("mph", 0.44704),
             Unit.Linear("Knots", 0.514444), Unit.Linear("ft/s", 0.3048),
         ],
+        ["Currency"] = [], // filled from live rates (CurrencyUnits)
     };
+
+    private const string Currency = "Currency";
+    private const string RatesFile = "rates.json";
+
+    /// <summary>Exchange rates: units of each currency per US dollar (open.er-api.com, updated daily).</summary>
+    public sealed class Rates
+    {
+        public DateTime Fetched { get; set; }
+        public Dictionary<string, double> PerUsd { get; set; } = new();
+    }
+
+    private static Rates? _rates;
+    private static bool _fetching;
 
     private static readonly Dictionary<string, (int From, int To)> Defaults = new()
     {
@@ -67,7 +83,7 @@ public partial class ConverterView : UserControl
     {
         InitializeComponent();
 
-        var tabs = new[] { Cat0, Cat1, Cat2, Cat3, Cat4 };
+        var tabs = new[] { Cat0, Cat1, Cat2, Cat3, Cat4, Cat5 };
         var names = Catalog.Keys.ToArray();
         for (var i = 0; i < tabs.Length; i++)
         {
@@ -100,12 +116,15 @@ public partial class ConverterView : UserControl
     private void SelectCategory(string name)
     {
         _category = name;
+        var currency = name == Currency;
+        RatesNote.Visibility = currency ? Visibility.Visible : Visibility.Collapsed;
+        var units = currency ? CurrencyUnits() : Catalog[name];
         _syncing = true;
         try
         {
-            FromBox.ItemsSource = Catalog[name];
-            ToBox.ItemsSource = Catalog[name];
-            var (from, to) = Defaults[name];
+            FromBox.ItemsSource = units;
+            ToBox.ItemsSource = units;
+            var (from, to) = currency ? CurrencyDefaults(units) : Defaults[name];
             FromBox.SelectedIndex = from;
             ToBox.SelectedIndex = to;
         }
@@ -114,6 +133,72 @@ public partial class ConverterView : UserControl
             _syncing = false;
         }
         Recalculate();
+        if (currency) _ = RefreshRatesAsync();
+    }
+
+    private static Unit[] CurrencyUnits()
+    {
+        _rates ??= Storage.Load<Rates>(RatesFile);
+        // Converting through the dollar: an amount in X is amount / rate(X) dollars.
+        return _rates.PerUsd.Where(r => r.Value > 0).OrderBy(r => r.Key).Select(r => Unit.Linear(r.Key, 1 / r.Value)).ToArray();
+    }
+
+    /// <summary>Your own currency (from Windows' region) into US dollars, or dollars into euros in the US.</summary>
+    private static (int From, int To) CurrencyDefaults(Unit[] units)
+    {
+        var codes = units.Select(u => u.Name).ToList();
+        var local = RegionInfo.CurrentRegion.ISOCurrencySymbol; // the Windows region, e.g. BDT in Bangladesh even with an English UI
+        var from = codes.IndexOf(local) is >= 0 and var i ? i : codes.IndexOf("USD");
+        var to = codes.IndexOf(local == "USD" ? "EUR" : "USD");
+        return (from, to);
+    }
+
+    /// <summary>Fetches rates when there are none or they're over 12 hours old; the cached ones keep working offline.</summary>
+    private async Task RefreshRatesAsync()
+    {
+        var had = _rates is { PerUsd.Count: > 0 };
+        ShowRatesStatus();
+        if (_fetching || (had && DateTime.UtcNow - _rates!.Fetched < TimeSpan.FromHours(12))) return;
+        _fetching = true;
+        try
+        {
+            using var doc = JsonDocument.Parse(await Http.Client.GetStringAsync("https://open.er-api.com/v6/latest/USD"));
+            if (doc.RootElement.GetProperty("result").GetString() != "success") return;
+            var rates = new Rates { Fetched = DateTime.UtcNow };
+            foreach (var r in doc.RootElement.GetProperty("rates").EnumerateObject()) rates.PerUsd[r.Name] = r.Value.GetDouble();
+            _rates = rates;
+            Storage.Save(RatesFile, rates);
+            if (!had && _category == Currency) SelectCategory(Currency); // first rates: fill the pickers
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            // Offline: cached rates (if any) stay in use.
+        }
+        finally
+        {
+            _fetching = false;
+            ShowRatesStatus();
+        }
+    }
+
+    private void ShowRatesStatus()
+    {
+        RatesStatus.Text = _rates is { PerUsd.Count: > 0 } r
+            ? $"Updated {r.Fetched.ToLocalTime():MMM d} · "
+            : _fetching ? "Loading rates… · " : "Couldn't load rates. Check your connection. · ";
+    }
+
+    private void OnRatesLink(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
+        e.Handled = true;
     }
 
     private void OnSwap(object sender, RoutedEventArgs e)

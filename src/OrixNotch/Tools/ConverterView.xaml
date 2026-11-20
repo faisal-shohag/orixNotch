@@ -7,7 +7,7 @@
             <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="Medium" />
-            <Setter Property="MinWidth" Value="114" />
+            <Setter Property="MinWidth" Value="100" />
             <Setter Property="Height" Value="30" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Focusable" Value="False" />
@@ -148,9 +148,10 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Length | Mass | Temperature | Volume | Speed -->
+        <!-- Length | Mass | Temperature | Volume | Speed | Currency -->
         <Border HorizontalAlignment="Center" Background="{DynamicResource Surface2Brush}"
                 CornerRadius="10" Padding="3">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -163,6 +164,8 @@
                 <RadioButton x:Name="Cat3" Style="{StaticResource SegmentButton}" GroupName="convCat" Content="Volume" />
                 <Border Width="1" Height="16" Background="{DynamicResource StrokeBrush}" VerticalAlignment="Center" />
                 <RadioButton x:Name="Cat4" Style="{StaticResource SegmentButton}" GroupName="convCat" Content="Speed" />
+                <Border Width="1" Height="16" Background="{DynamicResource StrokeBrush}" VerticalAlignment="Center" />
+                <RadioButton x:Name="Cat5" Style="{StaticResource SegmentButton}" GroupName="convCat" Content="Currency" />
             </StackPanel>
         </Border>
 
@@ -220,5 +223,13 @@
                 </Grid>
             </Border>
         </Grid>
+
+        <!-- Currency only: where the rates come from (the provider asks for this credit) and how fresh they are. -->
+        <TextBlock x:Name="RatesNote" Grid.Row="2" Style="{StaticResource SubText}" FontSize="11" Margin="0,8,0,0"
+                   HorizontalAlignment="Center" Visibility="Collapsed">
+            <Run x:Name="RatesStatus" />
+            <Hyperlink NavigateUri="https://www.exchangerate-api.com" RequestNavigate="OnRatesLink"
+                       Foreground="{DynamicResource SubTextBrush}">Rates by Exchange Rate API</Hyperlink>
+        </TextBlock>
     </Grid>
 </UserControl>
