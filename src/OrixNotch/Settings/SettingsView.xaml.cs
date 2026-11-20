@@ -854,11 +854,30 @@ public partial class SettingsView : UserControl, IToolView
         var look = ThemeService.Looks[index];
         var scheme = ThemeService.Schemes.First(s => s.Id == look.Scheme);
         var accent = ThemeService.Accents.FirstOrDefault(a => a.Id == scheme.Accent) ?? ThemeService.Accents[0];
+        // A tiny desktop: a colourful wallpaper strip with the notch hanging from the top, so glass reads as glass.
+        var notch = new Border
+        {
+            Width = 74, Height = 20, CornerRadius = new CornerRadius(0, 0, 10, 10), HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top, Background = scheme.PillBrush(), Opacity = look.Glass ? 0.6 + 0.3 * look.Strength : 1,
+            BorderThickness = new Thickness(1, 0, 1, 1),
+        };
+        notch.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+        var inside = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        inside.Children.Add(new Border { Width = 6, Height = 6, CornerRadius = new CornerRadius(3), Background = accent.Brush() });
+        inside.Children.Add(new Border
+        {
+            Width = 22, Height = 3, CornerRadius = new CornerRadius(1.5), Margin = new Thickness(6, 0, 0, 0),
+            Background = new SolidColorBrush(scheme.IsLight ? Color.FromArgb(0x70, 0, 0, 0) : Color.FromArgb(0x90, 0xFF, 0xFF, 0xFF)),
+        });
+        notch.Child = inside;
+        var wallpaper = new LinearGradientBrush(new GradientStopCollection
+        {
+            new(Color.FromRgb(0x1D, 0x2B, 0x64), 0), new(Color.FromRgb(0x6A, 0x3D, 0x9A), 0.55), new(Color.FromRgb(0xF0, 0x7B, 0x5A), 1),
+        }, 20);
         var preview = new Border
         {
-            Height = 34, CornerRadius = Radii.M, Background = scheme.PillBrush(),
-            Opacity = look.Glass ? 0.75 : 1, BorderThickness = new Thickness(1),
-            Child = new Border { Width = 26, Height = 5, CornerRadius = new CornerRadius(2.5), Background = accent.Brush(), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+            Height = 46, CornerRadius = Radii.M, Background = wallpaper, BorderThickness = new Thickness(1), ClipToBounds = true,
+            Child = notch,
         };
         preview.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
         var stack = new StackPanel();
