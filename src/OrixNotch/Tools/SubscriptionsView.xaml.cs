@@ -49,9 +49,10 @@ public partial class SubscriptionsView : UserControl, IToolView
             Field.ShowError(PriceInput);
             return;
         }
-        if (!TryParseDate(DateInput.Text.Trim(), out var next))
+        if (DateInput.SelectedDate is not { } next)
         {
-            Field.ShowError(DateInput);
+            DateInput.Focus();
+            DateInput.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent)); // open the calendar
             return;
         }
         Service.Add(new Subscription
@@ -67,39 +68,6 @@ public partial class SubscriptionsView : UserControl, IToolView
         DateInput.Clear();
         NameInput.Focus();
     }
-
-    /// <summary>"5 Dec", "Dec 5", "2026-12-05", or a day of the month ("5" = the next 5th). A date without a year is the next one.</summary>
-    internal static bool TryParseDate(string text, out DateTime date)
-    {
-        date = default;
-        if (text.Length == 0) return false;
-        var today = DateTime.Today;
-        if (int.TryParse(text, out var day) && day is >= 1 and <= 31)
-        {
-            var month = new DateTime(today.Year, today.Month, 1);
-            if (day < today.Day) month = month.AddMonths(1);
-            date = month.AddDays(Math.Min(day, DateTime.DaysInMonth(month.Year, month.Month)) - 1);
-            return true;
-        }
-        if (!DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.AllowWhiteSpaces, out date)
-            && !DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out date)) return false;
-        date = date.Date;
-        var yearTyped = text.Contains(date.Year.ToString(CultureInfo.InvariantCulture));
-        if (date < today && !yearTyped) date = date.AddYears(1); // "5 Jan" typed in December means next January
-        return true;
-    }
-
-#if DEBUG
-    static SubscriptionsView()
-    {
-        var today = DateTime.Today;
-        System.Diagnostics.Debug.Assert(TryParseDate(today.Day.ToString(CultureInfo.InvariantCulture), out var d) && d == today);
-        System.Diagnostics.Debug.Assert(TryParseDate("2030-03-04", out d) && d == new DateTime(2030, 3, 4));
-        System.Diagnostics.Debug.Assert(TryParseDate("2020-03-04", out d) && d == new DateTime(2020, 3, 4)); // typed year is kept
-        System.Diagnostics.Debug.Assert(!TryParseDate("soon", out _));
-        System.Diagnostics.Debug.Assert(!TryParseDate("", out _));
-    }
-#endif
 
     private void Render()
     {

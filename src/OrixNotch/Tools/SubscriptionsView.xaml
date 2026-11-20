@@ -21,8 +21,8 @@
                 <TextBox x:Name="NameInput" Tag="Netflix, Spotify, Claude…" KeyDown="OnInputKeyDown" />
                 <TextBox x:Name="PriceInput" Grid.Column="1" Margin="6,0,0,0" KeyDown="OnInputKeyDown" />
                 <ComboBox x:Name="CycleBox" Grid.Column="2" Width="100" Height="34" Margin="6,0,0,0" />
-                <TextBox x:Name="DateInput" Grid.Column="3" Margin="6,0,0,0" Tag="Renews on"
-                         ToolTip="Next payment date, e.g. 5 Dec or 2026-12-05" KeyDown="OnInputKeyDown" />
+                <hero:DateButton x:Name="DateInput" Grid.Column="3" Margin="6,0,0,0" Height="34" Placeholder="Renews on"
+                                 ToolTip="Next payment date" />
                 <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Add" Height="34" Margin="6,0,0,0" Click="OnAdd" />
             </Grid>
         </Border>
