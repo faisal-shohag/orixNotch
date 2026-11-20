@@ -46,6 +46,17 @@ public static class Storage
         return new T();
     }
 
+    /// <summary>
+    /// Writes via a temp file and a move, so a crash mid-write leaves the old file instead of a torn one (a torn
+    /// DPAPI blob would read as "no key" and lose the secret). Throws like File.WriteAllBytes.
+    /// </summary>
+    public static void WriteAllBytesAtomic(string path, byte[] data)
+    {
+        var tmp = path + ".tmp";
+        File.WriteAllBytes(tmp, data);
+        File.Move(tmp, path, overwrite: true);
+    }
+
     public static void Save<T>(string name, T value)
     {
         try

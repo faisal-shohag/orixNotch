@@ -287,7 +287,7 @@ public static class AiService
         if (key.Length == 0 || key.Any(c => c < 0x21 || c > 0x7E))
             throw new ArgumentException("Invalid characters in key. Copy it again.");
         var data = ProtectedData.Protect(Encoding.UTF8.GetBytes(key), Entropy, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(path, data);
+        Storage.WriteAllBytesAtomic(path, data);
     }
 
     /// <summary>

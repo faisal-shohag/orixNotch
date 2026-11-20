@@ -55,6 +55,7 @@ public sealed class AutomationService
         var now = DateTime.Now;
         if (now - _loaded > TimeSpan.FromMinutes(1))
         {
+            if (now.Date != _loaded.Date) _done.Clear(); // keys are for today's events only
             _events = EventReminderService.Meetings().Where(e => e.Date.Date == now.Date).ToList();
             _loaded = now;
         }

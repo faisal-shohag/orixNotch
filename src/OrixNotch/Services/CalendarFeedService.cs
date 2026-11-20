@@ -135,7 +135,7 @@ public sealed partial class CalendarFeedService : ObservableObject
             File.Delete(path);
             return;
         }
-        File.WriteAllBytes(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(string.Join('\n', feeds)), Entropy, DataProtectionScope.CurrentUser));
+        Storage.WriteAllBytesAtomic(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(string.Join('\n', feeds)), Entropy, DataProtectionScope.CurrentUser));
     }
 
     /// <summary>Stable id for a link that doesn't reveal it (stored on each event).</summary>

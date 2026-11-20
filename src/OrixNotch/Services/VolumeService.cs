@@ -47,6 +47,14 @@ public sealed class VolumeService
         }
     }
 
+    /// <summary>At exit: stop the audio service calling back into a closing app.</summary>
+    public void Stop()
+    {
+        if (_endpoint is not null && _callback is not null) _endpoint.UnregisterControlChangeNotify(_callback);
+        if (_mic is not null && _micCallback is not null) _mic.UnregisterControlChangeNotify(_micCallback);
+        _endpoint = _mic = null;
+    }
+
     /// <summary>Speaker volume, 0..1 (null without an audio device).</summary>
     public float? MasterVolume
     {
@@ -62,6 +70,13 @@ public sealed class VolumeService
     /// <summary>One app's sound in the Windows volume mixer (all its sessions together), adjustable here.</summary>
     public sealed class AppAudio(string app, int pid, List<object> sessions)
     {
+        /// <summary>Frees the audio sessions now (the mixer re-reads apps every tick); the object is inert afterwards.</summary>
+        public void Release()
+        {
+            foreach (var s in sessions) Marshal.ReleaseComObject(s);
+            sessions.Clear();
+        }
+
         public string App { get; } = app;   // process name; "" for Windows' system sounds
         public int ProcessId { get; } = pid;
 
@@ -90,20 +105,35 @@ public sealed class VolumeService
     public List<AppAudio> Apps()
     {
         var result = new List<AppAudio>();
+        var temporary = new List<object>(); // released at the end; only the kept sessions live on in AppAudio
         try
         {
             var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            temporary.Add(enumerator);
             if (enumerator.GetDefaultAudioEndpoint(0, 1, out var device) != 0) return result;
+            temporary.Add(device);
             var iid = typeof(IAudioSessionManager2).GUID;
             if (device.Activate(ref iid, 23, IntPtr.Zero, out var obj) != 0) return result;
-            if (((IAudioSessionManager2)obj).GetSessionEnumerator(out var sessions) != 0 || sessions.GetCount(out var count) != 0) return result;
+            temporary.Add(obj);
+            if (((IAudioSessionManager2)obj).GetSessionEnumerator(out var sessions) != 0) return result;
+            temporary.Add(sessions);
+            if (sessions.GetCount(out var count) != 0) return result;
             var groups = new Dictionary<string, (int Pid, bool Active, List<object> Sessions)>();
             for (var i = 0; i < count; i++)
             {
-                if (sessions.GetSession(i, out var session) != 0 || session.GetState(out var state) != 0 || state == 2 /* expired */) continue;
+                if (sessions.GetSession(i, out var session) != 0) continue;
+                if (session.GetState(out var state) != 0 || state == 2 /* expired */)
+                {
+                    temporary.Add(session);
+                    continue;
+                }
                 session.GetProcessId(out var pid);
                 var app = session.IsSystemSoundsSession() == 0 ? "" : ForegroundAppWatcher.NameOf((int)pid);
-                if (app is null) continue; // the app has exited
+                if (app is null) // the app has exited
+                {
+                    temporary.Add(session);
+                    continue;
+                }
                 var group = groups.TryGetValue(app, out var g) ? g : (Pid: (int)pid, Active: false, Sessions: new List<object>());
                 group.Sessions.Add(session);
                 groups[app] = (group.Pid, group.Active || state == 1, group.Sessions);
@@ -114,6 +144,10 @@ public sealed class VolumeService
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             App.Log(ex);
+        }
+        finally
+        {
+            foreach (var o in temporary) Marshal.ReleaseComObject(o);
         }
         return result;
     }

@@ -70,7 +70,11 @@ public sealed class TrayService : IDisposable
     public void Dispose()
     {
         _icon.Visible = false;
+        // NotifyIcon.Dispose leaves its Icon (a GDI handle) and menu to their owner.
+        var (icon, menu) = (_icon.Icon, _icon.ContextMenuStrip);
         _icon.Dispose();
+        icon?.Dispose();
+        menu?.Dispose();
     }
 }
 

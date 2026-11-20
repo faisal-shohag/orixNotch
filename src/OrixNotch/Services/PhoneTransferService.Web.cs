@@ -47,7 +47,7 @@ public sealed partial class PhoneTransferService
         _webKey = RandomId();
         try
         {
-            File.WriteAllBytes(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(_webKey), KeyEntropy, DataProtectionScope.CurrentUser));
+            Storage.WriteAllBytesAtomic(path, ProtectedData.Protect(Encoding.UTF8.GetBytes(_webKey), KeyEntropy, DataProtectionScope.CurrentUser));
         }
         catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {

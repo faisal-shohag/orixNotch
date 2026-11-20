@@ -88,10 +88,10 @@ public sealed class ScreenTimeService
     private string? PathOf(string app)
     {
         if (_paths.TryGetValue(app, out var known) && File.Exists(known)) return known;
+        var processes = Process.GetProcessesByName(app);
         try
         {
-            using var process = Process.GetProcessesByName(app).FirstOrDefault();
-            if (process?.MainModule?.FileName is not { Length: > 0 } path) return null;
+            if (processes.FirstOrDefault()?.MainModule?.FileName is not { Length: > 0 } path) return null;
             _paths[app] = path;
             Storage.Save(PathsFile, _paths);
             return path;
@@ -99,6 +99,10 @@ public sealed class ScreenTimeService
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             return null; // elevated apps don't let us read their file
+        }
+        finally
+        {
+            foreach (var p in processes) p.Dispose(); // every copy (Chrome runs dozens), not just the one read
         }
     }
 

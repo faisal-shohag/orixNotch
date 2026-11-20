@@ -125,6 +125,27 @@ public sealed class ClipboardService
     private ClipboardService()
     {
         Items = new ObservableCollection<ClipItem>(Storage.Load<List<ClipItem>>(FileName));
+        DeleteOrphanImages();
+    }
+
+    /// <summary>
+    /// Images saved just before a crash (or whose item was trimmed while the save failed) aren't in the history:
+    /// remove them. Skipped when the history is empty, which is also what an unreadable history file loads as.
+    /// </summary>
+    private void DeleteOrphanImages()
+    {
+        if (Items.Count == 0) return;
+        try
+        {
+            // By file name: a data folder that was moved keeps the old absolute paths in the history.
+            var kept = Items.Where(i => i.ImagePath is not null).Select(i => Path.GetFileName(i.ImagePath!)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in Directory.EnumerateFiles(Storage.Dir("clipboard"), "*.png"))
+                if (!kept.Contains(Path.GetFileName(file))) File.Delete(file);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            App.Log(ex);
+        }
     }
 
     public void Attach(IntPtr hwnd) => Win32.AddClipboardFormatListener(hwnd);

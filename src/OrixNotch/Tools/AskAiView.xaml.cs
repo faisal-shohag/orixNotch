@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -39,6 +40,36 @@ public partial class AskAiView : UserControl, IToolView
 
     private readonly List<AiTurn> _conversation = new();
     private List<ChatEntry> _history = new();
+
+    // A long chat would resend (and keep in memory as base64) everything: send the recent turns, keep images on the
+    // newest few, and store at most MaxSavedEntries for the next launch.
+    private const int MaxSentTurns = 41; // odd, so a window ending on a question starts on one
+    private const int ImageTurns = 6;
+    private const int MaxSavedEntries = 80;
+
+    private void ForgetOldImages()
+    {
+        for (var i = 0; i < _conversation.Count - ImageTurns; i++)
+            if (_conversation[i].Images is { Count: > 0 }) _conversation[i] = _conversation[i] with { Images = null };
+    }
+
+    private void TrimHistory()
+    {
+        var drop = _history.Count - MaxSavedEntries;
+        if (drop <= 0) return;
+        foreach (var name in _history.Take(drop).SelectMany(e => e.Images ?? []))
+        {
+            try
+            {
+                File.Delete(Path.Combine(Storage.PathOf(ImageDir), Path.GetFileName(name)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // still open somewhere: harmless leftover
+            }
+        }
+        _history.RemoveRange(0, drop);
+    }
     private CancellationTokenSource? _cts;
     private string? _keySetupFor;
     /// <summary>Bumped by New chat, so a reply still streaming from the old chat knows to drop itself.</summary>
@@ -77,6 +108,7 @@ public partial class AskAiView : UserControl, IToolView
         EmptyState.Visibility = Visibility.Collapsed;
         ChatScroll.Visibility = Visibility.Visible;
         NewChatButton.Visibility = Visibility.Visible;
+        ForgetOldImages();
         Dispatcher.BeginInvoke(ChatScroll.ScrollToEnd, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
@@ -427,7 +459,8 @@ public partial class AskAiView : UserControl, IToolView
         try
         {
             // Earlier images go along only while the model can read them (the user may have switched models).
-            var turns = ModelReadsImages ? _conversation.ToList() : _conversation.Select(t => t with { Images = null }).ToList();
+            var recent = _conversation.TakeLast(MaxSentTurns).SkipWhile(t => !t.FromUser);
+            var turns = ModelReadsImages ? recent.ToList() : recent.Select(t => t with { Images = null }).ToList();
             await foreach (var chunk in AiService.StreamReplyAsync(turns, cts.Token))
             {
                 reply.Append(chunk);
@@ -469,7 +502,9 @@ public partial class AskAiView : UserControl, IToolView
             ShowActions(actions, text, at);
             _history.Add(new ChatEntry(true, prompt, display, at, sent.Count > 0 ? SaveImages(sent) : null));
             _history.Add(new ChatEntry(false, text, null, at));
+            TrimHistory();
             Storage.Save(HistoryFile, _history);
+            ForgetOldImages();
         }
         else
         {

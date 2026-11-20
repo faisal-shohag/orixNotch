@@ -227,6 +227,7 @@ public partial class AskAiView
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;
+        image.DecodePixelHeight = 192; // previews show at most 96 px tall: don't hold the full 1568 px image per bubble
         image.StreamSource = new MemoryStream(bytes);
         image.EndInit();
         image.Freeze();

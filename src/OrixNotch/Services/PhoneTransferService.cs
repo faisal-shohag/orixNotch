@@ -132,6 +132,14 @@ public sealed partial class PhoneTransferService : ObservableObject
 
     private PhoneTransferService()
     {
+        try
+        {
+            SweepOutboxFolder();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            App.Log(ex);
+        }
         _progressTimer.Tick += (_, _) =>
         {
             var any = false;

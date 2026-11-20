@@ -44,6 +44,16 @@ public partial class App : Application
             Log(args.Exception);
             args.Handled = true;
         };
+        // Fire-and-forget tasks and background threads (Kestrel, watchers) fail outside the dispatcher.
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log(args.Exception);
+            args.SetObserved();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex) Log(ex);
+        };
 
         // Before any UI measures text.
         Resources["UiFont"] = BuildUiFont();
@@ -75,17 +85,28 @@ public partial class App : Application
         ScreenTimeService.Instance.Save();
         ClipboardService.Instance.Flush();
         SettingsService.Flush();
+        VolumeService.Instance.Stop();
         _ = PhoneTransferService.Instance.StopAsync(); // sockets close with the process anyway
         _ = PeekApiService.Instance.StopAsync();
         _mutex?.ReleaseMutex();
         base.OnExit(e);
     }
 
+    private const long MaxLogBytes = 1 << 20;
+    private static readonly object LogLock = new();
+
+    /// <summary>Appends to error.log; past 1 MB the old log becomes error.old.log, so it never grows without end.</summary>
     public static void Log(Exception ex)
     {
         try
         {
-            File.AppendAllText(Storage.PathOf("error.log"), $"[{DateTime.Now:u}] {ex}\n\n");
+            lock (LogLock) // services log from several threads at once
+            {
+                var path = Storage.PathOf("error.log");
+                if (new FileInfo(path) is { Exists: true, Length: > MaxLogBytes })
+                    File.Move(path, Storage.PathOf("error.old.log"), overwrite: true);
+                File.AppendAllText(path, $"[{DateTime.Now:u}] {ex}\n\n");
+            }
         }
         catch
         {

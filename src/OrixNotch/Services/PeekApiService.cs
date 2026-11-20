@@ -126,7 +126,7 @@ public sealed class PeekApiService
         _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         try
         {
-            File.WriteAllBytes(Storage.PathOf(TokenFile), ProtectedData.Protect(Encoding.UTF8.GetBytes(_token), TokenEntropy, DataProtectionScope.CurrentUser));
+            Storage.WriteAllBytesAtomic(Storage.PathOf(TokenFile), ProtectedData.Protect(Encoding.UTF8.GetBytes(_token), TokenEntropy, DataProtectionScope.CurrentUser));
         }
         catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {

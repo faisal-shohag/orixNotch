@@ -71,7 +71,20 @@ public partial class ControlsView : UserControl, IToolView
         }
     }
 
-    public void OnHidden() => _refresh.Stop();
+    public void OnHidden()
+    {
+        _refresh.Stop();
+        ReleaseApps(); // OnShown reads them again
+    }
+
+    private List<VolumeService.AppAudio> _apps = [];
+
+    private void ReleaseApps()
+    {
+        foreach (var a in _apps) a.Release();
+        _apps = [];
+        _appKey = "";
+    }
 
     private static (bool? On, string Text) RadioState(Radio? radio) =>
         radio is null ? (null, "Not available") : radio.State == global::Windows.Devices.Radios.RadioState.On ? (true, "On") : (false, "Off");
@@ -134,7 +147,13 @@ public partial class ControlsView : UserControl, IToolView
     {
         var apps = VolumeService.Instance.Apps();
         var key = string.Join("|", apps.Select(a => a.App));
-        if (key == _appKey) return;
+        if (key == _appKey)
+        {
+            foreach (var a in apps) a.Release(); // same apps: the rows keep the ones they have
+            return;
+        }
+        ReleaseApps();
+        _apps = apps;
         _appKey = key;
         AppList.Children.Clear();
         foreach (var app in apps)

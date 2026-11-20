@@ -164,6 +164,7 @@ public sealed class NotificationWatcher
             result.Add((n.AppInfo.AppUserModelId, n.AppInfo.DisplayInfo.DisplayName, icon,
                 texts.FirstOrDefault() ?? "", string.Join(" ", texts.Skip(1))));
         }
+        _seenIds.IntersectWith(list.Select(n => n.Id)); // forget toasts gone from Action Center, or this grows forever
         _listenerPrimed = true; // the first pass only records what was already there
         return result;
     }

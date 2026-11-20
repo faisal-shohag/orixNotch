@@ -255,7 +255,7 @@ public partial class NotchWindow : Window
         ClipboardService.Instance.Attach(_hwnd);
         HotkeyService.Attach(_hwnd);
 
-        SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(Place);
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(Place);
         Place();
         ThemeService.Changed += ApplyGlass;
@@ -269,17 +269,24 @@ public partial class NotchWindow : Window
         ForegroundAppWatcher.Instance.Changed += OnForegroundAppChanged;
         ForegroundAppWatcher.Instance.Start();
         // Morning brief: a few seconds after the first unlock of the day, or after starting at sign-in.
-        SystemEvents.SessionSwitch += (_, e) =>
-        {
-            if (e.Reason == SessionSwitchReason.SessionUnlock) Dispatcher.BeginInvoke(() => After(TimeSpan.FromSeconds(3), TryMorningBrief));
-        };
+        SystemEvents.SessionSwitch += OnSessionSwitch;
         After(TimeSpan.FromSeconds(20), TryMorningBrief);
         _guardTimer.Start();
         _repelTimer.Start();
     }
 
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(Place);
+
+    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason == SessionSwitchReason.SessionUnlock) Dispatcher.BeginInvoke(() => After(TimeSpan.FromSeconds(3), TryMorningBrief));
+    }
+
     protected override void OnClosed(EventArgs e)
     {
+        // SystemEvents is static: its handlers would keep this window alive.
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         HotkeyService.UnregisterAll();
         ForegroundAppWatcher.Instance.Stop();
         Win32.RemoveClipboardFormatListener(_hwnd);
@@ -1982,9 +1989,10 @@ public partial class NotchWindow : Window
             bitmap.DecodePixelHeight = 80;
             bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
             bitmap.EndInit();
+            bitmap.Freeze();
             frame.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
         }
-        catch (Exception ex) when (ex is System.IO.IOException or NotSupportedException or UnauthorizedAccessException)
+        catch (Exception) // a half-written screenshot throws FileFormatException, ArgumentException, …: show the glyph
         {
             frame.Child = new HeroIcon { Kind = AppIcon.Photo, Width = 19, Height = 19 };
         }

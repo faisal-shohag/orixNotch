@@ -73,9 +73,19 @@ public sealed partial class EventReminderService : ObservableObject
 
     private static string Key(CalendarEvent e) => $"{e.Date:yyyy-MM-dd}|{e.Time}|{e.Title}";
 
+    private DateTime _prunedDay;
+
     private void Check()
     {
         var now = DateTime.Now;
+        if (now.Date != _prunedDay)
+        {
+            // Keys start with the event's date: forget days before yesterday (yesterday's may still be lingering).
+            _prunedDay = now.Date;
+            var cutoff = $"{now.Date.AddDays(-1):yyyy-MM-dd}";
+            foreach (var set in new[] { _dismissed, _chimedLead, _chimedStart })
+                set.RemoveWhere(k => string.CompareOrdinal(k, cutoff) < 0);
+        }
         var due = App.Settings.RemindersEnabled
             ? _events
                 .Where(e => e.Date.Date == now.Date && !_dismissed.Contains(Key(e)) && CalendarView.TryParseTime(e.Time, out _))
