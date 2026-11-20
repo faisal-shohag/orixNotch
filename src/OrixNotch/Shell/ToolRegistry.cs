@@ -54,6 +54,9 @@ public static class ToolRegistry
         new("emoji", "Emoji", AppIcon.FaceSmile, W, 245, () => new EmojiView()),
     ];
 
+    /// <summary>Tools added in this release: their tabs get a "new" dot until opened once. Update with each release.</summary>
+    public static readonly string[] NewTools = ["screentime", "controls", "subscriptions"];
+
     /// <summary>Tools in the user's order, hidden ones removed.</summary>
     public static List<ToolDef> Ordered(bool includeHidden = false)
     {

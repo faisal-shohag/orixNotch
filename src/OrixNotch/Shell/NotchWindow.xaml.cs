@@ -1984,6 +1984,7 @@ public partial class NotchWindow : Window
         {
             Style = (Style)FindResource("TabButton"),
             Content = id == "notifications" ? WithUnreadBadge(new HeroIcon { Kind = icon, Width = 17, Height = 17 })
+                : IsNewTool(id) ? WithNewDot(id, new HeroIcon { Kind = icon, Width = 17, Height = 17 })
                 : new HeroIcon { Kind = icon, Width = 17, Height = 17 },
             ToolTip = name,
             GroupName = "tools",
@@ -1998,6 +1999,35 @@ public partial class NotchWindow : Window
         };
         if (id != SettingsId) WireTabDrag(tab); // press and hold to reorder
         return tab;
+    }
+
+    // "New" dots on the tabs of tools added in this release, until each is opened (not on a first install: all is new).
+    private readonly Dictionary<string, FrameworkElement> _newDots = new();
+
+    private static bool IsNewTool(string id) =>
+        !SettingsService.FirstRun && ToolRegistry.NewTools.Contains(id) && !App.Settings.SeenNew.Contains("tool|" + id);
+
+    private FrameworkElement WithNewDot(string id, FrameworkElement icon)
+    {
+        var dot = new Ellipse
+        {
+            Width = 6, Height = 6, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -3, -5, 0), IsHitTestVisible = false,
+        };
+        dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentBrush");
+        _newDots[id] = dot;
+        var grid = new Grid();
+        grid.Children.Add(icon);
+        grid.Children.Add(dot);
+        return grid;
+    }
+
+    private void MarkToolSeen(string id)
+    {
+        if (!_newDots.Remove(id, out var dot)) return;
+        dot.Visibility = Visibility.Collapsed;
+        App.Settings.SeenNew.Add("tool|" + id);
+        SettingsService.Save(notify: false);
     }
 
     /// <summary>The Notifications tab's icon with a count of what arrived since it was last opened.</summary>
@@ -2045,6 +2075,7 @@ public partial class NotchWindow : Window
         }
 
         var def = ToolRegistry.All.FirstOrDefault(t => t.Id == id) ?? ToolRegistry.All[0];
+        MarkToolSeen(def.Id);
         _backTarget = backTo;
         Present(def.Id, def.Name, def.Width, def.Height, () => def.Create(), showTabs: true);
 
