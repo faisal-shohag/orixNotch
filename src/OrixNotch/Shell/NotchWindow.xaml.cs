@@ -179,6 +179,9 @@ public partial class NotchWindow : Window
         ScreenTimeService.Instance.Summary += (seconds, top) =>
             EnqueuePeek(new PeekRequest("screentime", () => GlyphTile(AppIcon.Hourglass), $"{ScreenTimeService.Format(seconds)} on screen today",
                 top is null ? "Click to see your day" : $"Most of it in {top} · click to see your day", TimeSpan.FromSeconds(6), OnClick: ShowWrap));
+        BreakService.Instance.Due += kind =>
+            EnqueuePeek(new PeekRequest("break:" + kind.Id, () => GlyphTile(kind.Icon), kind.Title, kind.Sub, TimeSpan.FromSeconds(6)));
+        BreakService.Instance.Reconfigure();
         ScreenTimeService.Instance.GoalPassed += (app, minutes) =>
             EnqueuePeek(new PeekRequest("goal:" + app, () => GlyphTile(AppIcon.Hourglass), app,
                 $"{CommandRegistry.FormatMinutes(minutes)} today, your daily goal. Maybe take a break?", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("screentime")));

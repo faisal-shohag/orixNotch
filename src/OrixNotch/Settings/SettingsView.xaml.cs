@@ -35,7 +35,7 @@ public partial class SettingsView : UserControl, IToolView
     /// </summary>
     private static readonly Dictionary<string, string[]> NewRows = new()
     {
-        ["general"] = ["Add a daily goal", "Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
+        ["general"] = ["Add a daily goal", "Rest your eyes", "Stand up", "Drink water", "Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief", "Quiet during focus"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
@@ -586,6 +586,26 @@ public partial class SettingsView : UserControl, IToolView
         goalRow.Children.Add(goalLength);
         goalRow.Children.Add(addGoal);
         Row("Add a daily goal", "A gentle alert once a day when an app passes its time. Apps only; websites aren't counted separately.", goalRow);
+
+        Section("BREAKS");
+        foreach (var kind in BreakService.Kinds)
+        {
+            var id = kind.Id;
+            var (title, what) = id switch
+            {
+                "eyes" => ("Rest your eyes", "Every 20 minutes: look 20 feet (6 m) away for 20 seconds."),
+                "stand" => ("Stand up", "After an hour at the screen."),
+                _ => ("Drink water", "Every hour and a half."),
+            };
+            Row(title, what + " Only time you're using the PC counts, and a few minutes away resets it. Waits out full screen, quiet hours and focus.",
+                Toggle(BreakService.IsOn(id), v =>
+                {
+                    S.BreakReminders.Remove(id);
+                    if (v) S.BreakReminders.Add(id);
+                    Save(false);
+                    BreakService.Instance.Reconfigure();
+                }));
+        }
 
         Section("QUIET HOURS");
         var times = Enumerable.Range(0, 48).Select(i => $"{i / 2:00}:{i % 2 * 30:00}").ToList();
