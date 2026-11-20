@@ -179,6 +179,15 @@ public partial class NotchWindow : Window
         ScreenTimeService.Instance.Summary += (seconds, top) =>
             EnqueuePeek(new PeekRequest("screentime", () => GlyphTile(AppIcon.Hourglass), $"{ScreenTimeService.Format(seconds)} on screen today",
                 top is null ? "Click to see your day" : $"Most of it in {top} · click to see your day", TimeSpan.FromSeconds(6), OnClick: ShowWrap));
+        PomodoroService.Instance.StreakReached += days =>
+        {
+            if (!App.Settings.Celebrations) return;
+            EnqueuePeek(new PeekRequest("streak", () => GlyphTile(AppIcon.Fire), $"{days}-day focus streak",
+                days >= 7 ? "A focus session every day. Impressive. Keep it going!" : "Focus every day, and it adds up. Keep going!", TimeSpan.FromSeconds(6)));
+        };
+        AutomationService.Instance.Birthday += title =>
+            EnqueuePeek(new PeekRequest("birthday:" + title, () => GlyphTile(AppIcon.Cake), title, "Today. Don't forget to say happy birthday!",
+                TimeSpan.FromSeconds(8), OnClick: () => OpenTool("calendar")));
         BreakService.Instance.Due += kind =>
             EnqueuePeek(new PeekRequest("break:" + kind.Id, () => GlyphTile(kind.Icon), kind.Title, kind.Sub, TimeSpan.FromSeconds(6)));
         BreakService.Instance.Reconfigure();

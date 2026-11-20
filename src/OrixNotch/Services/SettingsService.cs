@@ -133,6 +133,8 @@ public sealed class AppSettings
 
     public string ThemeScheme { get; set; } = "midnight";
     public string ThemeAccent { get; set; } = "auto"; // "auto" = the scheme's own accent
+    public bool Celebrations { get; set; } = true;  // confetti on an empty to-do list, focus streaks, birthdays
+    public List<string> Celebrated { get; set; } = new(); // "yyyy-MM-dd|what" already celebrated
     public bool ReactivePill { get; set; } = true;   // the closed notch's music bars follow the sound (not on battery saver)
     public bool AlbumAccent { get; set; }             // while music plays, the accent follows the cover
     public bool Glass { get; set; }                    // see-through, tinted notch with a glass sheen

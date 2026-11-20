@@ -181,5 +181,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
+        <!-- Confetti when the last open to-do is ticked (Celebrations) -->
+        <Canvas x:Name="Fx" Grid.RowSpan="3" IsHitTestVisible="False" ClipToBounds="False" />
     </Grid>
 </UserControl>

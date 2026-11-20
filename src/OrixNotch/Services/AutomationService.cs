@@ -18,13 +18,38 @@ public sealed class AutomationService
     private readonly HashSet<string> _done = new();
     private List<CalendarEvent> _events = new();
     private DateTime _loaded;
+    private DateTime _birthdaysChecked;
 
     private AutomationService() => _timer.Tick += (_, _) => Check();
 
     public void Start() => _timer.Start();
 
+    /// <summary>A calendar event today with "birthday" in its name (title). Once per event per day.</summary>
+    public event Action<string>? Birthday;
+
+    private void CheckBirthdays()
+    {
+        var s = App.Settings;
+        if (!s.Celebrations || DateTime.Now.Hour < 8) return; // not before the day starts
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        foreach (var e in CalendarEvent.LoadAll().Where(e => e.Date.Date == DateTime.Today && e.Title.Contains("birthday", StringComparison.OrdinalIgnoreCase)))
+        {
+            var key = $"{today}|birthday|{e.Title}";
+            if (s.Celebrated.Contains(key)) continue;
+            s.Celebrated.RemoveAll(k => !k.StartsWith(today + "|")); // only today's matter
+            s.Celebrated.Add(key);
+            SettingsService.Save(notify: false);
+            Birthday?.Invoke(e.Title);
+        }
+    }
+
     private void Check()
     {
+        if (DateTime.Now - _birthdaysChecked > TimeSpan.FromMinutes(5))
+        {
+            _birthdaysChecked = DateTime.Now;
+            CheckBirthdays();
+        }
         var s = App.Settings;
         if (!s.AutoPauseMusic && !s.AutoFocusEvents) return;
         var now = DateTime.Now;

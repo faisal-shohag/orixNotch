@@ -48,7 +48,12 @@ public partial class TodosView : UserControl, IToolView
 
     private void OnItemChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(TodoItem.Done) && sender is TodoItem item) item.DoneAt = item.Done ? DateTime.Now : null;
+        if (e.PropertyName == nameof(TodoItem.Done) && sender is TodoItem item)
+        {
+            item.DoneAt = item.Done ? DateTime.Now : null;
+            // The last open one just ticked: a small celebration.
+            if (item.Done && App.Settings.Celebrations && _items.All(i => i.Done)) Confetti.Burst(Fx, new Point(Fx.ActualWidth / 2, Fx.ActualHeight / 2));
+        }
         Save();
         Refresh();
     }

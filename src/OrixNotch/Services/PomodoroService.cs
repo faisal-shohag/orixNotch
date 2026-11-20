@@ -157,7 +157,13 @@ public sealed partial class PomodoroService : ObservableObject
         foreach (var old in _log.Keys.Where(k => string.CompareOrdinal(k, Key(DateTime.Today.AddDays(-366))) < 0).ToList()) _log.Remove(old);
         Storage.Save(LogFile, _log);
         Completed = day.Sessions;
+        if (day.Sessions == 1 && Milestones.Contains(Streak)) StreakReached?.Invoke(Streak); // the day's first session extends it
     }
+
+    public static readonly int[] Milestones = [3, 7, 14, 30, 50, 100];
+
+    /// <summary>The focus streak reached a milestone (days).</summary>
+    public event Action<int>? StreakReached;
 
     public int MinutesToday => Today().Minutes;
 
