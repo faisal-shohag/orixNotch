@@ -12,7 +12,10 @@ namespace OrixNotch.Services;
 
 /// <summary>One piece of idle-notch information: a glyph (or the avatar) and a short value.</summary>
 /// <param name="Logo">A brand mark drawn instead of <paramref name="Glyph"/> (AI usage).</param>
-public sealed record IdleItem(string Id, AppIcon? Glyph, string Value, string ValueBrush = "TextBrush", bool Avatar = false, BrandLogo? Logo = null);
+/// <param name="Short">A very short value for the side tab (left/right edge): "23°", "4:12", "2.1M", "3". Null: icon only.</param>
+/// <param name="Percent">0–1 for items that are a level (AI usage, battery, CPU): the side tab draws a ring.</param>
+public sealed record IdleItem(string Id, AppIcon? Glyph, string Value, string ValueBrush = "TextBrush", bool Avatar = false, BrandLogo? Logo = null,
+    string? Short = null, double? Percent = null);
 
 /// <summary>
 /// Supplies the closed notch with the items the user picked in Settings → Display → Idle notch,
@@ -159,7 +162,7 @@ public sealed class IdleInfoService
         switch (id)
         {
             case "clock":
-                return new IdleItem(id, AppIcon.Clock, now.ToString("t", culture));
+                return new IdleItem(id, AppIcon.Clock, now.ToString("t", culture), Short: ShortTime(now, culture));
             case "clock2":
             {
                 if (App.Settings.SecondClockZone.Length == 0) return null;
@@ -173,7 +176,8 @@ public sealed class IdleInfoService
                     return null;
                 }
                 var city = SettingsService.CityFromTimeZone(zone.Id, RegionInfo.CurrentRegion.TwoLetterISORegionName) ?? zone.StandardName;
-                return new IdleItem(id, AppIcon.Globe, $"{city} {TimeZoneInfo.ConvertTime(now, zone).ToString("t", culture)}");
+                var there = TimeZoneInfo.ConvertTime(now, zone);
+                return new IdleItem(id, AppIcon.Globe, $"{city} {there.ToString("t", culture)}", Short: ShortTime(there, culture));
             }
             case "sun":
             {
@@ -181,22 +185,24 @@ public sealed class IdleInfoService
                 var cityNow = DateTime.UtcNow + sun.Offset; // the times are the Weather city's own local times
                 var next = sun.Events.Where(e => e.At > cityNow).OrderBy(e => e.At).FirstOrDefault();
                 return next.At == default ? null
-                    : new IdleItem(id, next.Rise ? AppIcon.Sun : AppIcon.Moon, $"{(next.Rise ? "Sunrise" : "Sunset")} {next.At.ToString("t", culture)}");
+                    : new IdleItem(id, next.Rise ? AppIcon.Sun : AppIcon.Moon, $"{(next.Rise ? "Sunrise" : "Sunset")} {next.At.ToString("t", culture)}",
+                        Short: ShortTime(next.At, culture));
             }
             case "date":
-                return new IdleItem(id, AppIcon.CalendarDays, now.ToString("ddd, MMM d", culture));
+                return new IdleItem(id, AppIcon.CalendarDays, now.ToString("ddd, MMM d", culture), Short: now.Day.ToString(culture));
             case "weather":
-                return _weather is { } w ? new IdleItem(id, w.Icon, w.Temp) : null;
+                return _weather is { } w ? new IdleItem(id, w.Icon, w.Temp, Short: w.Temp) : null;
             case "nextEvent":
                 return _nextEvent is { } e
-                    ? new IdleItem(id, AppIcon.CalendarDays, $"{e.Title} {(DateTime.Today + _nextAt).ToString("t", culture)}")
+                    ? new IdleItem(id, AppIcon.CalendarDays, $"{e.Title} {(DateTime.Today + _nextAt).ToString("t", culture)}",
+                        Short: ShortTime(DateTime.Today + _nextAt, culture))
                     : new IdleItem(id, AppIcon.CalendarDays, "No more events", "SubTextBrush");
             case "timeline":
                 // Drawn by NotchWindow (DayTimeline); the value only sizes the notch.
                 return new IdleItem(id, AppIcon.Sun, "");
             case "todos":
-                return new IdleItem(id, AppIcon.ListBullet, _openTodos == 0 ? "All done" : $"{_openTodos} open",
-                    _openTodos == 0 ? "SubTextBrush" : "TextBrush");
+                return new IdleItem(id, AppIcon.ListBullet, _openTodos == 0 ? "All done" : $"{_openTodos} open", Short: _openTodos.ToString(culture),
+                    ValueBrush: _openTodos == 0 ? "SubTextBrush" : "TextBrush");
             case "battery":
             {
                 var ps = Forms.SystemInformation.PowerStatus;
@@ -204,16 +210,16 @@ public sealed class IdleInfoService
                 var pct = (int)Math.Round(ps.BatteryLifePercent * 100);
                 var charging = ps.PowerLineStatus == Forms.PowerLineStatus.Online;
                 return new IdleItem(id, charging ? AppIcon.Bolt : AppIcon.BatteryFull, $"{pct}%",
-                    charging ? "GoodBrush" : pct < 20 ? "BadBrush" : "TextBrush");
+                    charging ? "GoodBrush" : pct < 20 ? "BadBrush" : "TextBrush", Short: $"{pct}", Percent: pct / 100.0);
             }
             case "cpu":
             {
                 var mem = new Win32.MEMORYSTATUSEX { dwLength = (uint)System.Runtime.InteropServices.Marshal.SizeOf<Win32.MEMORYSTATUSEX>() };
                 var ram = Win32.GlobalMemoryStatusEx(ref mem) ? mem.dwMemoryLoad : 0;
-                return new IdleItem(id, AppIcon.Cpu, $"{_cpu:0}% · {ram}%");
+                return new IdleItem(id, AppIcon.Cpu, $"{_cpu:0}% · {ram}%", Short: $"{_cpu:0}", Percent: _cpu / 100);
             }
             case "network":
-                return new IdleItem(id, AppIcon.ArrowDown, Rate(_rxPerSec));
+                return new IdleItem(id, AppIcon.ArrowDown, Rate(_rxPerSec), Short: ShortRate(_rxPerSec));
             case "stock":
             {
                 var tickers = App.Settings.StockTickers.Where(_quotes.ContainsKey).ToList();
@@ -223,24 +229,25 @@ public sealed class IdleInfoService
                 var arrow = change >= 0 ? "▲" : "▼";
                 return new IdleItem(id, AppIcon.ChartBar,
                     $"{t} {price.ToString(price >= 1000 ? "0" : "0.00", culture)} {arrow}{Math.Abs(change):0.0}%",
-                    change >= 0 ? "GoodBrush" : "BadBrush");
+                    change >= 0 ? "GoodBrush" : "BadBrush", Short: $"{arrow}{Math.Abs(change):0.0}");
             }
             case "screentime":
                 return ScreenTimeService.Instance.Enabled
-                    ? new IdleItem(id, AppIcon.Hourglass, ScreenTimeService.Format(ScreenTimeService.Instance.Total(DateTime.Today)))
+                    ? new IdleItem(id, AppIcon.Hourglass, ScreenTimeService.Format(ScreenTimeService.Instance.Total(DateTime.Today)),
+                        Short: ShortDuration(ScreenTimeService.Instance.Total(DateTime.Today)))
                     : null;
             case "unread":
                 var unread = NotificationHistory.Instance.Unread;
-                return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new");
+                return unread == 0 ? null : new IdleItem(id, AppIcon.Bell, unread == 1 ? "1 new" : $"{unread} new", Short: unread.ToString(culture));
             case "clipboard":
                 var clips = ClipboardService.Instance.Items.Count;
-                return new IdleItem(id, AppIcon.ClipboardList, clips == 1 ? "1 clip" : $"{clips} clips");
+                return new IdleItem(id, AppIcon.ClipboardList, clips == 1 ? "1 clip" : $"{clips} clips", Short: clips.ToString(culture));
             case "shelf":
                 var files = ShelfService.Instance.Items.Count;
-                return files == 0 ? null : new IdleItem(id, AppIcon.ArchiveBox, files == 1 ? "1 file" : $"{files} files");
+                return files == 0 ? null : new IdleItem(id, AppIcon.ArchiveBox, files == 1 ? "1 file" : $"{files} files", Short: files.ToString(culture));
             case "streak":
                 var done = PomodoroService.Instance.Completed;
-                return new IdleItem(id, AppIcon.Fire, done == 1 ? "1 today" : $"{done} today");
+                return new IdleItem(id, AppIcon.Fire, done == 1 ? "1 today" : $"{done} today", Short: done.ToString(culture));
             case "avatar":
                 return new IdleItem(id, null, ProfileService.FirstName, Avatar: true);
             // Shown only while on, so the closed notch says when you're muted or kept awake.
@@ -265,7 +272,8 @@ public sealed class IdleInfoService
         // (OpenCode) show today's tokens instead of "N%".
         static IdleItem Item(string id, (string Id, string Name, BrandLogo Logo, double? Percent, long TodayTokens) t) =>
             new(id, AppIcon.Sparkles, t.Percent is { } p ? $"{p:0}%" : CompactTokens(t.TodayTokens),
-                t.Percent >= 80 ? "BadBrush" : "TextBrush", Logo: t.Logo);
+                t.Percent >= 80 ? "BadBrush" : "TextBrush", Logo: t.Logo,
+                Short: t.Percent is { } sp ? $"{sp:0}" : CompactTokens(t.TodayTokens), Percent: t.Percent / 100);
 
         if (_ai.Count == 0) return [];
         if (App.Settings.IdleAiMode != "Choose")
@@ -286,6 +294,21 @@ public sealed class IdleInfoService
         >= 1_000 => $"{n / 1e3:0}K",
         _ => $"{n}",
     };
+
+    /// <summary>A time without AM/PM, for the narrow side tab: "4:12".</summary>
+    private static string ShortTime(DateTime time, CultureInfo culture) =>
+        time.ToString(culture.DateTimeFormat.ShortTimePattern.Replace("tt", "").Replace("t", "").Trim(), culture);
+
+    /// <summary>"2.1M", "512K", "0K": a download speed in four characters.</summary>
+    private static string ShortRate(double bytesPerSec) => bytesPerSec switch
+    {
+        >= 10 * 1024 * 1024 => $"{bytesPerSec / 1024 / 1024:0}M",
+        >= 1000 * 1024 => $"{bytesPerSec / 1024 / 1024:0.0}M",
+        _ => $"{bytesPerSec / 1024:0}K",
+    };
+
+    /// <summary>"2h", "45m": a day's screen time in three characters.</summary>
+    private static string ShortDuration(int seconds) => seconds >= 3600 ? $"{seconds / 3600}h" : $"{seconds / 60}m";
 
     private static string Rate(double bytesPerSec) => bytesPerSec switch
     {

@@ -116,14 +116,15 @@ public partial class NotchWindow
 
     // ---------------------------------------------------------------- side tab (left / right)
 
-    private int _sideGlyphs = 1;
+    private double _sideLength = 50;
 
-    /// <summary>The side tab's length: room for each icon it shows.</summary>
-    private double SideTabLength() => 20 + 30 * Math.Max(1, _sideGlyphs);
+    /// <summary>The side tab's length: what its cells need, plus a little room at each end.</summary>
+    private double SideTabLength() => _sideLength;
 
     /// <summary>
-    /// The closed side tab: the live activity's icon (music, timer or focus, reminder) and up to two idle items, in
-    /// their own colours, stacked along the edge. Text doesn't fit a side tab; the alert card and the panel carry it.
+    /// The closed side tab, top to bottom: the live activity's icon (music, timer or focus, reminder), then your idle
+    /// items (up to six). Levels (AI usage, battery, CPU) are small rings filling in the item's colour around its icon or
+    /// logo; the rest show their icon over a very short value ("23°", "4:12", "2.1M"). The full text is in the tooltip.
     /// </summary>
     private void RenderSide()
     {
@@ -140,28 +141,72 @@ public partial class NotchWindow
         };
         if (activity is { } icon)
         {
-            var glyph = new HeroIcon { Kind = icon, Width = 16, Height = 16, Margin = new Thickness(0, 7, 0, 7) };
+            var glyph = new HeroIcon { Kind = icon, Width = 16, Height = 16, Margin = new Thickness(0, 6, 0, 6) };
             glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
             SideLayer.Children.Add(glyph);
         }
-        foreach (var item in IdleInfoService.Instance.Items.Where(i => i.Glyph is not null || i.Logo is not null).Take(activity is null ? 2 : 1))
-        {
-            var glyph = IdleGlyph(item, 16);
-            glyph.Margin = new Thickness(0, 7, 0, 7);
-            glyph.ToolTip = item.Value;
-            SideLayer.Children.Add(glyph);
-        }
+        foreach (var item in IdleInfoService.Instance.Items.Where(i => i.Id is not ("timeline" or "avatar")).Take(6))
+            SideLayer.Children.Add(SideCell(item));
         if (SideLayer.Children.Count == 0)
-            SideLayer.Children.Add(new BrandMark { Variant = BrandVariant.Gradient, Width = 16, Height = 16, Margin = new Thickness(0, 7, 0, 7) });
-        var count = SideLayer.Children.Count;
-        if (count != _sideGlyphs)
+            SideLayer.Children.Add(new BrandMark { Variant = BrandVariant.Gradient, Width = 16, Height = 16, Margin = new Thickness(0, 6, 0, 6) });
+
+        SideLayer.Measure(new Size(SideDepth, double.PositiveInfinity));
+        var length = Math.Ceiling(SideLayer.DesiredSize.Height + 14);
+        if (Math.Abs(length - _sideLength) > 0.5)
         {
-            _sideGlyphs = count;
+            _sideLength = length;
             if (!_expanded && !_peeking)
             {
                 SetCollapsedTarget();
                 StartAnimation();
             }
         }
+    }
+
+    /// <summary>One item in the side tab: a ring for a level, else its icon over a short value.</summary>
+    private static FrameworkElement SideCell(IdleItem item)
+    {
+        var brush = IdleBrush(item);
+        FrameworkElement cell;
+        if (item.Percent is { } level)
+        {
+            const double size = 26;
+            var grid = new Grid { Width = size, Height = size };
+            var track = new System.Windows.Shapes.Ellipse { Margin = new Thickness(2.5), StrokeThickness = 2.5 };
+            track.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "TrackBrush");
+            grid.Children.Add(track);
+            grid.Children.Add(new System.Windows.Shapes.Path
+            {
+                Data = BuildMiniArc(level, size, 3.75), Stroke = brush, StrokeThickness = 2.5,
+                StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            });
+            var inner = IdleGlyph(item, 12);
+            if (inner is Control glyph && item.Logo is null) glyph.Foreground = brush;
+            inner.HorizontalAlignment = HorizontalAlignment.Center;
+            inner.VerticalAlignment = VerticalAlignment.Center;
+            grid.Children.Add(inner);
+            cell = grid;
+        }
+        else
+        {
+            var stack = new StackPanel();
+            var glyph = IdleGlyph(item, 15);
+            glyph.HorizontalAlignment = HorizontalAlignment.Center;
+            stack.Children.Add(glyph);
+            if (item.Short is { Length: > 0 } text)
+            {
+                var value = new TextBlock
+                {
+                    Text = text, FontSize = 10, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 2, 0, 0), Foreground = item.ValueBrush == "SubTextBrush" ? (Brush)Application.Current.Resources["SubTextBrush"] : brush,
+                };
+                stack.Children.Add(value);
+            }
+            cell = stack;
+        }
+        cell.Margin = new Thickness(0, 5, 0, 5);
+        cell.HorizontalAlignment = HorizontalAlignment.Center;
+        cell.ToolTip = item.Value;
+        return cell;
     }
 }

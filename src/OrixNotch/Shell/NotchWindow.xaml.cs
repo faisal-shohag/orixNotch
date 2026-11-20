@@ -1969,9 +1969,8 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>Clockwise arc from 12 o'clock covering <paramref name="progress"/> of the mini ring.</summary>
-    private static Geometry BuildMiniArc(double progress)
+    private static Geometry BuildMiniArc(double progress, double size = 22, double inset = 2.5)
     {
-        const double size = 22, inset = 2.5;
         var radius = size / 2 - inset;
         var center = new Point(size / 2, size / 2);
         progress = Math.Clamp(progress, 0, 0.9999);
