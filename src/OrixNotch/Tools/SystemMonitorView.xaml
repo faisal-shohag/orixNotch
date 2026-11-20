@@ -91,14 +91,14 @@
             </StackPanel>
         </Border>
 
+        <!-- The busiest apps by CPU; click one to end it (asks first). -->
         <Border Style="{StaticResource MiniCard}">
             <StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <hero:HeroIcon Kind="Clock" Style="{StaticResource LabelIcon}" />
-                    <TextBlock Text="UPTIME" Style="{StaticResource Caps}" />
+                    <hero:HeroIcon Kind="Fire" Style="{StaticResource LabelIcon}" />
+                    <TextBlock Text="TOP APPS" Style="{StaticResource Caps}" />
                 </StackPanel>
-                <TextBlock x:Name="UptimeText" Style="{StaticResource Big}" Text="–" />
-                <TextBlock x:Name="MachineText" Style="{StaticResource SubText}" FontWeight="Normal" FontSize="11" TextTrimming="CharacterEllipsis" />
+                <StackPanel x:Name="TopApps" Margin="0,5,0,0" />
             </StackPanel>
         </Border>
     </UniformGrid>

@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using OrixNotch.Interop;
+using OrixNotch.Services;
 using OrixNotch.Shell;
 using Forms = System.Windows.Forms;
 
@@ -20,15 +21,20 @@ public partial class SystemMonitorView : UserControl, IToolView
     private long _lastRx, _lastTx;
     private DateTime _lastNetSample;
 
+    private readonly ProcessSampler _processes = new();
+    private int _tick;
+
     public SystemMonitorView()
     {
         InitializeComponent();
         _timer.Tick += (_, _) => Sample();
-        MachineText.Text = Environment.MachineName;
     }
+
+    private int? _daysUntilFull;
 
     public void OnShown()
     {
+        _daysUntilFull = null;
         Sample();
         _timer.Start();
     }
@@ -42,8 +48,46 @@ public partial class SystemMonitorView : UserControl, IToolView
         SampleDisk();
         SampleNetwork();
         SampleBattery();
-        var up = TimeSpan.FromMilliseconds(Environment.TickCount64);
-        UptimeText.Text = up.TotalDays >= 1 ? $"{(int)up.TotalDays}d {up.Hours}h" : $"{up.Hours}h {up.Minutes}m";
+        if (_tick++ % 2 == 0) SampleTopApps(); // listing every process is heavier: every other second
+    }
+
+    private void SampleTopApps()
+    {
+        var top = _processes.Sample(3);
+        TopApps.Children.Clear();
+        if (top.Count == 0)
+        {
+            TopApps.Children.Add(new TextBlock { Text = "Measuring…", Style = (Style)FindResource("SubText"), FontSize = 11 });
+            return;
+        }
+        foreach (var (name, cpu, count) in top)
+        {
+            var row = new Grid { Margin = new Thickness(0, 1, 0, 1), Cursor = System.Windows.Input.Cursors.Hand, Background = Brushes.Transparent };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var label = new TextBlock { Text = name, FontSize = 11.5, TextTrimming = TextTrimming.CharacterEllipsis };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+            var value = new TextBlock { Text = cpu < 1 ? "<1%" : $"{cpu:0}%", FontSize = 11.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 0, 0) };
+            value.SetResourceReference(TextBlock.ForegroundProperty, cpu >= 50 ? "BadBrush" : "SubTextBrush");
+            Grid.SetColumn(value, 1);
+            row.Children.Add(label);
+            row.Children.Add(value);
+            row.ToolTip = count > 1 ? $"{count} processes · click to end" : "Click to end";
+            row.MouseLeftButtonUp += (_, _) => ConfirmEnd(name, count);
+            TopApps.Children.Add(row);
+        }
+    }
+
+    private static void ConfirmEnd(string name, int count)
+    {
+        using (NotchWindow.Instance?.HoldOpen())
+        {
+            var what = count > 1 ? $"all {count} {name} processes" : name;
+            if (MessageBox.Show($"End {what}? Unsaved work in it will be lost.", "End task",
+                    MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+            if (ProcessSampler.EndApp(name) == 0)
+                MessageBox.Show($"Windows didn't let OrixNotch end {name}. Try Task Manager.", "End task", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
     }
 
     private void SampleCpu()
@@ -62,7 +106,8 @@ public partial class SystemMonitorView : UserControl, IToolView
         _lastIdle = idle;
         _lastKernel = kernel;
         _lastUser = user;
-        CpuSub.Text = $"{Environment.ProcessorCount} threads";
+        var up = TimeSpan.FromMilliseconds(Environment.TickCount64);
+        CpuSub.Text = $"{Environment.ProcessorCount} threads · up {(up.TotalDays >= 1 ? $"{(int)up.TotalDays}d {up.Hours}h" : $"{up.Hours}h {up.Minutes}m")}";
     }
 
     private void DrawGraph()
@@ -99,7 +144,11 @@ public partial class SystemMonitorView : UserControl, IToolView
             var pct = 100.0 * used / drive.TotalSize;
             DiskLabel.Text = $"DISK {root.TrimEnd('\\')}";
             DiskText.Text = $"{pct:0}%";
-            DiskSub.Text = $"{Gb((ulong)drive.TotalFreeSpace)} free";
+            DiskHistory.Record(drive.TotalFreeSpace);
+            _daysUntilFull ??= DiskHistory.DaysUntilFull(drive.TotalFreeSpace) ?? -1; // once per opening: it moves by days
+            DiskSub.Text = _daysUntilFull is > 0 and var days
+                ? $"{Gb((ulong)drive.TotalFreeSpace)} free · full in ~{days}d"
+                : $"{Gb((ulong)drive.TotalFreeSpace)} free";
             DiskBar.Value = pct;
         }
         catch
