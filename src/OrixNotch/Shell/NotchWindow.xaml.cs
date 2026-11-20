@@ -938,7 +938,9 @@ public partial class NotchWindow : Window
         var depth = Vertical ? w : h;
         var span = Vertical ? h : w;
         var peekDepth = Vertical ? PeekW : _peekH;
-        var openDepth = Vertical ? _expandedW : _expandedH;
+        // Fully open once it has grown 200 px (or reached its size): switching between open tools of different sizes
+        // (a tool → the taller Settings) then just resizes, instead of re-running the open morph mid-way.
+        var openDepth = Math.Min(Vertical ? _expandedW : _expandedH, ClosedDepth + 200);
         var peek = _peeking && !_expanded ? Math.Clamp((depth - ClosedDepth) / Math.Max(1, peekDepth - ClosedDepth), 0, 1) : 0;
         var p = peek > 0 || (_peeking && !_expanded) ? 0 : Math.Clamp((depth - ClosedDepth) / Math.Max(1, openDepth - ClosedDepth), 0, 1);
         var floating = Floating;
