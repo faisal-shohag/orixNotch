@@ -210,6 +210,9 @@ public partial class NotchWindow : Window
 
         BuildEqualizer();
         TabBar.RenderTransform = _tabRise;
+        NowPlayingService.Instance.PropertyChanged += (_, _) => UpdateGlow();
+        PomodoroService.Instance.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PomodoroService.IsRunning)) UpdateGlow(); };
+        ThemeService.Changed += () => { _glowColor = null; UpdateGlow(); };
         _eqLive.Tick += (_, _) => TickEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
@@ -428,6 +431,7 @@ public partial class NotchWindow : Window
     private void CheckQuietEnded()
     {
         InCall = SystemToggles.InCall();
+        UpdateGlow();
         var quiet = QuietActive();
         if (_wasQuiet && !quiet && _quietMissed > 0)
         {
@@ -964,9 +968,8 @@ public partial class NotchWindow : Window
 
         // Depth: a soft shadow that grows as the notch opens, so it lifts off bright wallpapers. Not on glass (it would
         // show through and darken it), and removed when closed so the idle notch costs no effect pass.
-        var shadow = ThemeService.IsGlass ? 0 : p;
-        Shape.Effect = shadow > 0.02 ? _depth : null;
-        _depth.Opacity = 0.45 * shadow;
+        _openP = p;
+        ApplyShapeEffect();
 
         CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1);
         CollapsedLayer.Visibility = p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
@@ -1899,6 +1902,52 @@ public partial class NotchWindow : Window
 
     private readonly TranslateTransform _tabRise = new();
     private readonly DropShadowEffect _depth = new() { BlurRadius = 28, ShadowDepth = 8, Direction = 270, Color = Colors.Black, Opacity = 0 };
+    private readonly DropShadowEffect _glow = new() { BlurRadius = 26, ShadowDepth = 0, Opacity = 0.6 };
+    private double _openP;          // how open the notch is, 0–1 (the spring's progress)
+    private Color? _glowColor;
+    private bool _glowBreathing;
+
+    /// <summary>
+    /// The notch's one effect: while open, a soft shadow that grows with it (not on glass, it would show through);
+    /// while closed, the glow (Appearance › Glow): red on a call, accent in a focus session (both breathing slowly),
+    /// the cover's colour while music plays. Nothing at all otherwise, so the idle notch costs no effect pass.
+    /// </summary>
+    private void ApplyShapeEffect()
+    {
+        var shadow = ThemeService.IsGlass ? 0 : _openP;
+        _depth.Opacity = 0.45 * shadow;
+        Shape.Effect = shadow > 0.02 ? _depth : _glowColor is not null ? _glow : null;
+    }
+
+    public void RefreshGlow() => UpdateGlow();
+
+    private void UpdateGlow()
+    {
+        Color? color = null;
+        var breathe = false;
+        if (App.Settings.NotchGlow)
+        {
+            if (InCall) (color, breathe) = (Color.FromRgb(0xFF, 0x45, 0x3A), true);
+            else if (PomodoroService.Instance.Focusing) (color, breathe) = (ThemeService.CurrentAccent.Mean, true);
+            else if (NowPlayingService.Instance.IsPlaying && NowPlayingService.Instance.ArtTint is { } tint) color = tint;
+        }
+        if (color == _glowColor && breathe == _glowBreathing) return;
+        _glowColor = color;
+        _glowBreathing = breathe;
+        if (color is { } c) _glow.Color = c;
+        if (breathe && !Motion.Reduced)
+        {
+            var pulse = new DoubleAnimation(0.3, 0.8, TimeSpan.FromSeconds(2.2)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() };
+            Timeline.SetDesiredFrameRate(pulse, 20); // a slow breath doesn't need 60 fps
+            _glow.BeginAnimation(DropShadowEffect.OpacityProperty, pulse);
+        }
+        else
+        {
+            _glow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+            _glow.Opacity = 0.6;
+        }
+        ApplyShapeEffect();
+    }
 
     private void BuildEqualizer()
     {
