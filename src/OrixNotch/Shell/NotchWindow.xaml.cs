@@ -380,10 +380,11 @@ public partial class NotchWindow : Window
     /// Quiet hours are on now: the schedule in Settings → General, the tray's "Quiet for 1 hour", or (Automations)
     /// a call, meaning the microphone is in use.
     /// </summary>
-    public static bool QuietActive() => QuietSnoozed() || QuietScheduled() || _inCall
+    public static bool QuietActive() => QuietSnoozed() || QuietScheduled() || (App.Settings.AutoQuietOnMic && InCall)
         || (App.Settings.FocusQuiet && PomodoroService.Instance.Focusing);
 
-    private static bool _inCall; // refreshed by Guard every couple of seconds (reading it is a registry walk)
+    /// <summary>Microphone or camera in use. Refreshed by Guard every couple of seconds (reading it is a registry walk).</summary>
+    public static bool InCall { get; private set; }
 
     public static bool QuietSnoozed() => App.Settings.QuietUntil is { } until && until > DateTime.Now;
 
@@ -415,7 +416,7 @@ public partial class NotchWindow : Window
 
     private void CheckQuietEnded()
     {
-        _inCall = App.Settings.AutoQuietOnMic && SystemToggles.MicInUse();
+        InCall = SystemToggles.InCall();
         var quiet = QuietActive();
         if (_wasQuiet && !quiet && _quietMissed > 0)
         {

@@ -59,16 +59,25 @@ public static class SystemToggles
     }
 
     private const string MicConsentKey = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
+    private const string CameraConsentKey = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam";
 
     /// <summary>
     /// Some app is using the microphone right now (a call, in any app or browser): Windows' privacy records keep a
     /// start time per app and a stop time of 0 while it's in use.
     /// </summary>
-    public static bool MicInUse()
+    public static bool MicInUse() => InUse(MicConsentKey);
+
+    /// <summary>Some app is using the camera right now (the same privacy records as the microphone).</summary>
+    public static bool CameraInUse() => InUse(CameraConsentKey);
+
+    /// <summary>On a call: the microphone or the camera is in use.</summary>
+    public static bool InCall() => MicInUse() || CameraInUse();
+
+    private static bool InUse(string consentKey)
     {
         try
         {
-            using var root = Registry.CurrentUser.OpenSubKey(MicConsentKey);
+            using var root = Registry.CurrentUser.OpenSubKey(consentKey);
             return root is not null && InUse(root, 0);
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or System.IO.IOException)

@@ -42,6 +42,7 @@ public sealed class IdleInfoService
         ("streak", "Focus sessions today"),
         ("screentime", "Screen time today"),
         ("avatar", "Profile picture"),
+        ("call", "On a call"),
         ("mic", "Microphone muted"),
         ("awake", "Keep awake"),
     ];
@@ -243,6 +244,8 @@ public sealed class IdleInfoService
             case "avatar":
                 return new IdleItem(id, null, ProfileService.FirstName, Avatar: true);
             // Shown only while on, so the closed notch says when you're muted or kept awake.
+            case "call":
+                return NotchWindow.InCall ? new IdleItem(id, AppIcon.Microphone, "On a call", "BadBrush") : null;
             case "mic":
                 return VolumeService.Instance.MicMuted ? new IdleItem(id, AppIcon.MicrophoneOff, "Muted", "BadBrush") : null;
             case "awake":

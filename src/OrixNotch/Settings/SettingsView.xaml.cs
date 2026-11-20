@@ -38,7 +38,7 @@ public partial class SettingsView : UserControl, IToolView
         ["general"] = ["Add a daily goal", "Rest your eyes", "Stand up", "Drink water", "Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
         ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links", "Match the app in front", "Morning brief", "Quiet during focus"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
-        ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
+        ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "On a call", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Command palette", "Explain selected text", "Start focus", "Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
         ["about"] = ["Report a problem", "Request a tool"],
     };
@@ -653,7 +653,7 @@ public partial class SettingsView : UserControl, IToolView
             Toggle(S.AutoJoinLink, v => { S.AutoJoinLink = v; Save(false); }));
 
         Section("DURING A CALL");
-        Row("Quiet while on a call", "Holds alerts while any app (including your browser) is using the microphone, then sums them up afterwards.",
+        Row("Quiet while on a call", "Holds alerts while any app (including your browser) is using the microphone or camera, then sums them up afterwards.",
             Toggle(S.AutoQuietOnMic, v => { S.AutoQuietOnMic = v; Save(false); }));
 
         Section("FOCUS");
@@ -955,6 +955,7 @@ public partial class SettingsView : UserControl, IToolView
         ["date"] = "Weekday and date.",
         ["sun"] = "The next sunrise or sunset in your Weather city.",
         ["timeline"] = "Today on one line: the time gone by, your events and now.",
+        ["call"] = "Shows in red while any app uses your microphone or camera.",
         ["mic"] = "Shows only while your microphone is muted.",
         ["awake"] = "Shows only while Keep awake is on.",
         ["weather"] = "Temperature for your Weather city. Updates every 10 minutes.",
