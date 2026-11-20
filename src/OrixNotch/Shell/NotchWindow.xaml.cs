@@ -1665,6 +1665,13 @@ public partial class NotchWindow : Window
             connected ? "Connected" : "Disconnected", TimeSpan.FromSeconds(3)));
     }
 
+    /// <summary>An alert from a script: an orixnotch://peek link or the local peek API. Text arrives clipped.</summary>
+    public void ShowExternalPeek(string title, string sub, string? icon)
+    {
+        var glyph = Enum.TryParse<AppIcon>(icon, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) ? parsed : AppIcon.Bolt;
+        EnqueuePeek(new PeekRequest("ext:" + title, () => GlyphTile(glyph), title, sub, TimeSpan.FromSeconds(5)));
+    }
+
     private void ShowDownloadPeek(string path)
     {
         if (!App.Settings.DownloadAlerts) return;

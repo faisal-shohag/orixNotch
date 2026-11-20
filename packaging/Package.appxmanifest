@@ -48,6 +48,12 @@
                Task Manager or OrixNotch's settings (StartupService). -->
           <desktop:StartupTask TaskId="OrixNotchAutostart" Enabled="true" DisplayName="OrixNotch" />
         </desktop:Extension>
+        <!-- orixnotch:// links; the link reaches the running copy through ExternalCommands. -->
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="orixnotch" Parameters="&quot;%1&quot;">
+            <uap:DisplayName>OrixNotch</uap:DisplayName>
+          </uap3:Protocol>
+        </uap3:Extension>
       </Extensions>
     </Application>
   </Applications>

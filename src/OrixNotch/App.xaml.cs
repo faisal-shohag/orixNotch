@@ -32,6 +32,7 @@ public partial class App : Application
         if (!created)
         {
             _mutex = null;
+            ExternalCommands.SendToRunning(e.Args); // links and --open reach the running copy
             Shutdown();
             return;
         }
@@ -57,15 +58,13 @@ public partial class App : Application
         UpdateService.Instance.Start(); // first look a couple of minutes in, then daily
         CalendarFeedService.Instance.Start(); // subscribed calendars, every 30 minutes
 
-        // `OrixNotch.exe --open weather` starts with the panel open on a tool.
-        var openAt = Array.IndexOf(e.Args, "--open");
-        if (openAt >= 0)
-        {
-            window.Expand(activate: true);
-            if (openAt + 1 < e.Args.Length) window.ShowTool(e.Args[openAt + 1]);
-        }
-        if (e.Args.Contains("--settings")) window.OpenTool(NotchWindow.SettingsId);
-        else if (SettingsService.FirstRun && openAt < 0) window.OpenSettings("tabs"); // welcome: pick your tools
+        _ = PeekApiService.Instance.SyncAsync(); // localhost alerts for scripts, only when turned on
+        ExternalCommands.RegisterLinks();
+        ExternalCommands.Listen();
+
+        // `OrixNotch.exe --open weather` starts with the panel open on a tool; an orixnotch:// link runs.
+        if (e.Args.Length > 0) ExternalCommands.Run(e.Args);
+        else if (SettingsService.FirstRun) window.OpenSettings("tabs"); // welcome: pick your tools
         if (NotchWindow.ShotsDir is not null) window.RunShots(); // Store screenshots (dev only)
     }
 
@@ -75,6 +74,7 @@ public partial class App : Application
         ShelfService.Instance.Save();
         ScreenTimeService.Instance.Save();
         _ = PhoneTransferService.Instance.StopAsync(); // sockets close with the process anyway
+        _ = PeekApiService.Instance.StopAsync();
         _mutex?.ReleaseMutex();
         base.OnExit(e);
     }

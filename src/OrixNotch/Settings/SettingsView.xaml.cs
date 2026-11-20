@@ -36,7 +36,7 @@ public partial class SettingsView : UserControl, IToolView
     private static readonly Dictionary<string, string[]> NewRows = new()
     {
         ["general"] = ["Quiet hours", "Screenshots", "Track screen time", "Evening summary", "Calendar reminders", "Focus sessions", "Timers"],
-        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals"],
+        ["automations"] = ["Pause music", "Join from the reminder", "Quiet while on a call", "Focus events start a session", "Subscription renewals", "Alerts from scripts", "orixnotch:// links"],
         ["appearance"] = ["Follow album art", "Tint from wallpaper"],
         ["display"] = ["Clock style", "Second clock", "Sunrise & sunset", "Day timeline", "Unread notifications", "Screen time today", "Microphone muted", "Keep awake"],
         ["keyboard"] = ["Add a to-do", "Copy text from screen", "Mute microphone", "Keep awake"],
@@ -614,6 +614,25 @@ public partial class SettingsView : UserControl, IToolView
             }));
         Row("Subscription renewals", "An alert 2 days before something in the Subscriptions tool renews.",
             Toggle(S.SubscriptionAlerts, v => { S.SubscriptionAlerts = v; Save(false); }));
+
+        Section("FOR SCRIPTS");
+        var api = PeekApiService.Instance;
+        Row("Alerts from scripts", "Lets builds, CI or a coding agent show an alert on the notch through a local web address. Only this PC can reach it, and only with your token.",
+            Toggle(S.PeekApiEnabled, async v => { S.PeekApiEnabled = v; Save(false); await api.SyncAsync(); Render(); }),
+            footer: S.PeekApiEnabled ? Hint(api.Error ?? $"POST http://127.0.0.1:{S.PeekApiPort}/peek with {{\"title\": \"…\", \"sub\": \"…\"}}", bad: api.Error is not null) : null);
+        if (S.PeekApiEnabled)
+        {
+            var tokenButtons = new StackPanel { Orientation = Orientation.Horizontal };
+            tokenButtons.Children.Add(IconButton(AppIcon.Copy, "Copy an example curl command", true, () => ClipboardService.Instance.CopyQuiet(api.CurlExample)));
+            tokenButtons.Children.Add(IconButton(AppIcon.Refresh, "New token (scripts using the old one stop working)", true, () => { api.NewToken(); ClipboardService.Instance.CopyQuiet(api.CurlExample); }));
+            Row("Token", "Copy a ready curl command with your token. Keep the token private, like a password.", tokenButtons);
+            var ports = new[] { 53340, 53341, 53342, 53343 };
+            Row("Port", "Change it if another app already uses this one.",
+                Combo(ports.Select(p => p.ToString()), Math.Max(0, Array.IndexOf(ports, S.PeekApiPort)),
+                    async i => { S.PeekApiPort = ports[i]; Save(false); await api.SyncAsync(); Render(); }, 110));
+        }
+        Row("orixnotch:// links", "Links that open a tool or show an alert, from a script, a shortcut or the Run box: orixnotch://open/timer, orixnotch://timer?min=10, orixnotch://peek?text=Hello",
+            IconButton(AppIcon.Copy, "Copy an example link", true, () => ClipboardService.Instance.CopyQuiet("orixnotch://peek?text=Hello%20from%20a%20link")));
     }
 
     /// <summary>A sound picker that previews on change, plus a play button to hear it again.</summary>

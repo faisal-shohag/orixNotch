@@ -80,6 +80,8 @@ public sealed class AppSettings
     public bool AutoQuietOnMic { get; set; }             // quiet while the microphone is in use (calls)
     public bool AutoFocusEvents { get; set; }            // an event called "Focus" starts a focus session
     public bool SubscriptionAlerts { get; set; } = true; // 2 days before a subscription renews
+    public bool PeekApiEnabled { get; set; }             // POST 127.0.0.1:PeekApiPort/peek (PeekApiService)
+    public int PeekApiPort { get; set; } = 53340;
 
     // Screen Time: off until turned on in the tool; kept only on this PC
     public bool ScreenTimeEnabled { get; set; }
