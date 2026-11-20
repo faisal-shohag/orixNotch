@@ -573,6 +573,7 @@ public partial class NotchWindow : Window
 
     public void Expand(bool activate)
     {
+        FinishCornerTurnNow(); // opening mid-turn: finish it on the new edge first
         if (Visibility != Visibility.Visible) Visibility = Visibility.Visible;
         if (!_expanded)
         {
@@ -685,6 +686,7 @@ public partial class NotchWindow : Window
     /// <returns>True while the pointer is being dodged (keeps the per-frame loop running).</returns>
     private bool Repel(double dt)
     {
+        if (Turning) return true; // the corner turn drives the notch until it's on the new edge
         if (!App.Settings.RepelCursor || _expanded || _peeking || !IsVisible || !SystemParameters.ClientAreaAnimation
             || Concealable() // hidden notch: reaching the top edge reveals it, it mustn't run from that pointer
             || (Win32.GetAsyncKeyState(Win32.VK_LBUTTON) & 0x8000) != 0 // mid-drag: dropping onto the notch must stay easy
@@ -732,9 +734,15 @@ public partial class NotchWindow : Window
         var lead = Math.Clamp(_pointerSpeed * 0.022, -60, 60);
         var aimX = _dodgeSide < 0 ? x + Math.Max(0, lead) : x + Math.Min(0, lead);
         var target = DodgeTarget(aimX, half);
+        if (Math.Abs(target) > limit && !Turning)
+        {
+            // Cornered against the end of its edge: turn the corner onto the next edge (NotchWindow.Edge.cs).
+            StartCornerTurn(Math.Sign(target));
+            return true;
+        }
         if (Math.Abs(target) > limit)
         {
-            // Cornered against the screen edge: hop over the pointer to its other side in one
+            // Fallback (shouldn't happen mid-turn): hop over the pointer to its other side in one
             // frame (sliding would pass under it) and fade back in there, then run home.
             _dodgeSide = -_dodgeSide;
             _shove.Value = Math.Clamp(DodgeTarget(x, half, toward: false), -limit, limit);
@@ -907,7 +915,8 @@ public partial class NotchWindow : Window
         if (dt <= 0) return;
         dt = Math.Min(dt, 0.05);
 
-        var moving = _dodging && Repel(dt);
+        var moving = Turning || (_dodging && Repel(dt));
+        if (Turning) StepCornerTurn(dt);
 
         // Sub-step for stability on slow frames.
         var steps = (int)Math.Ceiling(dt / (1 / 240.0));
@@ -953,7 +962,7 @@ public partial class NotchWindow : Window
 
         // A pure slide changes nothing inside the window: skip the visual updates so WPF doesn't
         // re-render (and re-upload) the whole transparent window every frame.
-        var shape = (w, h, ear, radius, p, peek, _peeking, _expanded);
+        var shape = (w, h, ear, radius + CornerAmount * 1000, p, peek, _peeking, _expanded); // the corner turn changes the outline too
         if (shape == _shapeDrawn) return;
         _shapeDrawn = shape;
 
@@ -973,9 +982,25 @@ public partial class NotchWindow : Window
             _ => new Thickness(0, gap, 0, 0),
         };
         var r = Math.Min(radius, depth / 2);
-        Geometry outline = floating
-            ? new RectangleGeometry(Vertical ? new Rect(0, EarExpanded, w, h) : new Rect(EarExpanded, 0, w, h), r, r)
-            : NotchGeometry(span, depth, ear, radius, EarExpanded - ear); // drawn for a top notch...
+        var corner = CornerAmount; // 0 normally; towards 1 while tucking into a screen corner
+        Geometry outline;
+        if (floating)
+        {
+            // A floating notch tucks into a rounded square (never a disc).
+            var rr = r + (depth * 0.3 - r) * corner;
+            outline = new RectangleGeometry(Vertical ? new Rect(0, EarExpanded, w, h) : new Rect(EarExpanded, 0, w, h), rr, rr);
+        }
+        else if (corner > 0)
+        {
+            // The corner piece: square where it touches the screen's corner, a big round on the inner corner.
+            var e = ear * (1 - corner);
+            var nearR = radius * (1 - corner);                       // at the screen corner: towards square
+            var farR = radius + (depth * 0.8 - radius) * corner;     // facing the screen: towards a big round
+            outline = CornerEnd > 0
+                ? NotchGeometry(span, depth, e, e * (1 - corner), farR, nearR, EarExpanded - e)
+                : NotchGeometry(span, depth, e * (1 - corner), e, nearR, farR, EarExpanded - e);
+        }
+        else outline = NotchGeometry(span, depth, ear, radius, EarExpanded - ear); // drawn for a top notch...
         if (!floating && Edge != ScreenEdge.Top)
         {
             outline = outline.Clone(); // ...then turned onto the actual edge
@@ -1003,7 +1028,8 @@ public partial class NotchWindow : Window
         ApplyShapeEffect();
 
         // The minimal Pill keeps its closed content quieter.
-        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1) * (App.Settings.NotchShape == "Pill" ? 0.75 : 1);
+        CollapsedLayer.Opacity = Math.Clamp(1 - p * 4 - peek * 3, 0, 1) * (App.Settings.NotchShape == "Pill" ? 0.75 : 1)
+            * Math.Clamp(1 - CornerAmount * 2, 0, 1); // empty while it turns a corner
         CollapsedLayer.Visibility = !Vertical && p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
         SideLayer.Opacity = CollapsedLayer.Opacity;
         SideLayer.Visibility = Vertical && p < 0.25 && peek < 0.34 ? Visibility.Visible : Visibility.Collapsed;
@@ -1015,25 +1041,31 @@ public partial class NotchWindow : Window
     /// Notch silhouette: concave quarter-circle "ears" at the top-left and top-right that flow
     /// into the screen edge, straight sides, and rounded bottom corners.
     /// </summary>
-    private static Geometry NotchGeometry(double bodyW, double h, double ear, double radius, double inset)
+    private static Geometry NotchGeometry(double bodyW, double h, double ear, double radius, double inset) =>
+        NotchGeometry(bodyW, h, ear, ear, radius, radius, inset);
+
+    /// <summary>The outline with its own ear and bottom radius on each side (the corner turn tucks one side in).</summary>
+    private static Geometry NotchGeometry(double bodyW, double h, double earL, double earR, double radiusL, double radiusR, double inset)
     {
-        radius = Math.Max(0, Math.Min(radius, Math.Min(bodyW / 2, h - ear)));
-        var left = inset;
+        var ear = Math.Max(earL, earR);
+        radiusL = Math.Max(0, Math.Min(radiusL, Math.Min(bodyW / 2, h - earL)));
+        radiusR = Math.Max(0, Math.Min(radiusR, Math.Min(bodyW / 2, h - earR)));
+        var left = inset + (ear - earL);
         var bodyL = inset + ear;
         var bodyR = bodyL + bodyW;
-        var right = bodyR + ear;
+        var right = bodyR + earR;
 
         var g = new StreamGeometry();
         using (var c = g.Open())
         {
             c.BeginFigure(new Point(left, 0), true, true);
-            c.ArcTo(new Point(bodyL, ear), new Size(ear, ear), 0, false, SweepDirection.Clockwise, true, true);
-            c.LineTo(new Point(bodyL, h - radius), true, true);
-            c.ArcTo(new Point(bodyL + radius, h), new Size(radius, radius), 0, false, SweepDirection.Counterclockwise, true, true);
-            c.LineTo(new Point(bodyR - radius, h), true, true);
-            c.ArcTo(new Point(bodyR, h - radius), new Size(radius, radius), 0, false, SweepDirection.Counterclockwise, true, true);
-            c.LineTo(new Point(bodyR, ear), true, true);
-            c.ArcTo(new Point(right, 0), new Size(ear, ear), 0, false, SweepDirection.Clockwise, true, true);
+            c.ArcTo(new Point(bodyL, earL), new Size(earL, earL), 0, false, SweepDirection.Clockwise, true, true);
+            c.LineTo(new Point(bodyL, h - radiusL), true, true);
+            c.ArcTo(new Point(bodyL + radiusL, h), new Size(radiusL, radiusL), 0, false, SweepDirection.Counterclockwise, true, true);
+            c.LineTo(new Point(bodyR - radiusR, h), true, true);
+            c.ArcTo(new Point(bodyR, h - radiusR), new Size(radiusR, radiusR), 0, false, SweepDirection.Counterclockwise, true, true);
+            c.LineTo(new Point(bodyR, earR), true, true);
+            c.ArcTo(new Point(right, 0), new Size(earR, earR), 0, false, SweepDirection.Clockwise, true, true);
         }
         g.Freeze();
         return g;
@@ -1592,7 +1624,7 @@ public partial class NotchWindow : Window
 
     private void ShowNextPeek()
     {
-        if (_expanded || AlertsHeld()) return; // stays queued until the notch is closed / the app is left
+        if (_expanded || AlertsHeld() || Turning) return; // mid-turn: shown when the turn ends // stays queued until the notch is closed / the app is left
         if (Visibility != Visibility.Visible) Visibility = Visibility.Visible; // a listed app hid it but lets alerts through
         _peekQueue.RemoveAll(r => DateTime.Now - r.QueuedAt > TimeSpan.FromMinutes(1)); // stale while the notch was open
         if (_peekQueue.Count == 0) return;

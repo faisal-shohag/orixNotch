@@ -212,4 +212,127 @@ public partial class NotchWindow
         cell.ToolTip = item.Value;
         return cell;
     }
+
+    // ---------------------------------------------------------------- corner turn
+    //
+    // Chased into the end of its edge, the closed notch turns the corner onto the next edge: it tucks into the corner
+    // (shrinks to a square of its own depth, flush with both screen edges, with a big round on the inner corner),
+    // switches edge while it's that square (identical either way round, so the switch is invisible), then stretches
+    // out along the new edge. It stays there: Position in Settings becomes that edge, and the existing dodge spring
+    // brings it to the middle of it once the pointer leaves.
+
+    private const double TurnSeconds = 0.36;
+
+    private ScreenEdge? _turnTo;   // non-null while turning
+    private int _turnDir;          // the direction it was pushed along the old edge (+1 / -1)
+    private int _turnEntry;        // which end of the new edge it comes out of (-1 start, +1 end)
+    private double _turnT;         // 0–1
+    private bool _turnSwapped;
+    private double _turnFromSpan, _turnToSpan;
+
+    private bool Turning => _turnTo is not null;
+
+    /// <summary>The edge round the corner from <paramref name="edge"/> when pushed along it, and the end it enters at.</summary>
+    private static (ScreenEdge To, int Entry) NextEdge(ScreenEdge edge, int dir) => (edge, dir) switch
+    {
+        (ScreenEdge.Top, > 0) => (ScreenEdge.Right, -1),
+        (ScreenEdge.Top, _) => (ScreenEdge.Left, -1),
+        (ScreenEdge.Bottom, > 0) => (ScreenEdge.Right, +1),
+        (ScreenEdge.Bottom, _) => (ScreenEdge.Left, +1),
+        (ScreenEdge.Left, > 0) => (ScreenEdge.Bottom, -1),
+        (ScreenEdge.Left, _) => (ScreenEdge.Top, -1),
+        (ScreenEdge.Right, > 0) => (ScreenEdge.Bottom, +1),
+        _ => (ScreenEdge.Top, +1),
+    };
+
+    private double TurnGap => Floating ? IslandGap : 0;
+
+    /// <summary>Starts turning the corner at the <paramref name="dir"/> end of the current edge.</summary>
+    private void StartCornerTurn(int dir)
+    {
+        if (Turning) return;
+        var (to, entry) = NextEdge(Edge, dir);
+        _turnTo = to;
+        _turnDir = dir;
+        _turnEntry = entry;
+        _turnT = 0;
+        _turnSwapped = false;
+        _turnFromSpan = Vertical ? _height.Value : _width.Value;
+        _dodging = false;
+        _dodgeSpeed = 0;
+        if (Motion.Reduced)
+        {
+            SwapEdge();
+            EndCornerTurn();
+            return;
+        }
+        StartAnimation();
+    }
+
+    /// <summary>Advances the turn by <paramref name="dt"/> seconds and sets the notch's size and place for it.</summary>
+    private void StepCornerTurn(double dt)
+    {
+        _turnT = Math.Min(1, _turnT + dt / TurnSeconds);
+        if (!_turnSwapped && _turnT >= 0.5) SwapEdge();
+        var depth = ClosedDepth;
+        double span;
+        if (_turnT < 0.5) span = Lerp(_turnFromSpan, depth, Ease(_turnT / 0.5));
+        else span = Lerp(depth, _turnToSpan, Ease((_turnT - 0.5) / 0.5));
+        // The far side stays flush with the corner: on the old edge at the end it was pushed to, on the new one at
+        // the end it came out of.
+        var end = _turnSwapped ? _turnEntry : _turnDir;
+        var along = end * Math.Max(0, _maxShove - TurnGap - span / 2);
+        _shove.Value = _shove.Target = along;
+        _shove.Velocity = 0;
+        var (w, h) = Vertical ? (depth, span) : (span, depth);
+        _width.Value = _width.Target = w;
+        _height.Value = _height.Target = h;
+        _width.Velocity = _height.Velocity = 0;
+        if (_turnT >= 1) EndCornerTurn();
+
+        static double Lerp(double a, double b, double t) => a + (b - a) * t;
+        static double Ease(double t) => t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2; // ease in-out
+    }
+
+    /// <summary>How tucked into the corner the outline is: 0 = its normal shape, 1 = the corner piece.</summary>
+    private double CornerAmount => !Turning ? 0 : _turnT < 0.5 ? _turnT / 0.5 : 1 - (_turnT - 0.5) / 0.5;
+
+    /// <summary>Which end of the span the corner is at, while turning (+1 the end, -1 the start).</summary>
+    private int CornerEnd => _turnSwapped ? _turnEntry : _turnDir;
+
+    /// <summary>At the midpoint (a square, the same either way round): onto the new edge.</summary>
+    private void SwapEdge()
+    {
+        if (_turnTo is not { } to) return;
+        _turnSwapped = true;
+        App.Settings.NotchEdge = to.ToString();
+        SettingsService.Save(notify: false);
+        // The new edge's half-length first, so the window lands with the square already at the corner.
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var (_, _, _, _, maxShove) = EdgePlacement(CurrentScreen(), dpi);
+        _maxShove = maxShove;
+        _shove.Value = _shove.Target = _turnEntry * Math.Max(0, maxShove - TurnGap - ClosedDepth / 2);
+        Place();
+        _turnToSpan = Vertical ? SideTabLength() : ActivityWidth();
+        _shapeDrawn = default;
+    }
+
+    private void EndCornerTurn()
+    {
+        if (!_turnSwapped) SwapEdge();
+        _turnTo = null;
+        _shapeDrawn = default;
+        SetCollapsedTarget();
+        SetShove(0); // settle in the middle of the new edge (the dodge takes over again if the pointer is still near)
+        StartAnimation();
+        if (!_expanded) ShowNextPeek(); // an alert that arrived mid-turn
+    }
+
+    /// <summary>Opening mid-turn: finish it at once, on the new edge.</summary>
+    private void FinishCornerTurnNow()
+    {
+        if (!Turning) return;
+        _turnT = 1;
+        EndCornerTurn();
+    }
 }
