@@ -8,7 +8,9 @@
         Topmost="True" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
         Width="860" Height="600" UseLayoutRounding="True"
         Foreground="{DynamicResource TextBrush}" FontFamily="{DynamicResource UiFont}" FontSize="14"
-        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType"
+        Typography.NumeralAlignment="Tabular">
+    <!-- Tabular digits everywhere (inherited): clocks, timers and percentages keep their width as they change. -->
     <Grid>
         <!-- While the notch is hidden (Settings → Show notch), a thin accent line marks where the top edge brings it back -->
         <Border x:Name="EdgeHint" Width="120" Height="3" CornerRadius="0,0,2,2" VerticalAlignment="Top" HorizontalAlignment="Center"
