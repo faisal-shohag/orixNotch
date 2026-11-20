@@ -44,7 +44,8 @@ public partial class NotchWindow : Window
     public const string SettingsId = "settings";
 
     private readonly Spring _width = new(207);
-    private readonly Spring _height = new(32);
+    // Near-critical (default 32 overshoots ~4 px): the bottom edge, with the tab bar rising into it, read as a shake.
+    private readonly Spring _height = new(32) { Damping = 36 };
 
     // Dodge: the closed notch runs from a pointer coming at it from the left or right, always
     // keeping DodgeGap away from it, and drifts home when the pointer backs off. It can only be
