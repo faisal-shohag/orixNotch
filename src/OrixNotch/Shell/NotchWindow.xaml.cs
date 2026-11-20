@@ -1563,8 +1563,10 @@ public partial class NotchWindow : Window
     }
 
     private void ShowPowerPeek(string title, string sub, bool charging) =>
-        EnqueuePeek(new PeekRequest("power", () => GlyphTile(charging ? AppIcon.Bolt : AppIcon.BatteryFull), title, sub,
-            TimeSpan.FromSeconds(3)));
+        // Plugged in: the battery fills to its level (sub is "NN%").
+        EnqueuePeek(new PeekRequest("power",
+            () => charging && int.TryParse(sub.TrimEnd('%'), out var pct) ? ChargingTile.Create(pct) : GlyphTile(AppIcon.BatteryFull),
+            title, sub, TimeSpan.FromSeconds(3)));
 
     private void ShowVolumePeek(float level, bool muted)
     {
