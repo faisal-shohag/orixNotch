@@ -166,6 +166,8 @@ public partial class NotchWindow : Window
         };
         DownloadWatcher.Instance.Finished += ShowDownloadPeek;
         ScreenshotWatcher.Instance.Taken += ShowScreenshotPeek;
+        OcrService.Instance.Done += (title, sub) =>
+            EnqueuePeek(new PeekRequest("ocr", () => GlyphTile(AppIcon.DocText), title, sub, TimeSpan.FromSeconds(4)));
         NotificationHistory.Instance.Start();
         IdleInfoService.Instance.Changed += OnIdleChanged;
         _idleRotate.Tick += (_, _) => OnIdleRotate();
@@ -234,6 +236,7 @@ public partial class NotchWindow : Window
         switch (msg)
         {
             case Win32.WM_CLIPBOARDUPDATE:
+                OcrService.Instance.OnClipboardUpdate();
                 ClipboardService.Instance.OnClipboardUpdate();
                 break;
             case Win32.WM_HOTKEY:
@@ -259,6 +262,9 @@ public partial class NotchWindow : Window
                 break;
             case "awake":
                 KeepAwakeService.Toggle();
+                break;
+            case "ocr":
+                OcrService.Instance.Start();
                 break;
             default:
                 OpenTool(action);
@@ -352,7 +358,7 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>Feedback for something the user just did (volume keys, mic mute) shows even while quiet.</summary>
-    private static bool IsUserFeedback(string key) => key is "volume" or "mic" or "awake";
+    private static bool IsUserFeedback(string key) => key is "volume" or "mic" or "awake" or "ocr";
 
     private bool HeldForQuiet(PeekRequest request)
     {
@@ -1606,7 +1612,7 @@ public partial class NotchWindow : Window
     /// <summary>A screenshot was saved: its thumbnail; clicking parks it on the Shelf (drag it out or send it to the phone from there).</summary>
     private void ShowScreenshotPeek(string path)
     {
-        if (!App.Settings.ScreenshotAlerts || !System.IO.File.Exists(path)) return;
+        if (!App.Settings.ScreenshotAlerts || OcrService.Instance.Waiting || !System.IO.File.Exists(path)) return;
         EnqueuePeek(new PeekRequest("screenshot", () => ThumbTile(path), "Screenshot saved",
             "Click to put it on the Shelf", TimeSpan.FromSeconds(5), OnClick: () =>
             {

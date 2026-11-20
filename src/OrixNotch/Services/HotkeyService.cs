@@ -15,6 +15,7 @@ public static class HotkeyService
         new("clipboard", "Clipboard history", "Opens the notch on clipboard history."),
         new("teleprompter", "Teleprompter", "Opens the teleprompter and starts or pauses scrolling."),
         new("todos", "Add a to-do", "Opens To-Dos ready to type. Enter saves it."),
+        new("ocr", "Copy text from screen", "Snip any part of the screen and copy the text in it. Read on this PC by Windows."),
         new("mic", "Mute microphone", "Mutes or unmutes your default microphone in every app."),
         new("awake", "Keep awake", "Keeps the PC and screen from sleeping until you press it again."),
     ];

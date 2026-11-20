@@ -27,6 +27,7 @@ public sealed class TrayService : IDisposable
         menu.Items.Add(new Forms.ToolStripSeparator());
         var quiet = new Forms.ToolStripMenuItem("Quiet for 1 hour", null, (_, _) => NotchWindow.ToggleQuietHour());
         menu.Items.Add(quiet);
+        menu.Items.Add("Copy text from screen", null, (_, _) => OcrService.Instance.Start());
         var mic = new Forms.ToolStripMenuItem("Mute microphone", null, (_, _) => VolumeService.Instance.ToggleMic());
         menu.Items.Add(mic);
         var awake = new Forms.ToolStripMenuItem("Keep awake", null, (_, _) => KeepAwakeService.Toggle());
