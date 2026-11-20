@@ -33,21 +33,17 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - name: Build
-        run: |
-          dotnet restore OrixNotch.sln
-          dotnet build OrixNotch.sln -c Release --no-restore
-
       - name: Install WiX
         run: |
           dotnet tool install --global wix --version 5.0.2
           wix extension add -g WixToolset.Util.wixext/5.0.2
 
+      # The publishes compile the app (a build failure fails here); the MSI reuses the exe instead of publishing it again.
       - name: Package (exe, MSI, MSIX)
         shell: pwsh
         run: |
           ./packaging/Build-Exe.ps1
-          ./packaging/Build-Msi.ps1
+          ./packaging/Build-Msi.ps1 -Exe publish/exe/OrixNotch.exe
           ./packaging/Build-Msix.ps1
 
       - name: Upload packages

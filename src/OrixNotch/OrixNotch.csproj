@@ -16,6 +16,8 @@
     <Product>OrixNotch</Product>
     <!-- WPF needs the DPI settings in app.manifest; the WinForms analyzer only knows SetHighDpiMode. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
+    <!-- The UI is English only: don't ship the 13 language folders of framework/package resources (~16 MB). -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>

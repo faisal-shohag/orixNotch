@@ -69,7 +69,7 @@ jobs:
           New-Item -ItemType Directory dist -Force | Out-Null
           ./packaging/Build-Exe.ps1 -Version $v
           Copy-Item publish/exe/OrixNotch.exe "dist/OrixNotch-$v-portable.exe"
-          ./packaging/Build-Msi.ps1 -Version $v -OutFile "$PWD/dist/OrixNotch-$v-setup.msi"
+          ./packaging/Build-Msi.ps1 -Version $v -OutFile "$PWD/dist/OrixNotch-$v-setup.msi" -Exe publish/exe/OrixNotch.exe # same signed exe
           $msix = @{ Version = $v; OutFile = "$PWD/dist/OrixNotch-$v-store.msix" }
           if ($env:STORE_IDENTITY_NAME) {
             $msix.IdentityName = $env:STORE_IDENTITY_NAME
