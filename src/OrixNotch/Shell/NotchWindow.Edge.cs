@@ -116,10 +116,13 @@ public partial class NotchWindow
 
     // ---------------------------------------------------------------- side tab (left / right)
 
-    private double _sideLength = 50;
+    private double _sideLength = 125;
 
-    /// <summary>The side tab's length: what its cells need, plus a little room at each end.</summary>
-    private double SideTabLength() => _sideLength;
+    /// <summary>
+    /// The side tab's length: what its cells need plus a little room at each end, but never shorter than 2.6× its
+    /// width, so it's always a tall capsule (an empty tab at startup would otherwise be a near-circle).
+    /// </summary>
+    private double SideTabLength() => Math.Max(_sideLength, Math.Round(SideDepth * 2.6));
 
     /// <summary>
     /// The closed side tab, top to bottom: the live activity's icon (music, timer or focus, reminder), then your idle
