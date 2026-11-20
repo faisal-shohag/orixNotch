@@ -178,7 +178,7 @@ public partial class NotchWindow : Window
         };
         ScreenTimeService.Instance.Summary += (seconds, top) =>
             EnqueuePeek(new PeekRequest("screentime", () => GlyphTile(AppIcon.Hourglass), $"{ScreenTimeService.Format(seconds)} on screen today",
-                top is null ? "Click for details" : $"Most of it in {top}", TimeSpan.FromSeconds(6), OnClick: () => OpenTool("screentime")));
+                top is null ? "Click to see your day" : $"Most of it in {top} · click to see your day", TimeSpan.FromSeconds(6), OnClick: ShowWrap));
         OcrService.Instance.Done += (title, sub) =>
             EnqueuePeek(new PeekRequest("ocr", () => GlyphTile(AppIcon.DocText), title, sub, TimeSpan.FromSeconds(4)));
         NotificationHistory.Instance.Start();
@@ -196,7 +196,7 @@ public partial class NotchWindow : Window
         BuildEqualizer();
         Tabs.LayoutUpdated += (_, _) =>
         {
-            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool is not (SettingsId or PaletteId or BriefId)) MoveTabIndicator(_activeTool, animate: false);
+            if (TabIndicator.Opacity < 0.5 && _expanded && _activeTool is not (SettingsId or PaletteId or BriefId or WrapId)) MoveTabIndicator(_activeTool, animate: false);
         };
         WireTabScroll();
         BuildTabs();
@@ -557,7 +557,7 @@ public partial class NotchWindow : Window
             SetShove(0);
             if (EventReminderService.Instance.IsActive) ShowTool("calendar");
             else if (ContextTool() is { } matched) ShowTool(matched, remember: false);
-            else ShowTool(_activeTool is SettingsId or PaletteId or BriefId ? App.Settings.LastTool : _activeTool);
+            else ShowTool(_activeTool is SettingsId or PaletteId or BriefId or WrapId ? App.Settings.LastTool : _activeTool);
             _outsideSince = null;
             _awaitingCursor = activate && !IsCursorOverPill();
             _leaveTimer.Start();
@@ -1882,7 +1882,7 @@ public partial class NotchWindow : Window
         if (tools.Count == 0) tools = [ToolRegistry.All[0]];
 
         var previousActive = _activeTool;
-        if (_activeTool is not (SettingsId or PaletteId or BriefId) && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
+        if (_activeTool is not (SettingsId or PaletteId or BriefId or WrapId) && tools.All(t => t.Id != _activeTool)) _activeTool = tools[0].Id;
 
         // Settings isn't in the scrolling strip: it's pinned at the right end (SettingsTabHost).
         SettingsTabHost.Child ??= MakeTab(SettingsId, "Settings", AppIcon.Gear);
@@ -2004,6 +2004,16 @@ public partial class NotchWindow : Window
 
     public const string PaletteId = "palette";
     public const string BriefId = "brief";
+    public const string WrapId = "wrap";
+
+    /// <summary>The end-of-day wrap: today's screen time, focus and to-dos, with "Save image".</summary>
+    public void ShowWrap()
+    {
+        Expand(activate: true);
+        _backTarget = null;
+        Present(WrapId, $"Your day · {DateTime.Today:ddd, MMM d}", 720, 128, () => new Tools.WrapView(), showTabs: false);
+        (_views[WrapId] as Tools.WrapView)?.Show();
+    }
 
     private static void After(TimeSpan delay, Action action)
     {

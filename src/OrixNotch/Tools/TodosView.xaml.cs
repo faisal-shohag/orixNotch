@@ -16,6 +16,7 @@ public sealed partial class TodoItem : ObservableObject
     [ObservableProperty] private bool _done;
     [ObservableProperty] private bool _starred;
     public DateTime Created { get; set; } = DateTime.Now;
+    public DateTime? DoneAt { get; set; } // set when ticked in the list (for the end-of-day wrap); older items have none
 }
 
 public partial class TodosView : UserControl, IToolView
@@ -47,6 +48,7 @@ public partial class TodosView : UserControl, IToolView
 
     private void OnItemChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(TodoItem.Done) && sender is TodoItem item) item.DoneAt = item.Done ? DateTime.Now : null;
         Save();
         Refresh();
     }
@@ -85,6 +87,9 @@ public partial class TodosView : UserControl, IToolView
     }
 
     private void Save() => Storage.Save(FileName, _items.ToList());
+
+    /// <summary>To-dos ticked today (read from the saved list, which every change writes).</summary>
+    public static int DoneToday() => Storage.Load<List<TodoItem>>(FileName).Count(i => i.Done && i.DoneAt?.Date == DateTime.Today);
 
     private void OnInputKeyDown(object sender, KeyEventArgs e)
     {

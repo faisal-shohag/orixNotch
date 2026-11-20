@@ -138,6 +138,8 @@ public static partial class CommandRegistry
                 () => VolumeService.Instance.ToggleMic()));
         yield return new("Keep awake", ["awake", "caffeine", "sleep"],
             new(AppIcon.Coffee, KeepAwakeService.On ? "Stop keeping awake" : "Keep awake", "Keeps the PC and screen on", KeepAwakeService.Toggle));
+        yield return new("My day", ["day", "wrap", "today", "summary"],
+            new(AppIcon.Hourglass, "My day", "Screen time, focus and to-dos today", () => NotchWindow.Instance?.ShowWrap()));
         yield return new("Copy text from screen", ["ocr", "copy text", "text from screen", "snip"],
             new(AppIcon.DocText, "Copy text from screen", "Snip, then the text is copied", () => OcrService.Instance.Start()));
     }
