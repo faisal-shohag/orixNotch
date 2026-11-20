@@ -70,7 +70,7 @@ public partial class NotchWindow
     private (int X, int Y, int W, int H, double MaxShove) EdgePlacement(System.Windows.Forms.Screen screen, DpiScale dpi)
     {
         Width = 860;
-        Height = Vertical ? 860 : 600;
+        Height = Math.Max(Height, Vertical ? 860 : 600); // never shrink below what a tall panel (Settings) grew it to
         var w = (int)Math.Round(Width * dpi.DpiScaleX);
         var h = (int)Math.Round(Height * dpi.DpiScaleY);
         var b = screen.Bounds;

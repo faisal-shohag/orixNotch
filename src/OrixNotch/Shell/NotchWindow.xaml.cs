@@ -2358,8 +2358,8 @@ public partial class NotchWindow : Window
     public void ShowSettings()
     {
         if (_activeTool != SettingsId) _backTarget = _activeTool;
-        // Settings opens taller than the tools (≈750×512).
-        Present(SettingsId, "Settings", 714, 438, () => new SettingsView(), showTabs: false);
+        // Settings opens taller than the tools, so its whole sidebar fits (≈750×640).
+        Present(SettingsId, "Settings", 714, 568, () => new SettingsView(), showTabs: false); // tall enough for the whole sidebar
     }
 
     /// <summary>Opens the notch on one Settings page ("tabs", "appearance"…).</summary>
