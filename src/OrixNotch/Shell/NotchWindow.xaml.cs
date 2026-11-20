@@ -1907,7 +1907,7 @@ public partial class NotchWindow : Window
     /// <summary>Brand logo on a soft tile (AI usage alerts).</summary>
     private static FrameworkElement LogoTile(BrandLogo logo)
     {
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = Radii.M };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20) };
         tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var mark = BrandLogos.Create(logo, 20);
         mark.HorizontalAlignment = HorizontalAlignment.Center;
@@ -1918,7 +1918,7 @@ public partial class NotchWindow : Window
     /// <summary>Accent-soft rounded tile with a glyph (reminders).</summary>
     private static FrameworkElement GlyphTile(AppIcon kind)
     {
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = Radii.M };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20) };
         tile.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         var icon = new HeroIcon { Kind = kind, Width = 19, Height = 19, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         icon.SetResourceReference(ForegroundProperty, "AccentBrush");
@@ -1933,11 +1933,11 @@ public partial class NotchWindow : Window
         {
             var image = new Image { Source = n.Icon, Width = 34, Height = 34, Stretch = Stretch.Uniform };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-            var frame = new Border { Width = 40, Height = 40, CornerRadius = Radii.M, Child = image };
+            var frame = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20), Child = image };
             frame.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
             return frame;
         }
-        var tile = new Border { Width = 40, Height = 40, CornerRadius = Radii.M };
+        var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20) };
         tile.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
         var letter = new TextBlock
         {
