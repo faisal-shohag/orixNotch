@@ -843,6 +843,8 @@ public partial class SettingsView : UserControl, IToolView
             Toggle(S.Celebrations, v => { S.Celebrations = v; Save(false); }));
         Row("Glow", "A soft glow around the closed notch: the album's colour while music plays, your accent during a focus session, red while you're on a call.",
             Toggle(S.NotchGlow, v => { S.NotchGlow = v; Save(false); NotchWindow.Instance?.RefreshGlow(); }));
+        Row("Only music bars while playing", "Keep your items on the closed notch while music plays, with just the music bars instead of the song's art and title. The song is still in Now Playing.",
+            Toggle(S.MusicBarsOnly, v => { S.MusicBarsOnly = v; Save(false); NotchActivityService.Instance.Refresh(); }));
         Row("Music bars follow the sound", "The bars on the closed notch move with what's playing. Off, or on battery saver, they sway on their own.",
             Toggle(S.ReactivePill, v => { S.ReactivePill = v; Save(false); }));
 

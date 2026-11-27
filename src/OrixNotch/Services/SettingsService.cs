@@ -136,6 +136,7 @@ public sealed class AppSettings
     public bool Celebrations { get; set; } = true;  // confetti on an empty to-do list, focus streaks, birthdays
     public List<string> Celebrated { get; set; } = new(); // "yyyy-MM-dd|what" already celebrated
     public bool NotchGlow { get; set; } = true;     // a soft glow around the closed notch: music, focus, calls
+    public bool MusicBarsOnly { get; set; }            // while music plays the closed notch keeps your idle items, plus the music bars
     public bool ReactivePill { get; set; } = true;   // the closed notch's music bars follow the sound (not on battery saver)
     public bool AlbumAccent { get; set; }             // while music plays, the accent follows the cover
     public bool Glass { get; set; }                    // see-through, tinted notch with a glass sheen

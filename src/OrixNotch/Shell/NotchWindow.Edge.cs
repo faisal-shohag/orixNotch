@@ -135,7 +135,7 @@ public partial class NotchWindow
         SideLayer.Children.Clear();
         var act = NotchActivityService.Instance;
         var kind = act.Kind;
-        if (kind == NotchActivityKind.Music) SideLayer.Children.Add(SideWave);
+        if (kind == NotchActivityKind.Music || QuietMusic) SideLayer.Children.Add(SideWave);
         else if (kind == NotchActivityKind.Reminder)
         {
             var stack = new StackPanel { Margin = new Thickness(0, 6, 0, 6), ToolTip = act.Text };
@@ -245,11 +245,12 @@ public partial class NotchWindow
     // The side tab's music waveform: kept, not rebuilt, so RenderSide's refreshes don't restart its animation.
     private StackPanel? _sideWave;
 
-    private StackPanel SideWave => _sideWave ??= BuildSideWave();
+    private StackPanel SideWave => _sideWave ??= MirrorWave(18, new Thickness(0, 8, 0, 8));
 
-    private StackPanel BuildSideWave()
+    /// <summary>A copy of the top pill's music bars (for the side tab and beside the idle items).</summary>
+    private StackPanel MirrorWave(double height, Thickness margin)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Height = 18, Margin = new Thickness(0, 8, 0, 8), HorizontalAlignment = HorizontalAlignment.Center };
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Height = height, Margin = margin, HorizontalAlignment = HorizontalAlignment.Center };
         // Mirrors the top pill's bars (hidden on the sides but still driven by _eq / TickEqualizer): same level, same tint.
         foreach (var top in new[] { Bar1, Bar2, Bar3, Bar4, Bar5 })
         {
@@ -257,7 +258,7 @@ public partial class NotchWindow
             BindingOperations.SetBinding(scale, ScaleTransform.ScaleYProperty, new Binding("RenderTransform.ScaleY") { Source = top });
             var bar = new System.Windows.Shapes.Rectangle
             {
-                Width = 3, Height = 18, RadiusX = 1.5, RadiusY = 1.5, Margin = new Thickness(1.25, 0, 1.25, 0),
+                Width = 3, Height = height, RadiusX = 1.5, RadiusY = 1.5, Margin = new Thickness(1.25, 0, 1.25, 0),
                 RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = scale,
             };
             bar.SetBinding(System.Windows.Shapes.Shape.FillProperty, new Binding(nameof(System.Windows.Shapes.Shape.Fill)) { Source = top });

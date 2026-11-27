@@ -497,7 +497,7 @@ public partial class NotchWindow : Window
     private void UpdatePillMotion()
     {
         var music = NotchActivityService.Instance.Kind == NotchActivityKind.Music;
-        SetEqualizer(!_expanded && music && PillShown);
+        SetEqualizer(!_expanded && (music || QuietMusic) && PillShown);
         if (music) UpdateMarquee();
     }
 
@@ -1142,9 +1142,17 @@ public partial class NotchWindow : Window
             || CountdownService.Instance.IsRunning
             || StopwatchService.Instance.IsRunning;
         if (timer) return _timerW;
-        var music = NowPlayingService.Instance.HasSession && NowPlayingService.Instance.IsPlaying;
-        return music ? _musicW : IdleActive ? IdleWidth() : _idleW;
+        var music = NotchActivityService.Instance.Kind == NotchActivityKind.Music;
+        return music ? _musicW : (IdleActive ? IdleWidth() : _idleW) + (QuietMusic ? QuietWaveW : 0);
     }
+
+    /// <summary>Music is playing with "Only music bars while playing" on: your items plus the bars.</summary>
+    private static bool QuietMusic => App.Settings.MusicBarsOnly &&NotchActivityService.Instance.Kind == NotchActivityKind.None
+        && NowPlayingService.Instance.HasSession && NowPlayingService.Instance.IsPlaying;
+
+    private const double QuietWaveW = 32; // the bars (5 × 5.5) and a gap
+
+    private FrameworkElement? _idleWave;
 
     private void OnActivityChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -1206,14 +1214,22 @@ public partial class NotchWindow : Window
         if (idle) RenderIdle();
         UpdateIdleRotation();
 
+        var quiet = QuietMusic;
+        IdleWaveHost.Content = quiet ? _idleWave ??= MirrorWave(14, new Thickness(0)) : null;
+        IdleWaveHost.Visibility = quiet ? Visibility.Visible : Visibility.Collapsed;
+        IdlePart.Margin = new Thickness(12, 0, 13 + (quiet ? QuietWaveW : 0), 0);
+        if (music || quiet)
+        {
+            var np = NowPlayingService.Instance;
+            var bars = new SolidColorBrush(WaveColor(np.ArtTint));
+            bars.Freeze();
+            foreach (var bar in new[] { Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Fill = bars;
+        }
         if (music)
         {
             var np = NowPlayingService.Instance;
             TrackTitle.Text = string.IsNullOrWhiteSpace(np.Title) ? "Playing" : np.Title;
             TrackArtist.Text = string.IsNullOrWhiteSpace(np.Artist) ? "" : "  " + np.Artist;
-            var bars = new SolidColorBrush(WaveColor(np.ArtTint));
-            bars.Freeze();
-            foreach (var bar in new[] { Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Fill = bars;
             Dispatcher.BeginInvoke(UpdateMarquee, DispatcherPriority.Loaded);
         }
         else
@@ -1251,7 +1267,7 @@ public partial class NotchWindow : Window
             if (_currentPeek?.Key == ReminderPeekKey) EndPeek();
         }
 
-        SetEqualizer(!_expanded && music && PillShown);
+        SetEqualizer(!_expanded && (music || quiet) && PillShown);
 
         if (Vertical) RenderSide();
         if (!_expanded && !_peeking)
@@ -1386,7 +1402,7 @@ public partial class NotchWindow : Window
         if (!_peeking)
         {
             if (Vertical) RenderSide();
-            var w = Vertical ? SideDepth : IdleWidth();
+            var w = Vertical ? SideDepth : ActivityWidth();
             if (Math.Abs(_width.Target - w) > 0.5)
             {
                 SetCollapsedTarget();

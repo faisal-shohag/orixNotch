@@ -98,6 +98,9 @@
                         </ContentControl>
                         <StackPanel x:Name="IdleRow" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Grid>
+                    <!-- Music playing with "Only music bars while playing" on: the bars sit at the end of your items (filled in code) -->
+                    <ContentControl x:Name="IdleWaveHost" Focusable="False" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Margin="0,0,14,0" Visibility="Collapsed" />
 
                     <!-- Event reminder (compact): calendar tile, "10m", dismiss -->
                     <Grid x:Name="ReminderPart" Margin="9,0,7,0" Visibility="Collapsed">

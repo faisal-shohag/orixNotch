@@ -74,7 +74,7 @@ public sealed partial class NotchActivityService : ObservableObject
             text = sw.ElapsedText;
             progress = 0; // no total: track ring only
         }
-        else if (np.HasSession && np.IsPlaying)
+        else if (np.HasSession && np.IsPlaying && !App.Settings.MusicBarsOnly)
         {
             kind = NotchActivityKind.Music;
             text = string.IsNullOrEmpty(np.Artist) ? np.Title : $"{np.Title} – {np.Artist}";
