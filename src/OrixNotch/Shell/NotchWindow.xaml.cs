@@ -149,11 +149,14 @@ public partial class NotchWindow : Window
         NotchActivityService.Instance.PropertyChanged += (_, e) =>
         {
             // A running timer changes Text and Progress every tick: Text is bound in XAML, Progress only moves the arc.
-            if (e.PropertyName == nameof(NotchActivityService.Progress))
+            if (e.PropertyName is nameof(NotchActivityService.Progress) or nameof(NotchActivityService.Text))
             {
-                if (TimerPart.Visibility == Visibility.Visible) MiniArc.Data = BuildMiniArc(NotchActivityService.Instance.Progress);
+                if (e.PropertyName == nameof(NotchActivityService.Progress) && TimerPart.Visibility == Visibility.Visible)
+                    MiniArc.Data = BuildMiniArc(NotchActivityService.Instance.Progress);
+                // The side tab draws its ring and countdown in code: redraw it (once a second at most, it's a few elements).
+                if (Vertical && !_expanded && !_peeking && e.PropertyName == nameof(NotchActivityService.Text)) RenderSide();
             }
-            else if (e.PropertyName != nameof(NotchActivityService.Text)) UpdateActivity();
+            else UpdateActivity();
         };
         EventReminderService.Instance.Alert += _ => ShowReminderPeek();
         NotificationWatcher.Instance.Arrived += ShowNotificationPeek;
@@ -1366,6 +1369,8 @@ public partial class NotchWindow : Window
 
     private void OnIdleChanged()
     {
+        // The side tab shows idle items next to a live activity too (and its countdown / ring): refresh it every tick.
+        if (Vertical && !_expanded && !_peeking && !IdleActive) RenderSide();
         if (_expanded || !IdleActive)
         {
             if (!NotchActivityService.Instance.HasActivity && IdleInfoService.Instance.Items.Count == 0) UpdateActivity();
@@ -1778,6 +1783,7 @@ public partial class NotchWindow : Window
         PeekLayer.BeginAnimation(OpacityProperty, null);
         PeekLayer.Visibility = Visibility.Collapsed;
         if (_expanded) return;
+        if (Vertical) RenderSide(); // values may have moved on while the alert covered the tab
         SetCollapsedTarget();
         StartAnimation();
         if (HiddenForApp) Guard(); // "Hide completely" let this alert through; hide again now it's done

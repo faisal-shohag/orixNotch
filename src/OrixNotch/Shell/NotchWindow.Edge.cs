@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using OrixNotch.Interop;
 using OrixNotch.Services;
@@ -132,21 +133,44 @@ public partial class NotchWindow
     private void RenderSide()
     {
         SideLayer.Children.Clear();
-        var kind = NotchActivityService.Instance.Kind;
-        AppIcon? activity = kind switch
+        var act = NotchActivityService.Instance;
+        var kind = act.Kind;
+        if (kind == NotchActivityKind.Music) SideLayer.Children.Add(SideWave);
+        else if (kind == NotchActivityKind.Reminder)
         {
-            NotchActivityKind.Music => AppIcon.MusicNote,
-            NotchActivityKind.Focus => AppIcon.Bolt,
-            NotchActivityKind.Break => AppIcon.Coffee,
-            NotchActivityKind.Timer or NotchActivityKind.Stopwatch => AppIcon.Clock,
-            NotchActivityKind.Reminder => AppIcon.CalendarDays,
-            _ => null,
-        };
-        if (activity is { } icon)
-        {
-            var glyph = new HeroIcon { Kind = icon, Width = 19, Height = 19, Margin = new Thickness(0, 6, 0, 6) };
+            var stack = new StackPanel { Margin = new Thickness(0, 6, 0, 6), ToolTip = act.Text };
+            var glyph = new HeroIcon { Kind = AppIcon.CalendarDays, Width = 19, Height = 19 };
             glyph.SetResourceReference(ForegroundProperty, "AccentBrush");
-            SideLayer.Children.Add(glyph);
+            stack.Children.Add(glyph);
+            var when = SideValue(EventReminderService.Instance.ShortWhen);
+            ((TextBlock)when.Child).SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+            stack.Children.Add(when);
+            SideLayer.Children.Add(stack);
+        }
+        else if (kind is NotchActivityKind.Focus or NotchActivityKind.Break or NotchActivityKind.Timer or NotchActivityKind.Stopwatch)
+        {
+            // Progress ring round the mode glyph, like the top pill's timer.
+            const double size = 32;
+            var brush = kind == NotchActivityKind.Break ? "GoodBrush" : "AccentBrush";
+            var grid = new Grid { Width = size, Height = size, Margin = new Thickness(0, 5, 0, 5), ToolTip = act.Text };
+            var track = new System.Windows.Shapes.Ellipse { Margin = new Thickness(3), StrokeThickness = 3 };
+            track.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "TrackBrush");
+            grid.Children.Add(track);
+            var arc = new System.Windows.Shapes.Path
+            {
+                Data = BuildMiniArc(act.Progress, size, 4.5), StrokeThickness = 3,
+                StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            };
+            arc.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, brush);
+            grid.Children.Add(arc);
+            var glyph = new HeroIcon
+            {
+                Kind = kind switch { NotchActivityKind.Break => AppIcon.Coffee, NotchActivityKind.Focus => AppIcon.Bolt, _ => AppIcon.Clock },
+                Width = 14, Height = 14, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            };
+            glyph.SetResourceReference(ForegroundProperty, brush);
+            grid.Children.Add(glyph);
+            SideLayer.Children.Add(grid);
         }
         foreach (var item in IdleInfoService.Instance.Items.Where(i => i.Id is not ("timeline" or "avatar")).Take(6))
             SideLayer.Children.Add(SideCell(item));
@@ -198,11 +222,8 @@ public partial class NotchWindow
             stack.Children.Add(glyph);
             if (item.Short is { Length: > 0 } text)
             {
-                var value = new TextBlock
-                {
-                    Text = text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 2, 0, 0), Foreground = item.ValueBrush == "SubTextBrush" ? (Brush)Application.Current.Resources["SubTextBrush"] : brush,
-                };
+                var value = SideValue(text);
+                ((TextBlock)value.Child).Foreground = item.ValueBrush == "SubTextBrush" ? (Brush)Application.Current.Resources["SubTextBrush"] : brush;
                 stack.Children.Add(value);
             }
             cell = stack;
@@ -211,6 +232,38 @@ public partial class NotchWindow
         cell.HorizontalAlignment = HorizontalAlignment.Center;
         cell.ToolTip = item.Value;
         return cell;
+    }
+
+    /// <summary>A short value under a side-tab icon; shrinks rather than clipping when wider than the tab.</summary>
+    private static Viewbox SideValue(string text) => new()
+    {
+        StretchDirection = StretchDirection.DownOnly, MaxWidth = 40, HorizontalAlignment = HorizontalAlignment.Center,
+        Margin = new Thickness(0, 2, 0, 0),
+        Child = new TextBlock { Text = text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, Typography = { NumeralAlignment = FontNumeralAlignment.Tabular } },
+    };
+
+    // The side tab's music waveform: kept, not rebuilt, so RenderSide's refreshes don't restart its animation.
+    private StackPanel? _sideWave;
+
+    private StackPanel SideWave => _sideWave ??= BuildSideWave();
+
+    private StackPanel BuildSideWave()
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Height = 18, Margin = new Thickness(0, 8, 0, 8), HorizontalAlignment = HorizontalAlignment.Center };
+        // Mirrors the top pill's bars (hidden on the sides but still driven by _eq / TickEqualizer): same level, same tint.
+        foreach (var top in new[] { Bar1, Bar2, Bar3, Bar4, Bar5 })
+        {
+            var scale = new ScaleTransform();
+            BindingOperations.SetBinding(scale, ScaleTransform.ScaleYProperty, new Binding("RenderTransform.ScaleY") { Source = top });
+            var bar = new System.Windows.Shapes.Rectangle
+            {
+                Width = 3, Height = 18, RadiusX = 1.5, RadiusY = 1.5, Margin = new Thickness(1.25, 0, 1.25, 0),
+                RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = scale,
+            };
+            bar.SetBinding(System.Windows.Shapes.Shape.FillProperty, new Binding(nameof(System.Windows.Shapes.Shape.Fill)) { Source = top });
+            panel.Children.Add(bar);
+        }
+        return panel;
     }
 
     // ---------------------------------------------------------------- corner turn
